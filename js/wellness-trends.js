@@ -50,12 +50,17 @@ async function initWellnessTrends() {
     });
   });
 
+  const cached = !AUTH.demo && cacheGet('wellness_history');
+  if (cached) { TREND_DATA = cached; renderTrendsNow(); } // instant repaint from the last known-good history
+
   try {
     TREND_DATA = await fetchWellnessHistory();
     renderTrendsNow();
   } catch (err) {
-    document.getElementById('w-trends-chart').innerHTML = `<div class="w-trends-empty">Couldn't load trends.</div>`;
-    document.getElementById('w-trends-summary').textContent = '';
+    if (!cached) {
+      document.getElementById('w-trends-chart').innerHTML = `<div class="w-trends-empty">Couldn't load trends.</div>`;
+      document.getElementById('w-trends-summary').textContent = '';
+    }
   }
 }
 

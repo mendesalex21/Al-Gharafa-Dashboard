@@ -1,3 +1,11 @@
+/** Last-known-good payload per action, so a repeat visit can paint instantly while a fresh copy loads behind it. */
+function cacheGet(action) {
+  try { const raw = localStorage.getItem('cache_' + action); return raw ? JSON.parse(raw) : null; } catch (err) { return null; }
+}
+function cacheSet(action, data) {
+  try { localStorage.setItem('cache_' + action, JSON.stringify(data)); } catch (err) { /* storage full/disabled: skip caching, not fatal */ }
+}
+
 /**
  * Apps Script API call. In demo mode, returns the sample data directly.
  * Retries once on a bad (non-JSON) response — Apps Script's Web App occasionally returns an HTML
@@ -27,6 +35,7 @@ async function callApi(action, mockData) {
     throw new Error(json.error || 'Unknown error');
   }
   AUTH.user = json.user;
+  cacheSet(action, json.data);
   return json.data;
 }
 function fetchHome() { return callApi('home', MOCK_HOME); }

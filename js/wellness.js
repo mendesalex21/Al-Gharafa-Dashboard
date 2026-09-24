@@ -9,13 +9,16 @@ const QUESTIONS_ORDER = ['fatigue', 'soreness', 'sleep', 'energy', 'recovery'];
 
 async function renderWellness() {
   const root = document.getElementById('view-wellness');
+  root.innerHTML = wellnessSkeleton(); // paint the layout immediately, before any network call
+  initWellnessTrends(); // its own independent fetch — starts now, in parallel with fetchWellness() below
+
+  const cached = !AUTH.demo && cacheGet('wellness');
+  if (cached) renderAllWellness(cached); // instant repaint from the last known-good data while a fresh copy loads
   try {
     const data = await fetchWellness();
-    root.innerHTML = wellnessSkeleton();
     renderAllWellness(data);
-    initWellnessTrends();
   } catch (err) {
-    root.innerHTML = `<div class="card" style="padding:24px"><strong>Couldn't load data.</strong><p class="hint">${escapeHtml(err.message)}</p></div>`;
+    if (!cached) root.innerHTML = `<div class="card" style="padding:24px"><strong>Couldn't load data.</strong><p class="hint">${escapeHtml(err.message)}</p></div>`;
   }
 }
 
