@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Al-Gharafa SC — Staff Dashboard</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="css/style.css?v=7">
+</head>
+<body>
+
+<div id="signin-gate">
+  <div class="brand-dot" style="width:36px;height:36px"></div>
+  <div class="club">Al-Gharafa SC</div>
+  <p class="desc">Staff access only. Sign in with an authorized Google account.</p>
+  <div id="g_id_signin_container"></div>
+</div>
+
+<div id="demo-banner" class="demo-banner hidden">Demo mode — sample data, Google sign-in not configured yet</div>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="brand"><span class="brand-dot"></span> Al-Gharafa SC</div>
+    <nav class="nav" aria-label="Sections">
+      <button class="nav-item" disabled title="Coming soon">Home</button>
+      <button class="nav-item" disabled title="Coming soon">Training</button>
+      <button class="nav-item" disabled title="Coming soon">Workload</button>
+      <button class="nav-item" data-view="wellness" aria-current="page">Wellness</button>
+      <button class="nav-item" disabled title="Coming soon">Heart Rate</button>
+    </nav>
+    <div class="topbar-right">
+      <span id="today-pill" class="today-pill"></span>
+      <div id="avatar" class="avatar" title="Account">·</div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" id="view-home" hidden></main>
+<main class="wrap" id="view-wellness"></main>
+
+<script src="js/config.js?v=7"></script>
+<script src="js/rings.js?v=7"></script>
+<script src="js/photo-data.js?v=7"></script>
+<script src="js/wellness-ring.js?v=7"></script>
+<script src="js/wellness-trends.js?v=7"></script>
+<script src="js/mock-data.js?v=7"></script>
+<script src="js/auth.js?v=7"></script>
+<script src="js/api.js?v=7"></script>
+<script src="js/home.js?v=7"></script>
+<script src="js/wellness.js?v=7"></script>
+<script src="js/app.js?v=7"></script>
+</body>
+</html>
