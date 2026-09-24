@@ -12,6 +12,12 @@ function cacheSet(action, data) {
  * "starting up" page on its very first request after being idle ("cold start").
  */
 async function callApi(action, mockData) {
+  if (AUTH.demo && mockData == null && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+    // local development only: real data built by sync/build.py, read from disk (outside the published site/)
+    const r = await fetch(`../sync/out/${action}.json`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`No local ${action}.json — run sync/build.py --no-upload`);
+    return r.json();
+  }
   if (AUTH.demo) return Promise.resolve(structuredClone(mockData));
   let json;
   const delays = [600, 1500, 3000]; // backoff between attempts (cold start can take a few seconds)
@@ -38,6 +44,15 @@ async function callApi(action, mockData) {
   cacheSet(action, json.data);
   return json.data;
 }
-function fetchHome() { return callApi('home', MOCK_HOME); }
 function fetchWellness() { return callApi('wellness', MOCK_WELLNESS); }
-function fetchWellnessHistory() { return callApi('wellness_history', MOCK_WELLNESS_HISTORY); }
+
+/** One network fetch per payload per page load, shared by every page that needs it. */
+const DATA_PROMISES = {};
+const DATA_MOCKS = { wellness: () => MOCK_WELLNESS, wellness_history: () => MOCK_WELLNESS_HISTORY };
+function loadData(action) {
+  if (!DATA_PROMISES[action]) {
+    DATA_PROMISES[action] = callApi(action, DATA_MOCKS[action] ? DATA_MOCKS[action]() : null)
+      .catch((err) => { delete DATA_PROMISES[action]; throw err; });
+  }
+  return DATA_PROMISES[action];
+}

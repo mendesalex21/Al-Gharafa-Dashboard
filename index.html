@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Al-Gharafa SC — Staff Dashboard</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="css/style.css?v=10">
+<link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body>
 
@@ -22,10 +22,11 @@
   <div class="wrap topbar-inner">
     <div class="brand"><span class="brand-dot"></span> Al-Gharafa SC</div>
     <nav class="nav" aria-label="Sections">
-      <button class="nav-item" disabled title="Coming soon">Home</button>
-      <button class="nav-item" disabled title="Coming soon">Training</button>
-      <button class="nav-item" disabled title="Coming soon">Workload</button>
       <button class="nav-item" data-section="wellness" data-flyout="wellness" aria-haspopup="true" aria-expanded="false" aria-current="page">Wellness</button>
+      <button class="nav-item" data-section="training" data-flyout="training" aria-haspopup="true" aria-expanded="false">Training</button>
+      <button class="nav-item" data-section="workload" data-flyout="workload" aria-haspopup="true" aria-expanded="false">Workload</button>
+      <button class="nav-item" data-section="testing" data-view="testing">Testing</button>
+      <button class="nav-item" data-section="calendar" data-view="calendar">Calendar</button>
       <button class="nav-item" disabled title="Coming soon">Heart Rate</button>
     </nav>
     <div class="topbar-right">
@@ -33,30 +34,54 @@
       <div id="avatar" class="avatar" title="Account">·</div>
     </div>
   </div>
-  <div class="flyout" id="flyout-wellness">
+  <div class="flyout" id="flyout-wellness" data-default="wellness">
     <div class="flyout-inner">
       <div class="flyout-label">Wellness</div>
       <button class="flyout-link" data-view="wellness">Overview</button>
       <button class="flyout-link" data-view="longitudinal">Longitudinal</button>
     </div>
   </div>
+  <div class="flyout" id="flyout-training" data-default="sessions">
+    <div class="flyout-inner">
+      <div class="flyout-label">Training</div>
+      <button class="flyout-link" data-view="sessions">Sessions</button>
+      <button class="flyout-link" data-view="objectives">Objectives</button>
+    </div>
+  </div>
+  <div class="flyout" id="flyout-workload" data-default="squad">
+    <div class="flyout-inner">
+      <div class="flyout-label">Workload &amp; injury prevention</div>
+      <button class="flyout-link" data-view="squad">Squad</button>
+      <button class="flyout-link" data-view="player">Player</button>
+    </div>
+  </div>
 </header>
 <div class="flyout-backdrop" id="flyout-backdrop"></div>
 
-<main class="wrap" id="view-home" hidden></main>
 <main class="wrap" id="view-wellness"></main>
-<main class="wrap" id="view-longitudinal" hidden></main>
+<main class="wrap page" id="view-longitudinal" hidden></main>
+<main class="wrap page" id="view-sessions" hidden></main>
+<main class="wrap page" id="view-objectives" hidden></main>
+<main class="wrap page" id="view-squad" hidden></main>
+<main class="wrap page" id="view-player" hidden></main>
+<main class="wrap page" id="view-testing" hidden></main>
+<main class="wrap page" id="view-calendar" hidden></main>
 
-<script src="js/config.js?v=10"></script>
-<script src="js/rings.js?v=10"></script>
-<script src="js/photo-data.js?v=10"></script>
-<script src="js/wellness-ring.js?v=10"></script>
-<script src="js/longitudinal.js?v=10"></script>
-<script src="js/mock-data.js?v=10"></script>
-<script src="js/auth.js?v=10"></script>
-<script src="js/api.js?v=10"></script>
-<script src="js/home.js?v=10"></script>
-<script src="js/wellness.js?v=10"></script>
-<script src="js/app.js?v=10"></script>
+<script src="js/config.js?v=11"></script>
+<script src="js/rings.js?v=11"></script>
+<script src="js/photo-data.js?v=11"></script>
+<script src="js/wellness-ring.js?v=11"></script>
+<script src="js/charts.js?v=11"></script>
+<script src="js/ui.js?v=11"></script>
+<script src="js/longitudinal.js?v=11"></script>
+<script src="js/workload.js?v=11"></script>
+<script src="js/training.js?v=11"></script>
+<script src="js/testing.js?v=11"></script>
+<script src="js/calendar.js?v=11"></script>
+<script src="js/mock-data.js?v=11"></script>
+<script src="js/auth.js?v=11"></script>
+<script src="js/api.js?v=11"></script>
+<script src="js/wellness.js?v=11"></script>
+<script src="js/app.js?v=11"></script>
 </body>
 </html>
