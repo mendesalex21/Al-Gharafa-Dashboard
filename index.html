@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Al-Gharafa SC — Staff Dashboard</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="css/style.css?v=9">
+<link rel="stylesheet" href="css/style.css?v=10">
 </head>
 <body>
 
@@ -25,7 +25,7 @@
       <button class="nav-item" disabled title="Coming soon">Home</button>
       <button class="nav-item" disabled title="Coming soon">Training</button>
       <button class="nav-item" disabled title="Coming soon">Workload</button>
-      <button class="nav-item" data-view="wellness" aria-current="page">Wellness</button>
+      <button class="nav-item" data-section="wellness" data-flyout="wellness" aria-haspopup="true" aria-expanded="false" aria-current="page">Wellness</button>
       <button class="nav-item" disabled title="Coming soon">Heart Rate</button>
     </nav>
     <div class="topbar-right">
@@ -33,21 +33,30 @@
       <div id="avatar" class="avatar" title="Account">·</div>
     </div>
   </div>
+  <div class="flyout" id="flyout-wellness">
+    <div class="flyout-inner">
+      <div class="flyout-label">Wellness</div>
+      <button class="flyout-link" data-view="wellness">Overview</button>
+      <button class="flyout-link" data-view="longitudinal">Longitudinal</button>
+    </div>
+  </div>
 </header>
+<div class="flyout-backdrop" id="flyout-backdrop"></div>
 
 <main class="wrap" id="view-home" hidden></main>
 <main class="wrap" id="view-wellness"></main>
+<main class="wrap" id="view-longitudinal" hidden></main>
 
-<script src="js/config.js?v=9"></script>
-<script src="js/rings.js?v=9"></script>
-<script src="js/photo-data.js?v=9"></script>
-<script src="js/wellness-ring.js?v=9"></script>
-<script src="js/wellness-trends.js?v=9"></script>
-<script src="js/mock-data.js?v=9"></script>
-<script src="js/auth.js?v=9"></script>
-<script src="js/api.js?v=9"></script>
-<script src="js/home.js?v=9"></script>
-<script src="js/wellness.js?v=9"></script>
-<script src="js/app.js?v=9"></script>
+<script src="js/config.js?v=10"></script>
+<script src="js/rings.js?v=10"></script>
+<script src="js/photo-data.js?v=10"></script>
+<script src="js/wellness-ring.js?v=10"></script>
+<script src="js/longitudinal.js?v=10"></script>
+<script src="js/mock-data.js?v=10"></script>
+<script src="js/auth.js?v=10"></script>
+<script src="js/api.js?v=10"></script>
+<script src="js/home.js?v=10"></script>
+<script src="js/wellness.js?v=10"></script>
+<script src="js/app.js?v=10"></script>
 </body>
 </html>

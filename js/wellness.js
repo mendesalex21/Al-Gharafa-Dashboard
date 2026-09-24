@@ -10,7 +10,7 @@ const QUESTIONS_ORDER = ['fatigue', 'soreness', 'sleep', 'energy', 'recovery'];
 async function renderWellness() {
   const root = document.getElementById('view-wellness');
   root.innerHTML = wellnessSkeleton(); // paint the layout immediately, before any network call
-  initWellnessTrends(); // its own independent fetch — starts now, in parallel with fetchWellness() below
+  loadWellnessHistory().catch(() => {}); // prefetch in parallel so the Longitudinal page opens instantly
 
   const cached = !AUTH.demo && cacheGet('wellness');
   if (cached) renderAllWellness(cached); // instant repaint from the last known-good data while a fresh copy loads
@@ -55,8 +55,6 @@ function wellnessSkeleton() {
       <h2>No check-in yet <span class="w-count" id="w-cnt-none"></span></h2>
       <div class="w-grid" id="w-grid-none"></div>
     </section>
-
-    ${trendsSkeleton()}
   `;
 }
 

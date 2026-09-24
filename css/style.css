@@ -19,6 +19,7 @@
   --radius-md: 16px;
   --radius-sm: 10px;
   --shadow: 0 1px 2px rgba(11, 11, 11, 0.04), 0 8px 24px rgba(11, 11, 11, 0.05);
+  --seg-active: #ffffff;
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
@@ -33,6 +34,7 @@
     --border: rgba(255, 255, 255, 0.10);
     --accent: #3987e5;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --seg-active: #3a3a3c;
   }
 }
 :root[data-theme="dark"] {
@@ -47,6 +49,7 @@
   --border: rgba(255, 255, 255, 0.10);
   --accent: #3987e5;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --seg-active: #3a3a3c;
 }
 
 * { box-sizing: border-box; }
@@ -83,6 +86,28 @@ body {
 .nav-item[aria-current="page"] { background: var(--ink); color: var(--bg); }
 .nav-item[disabled] { opacity: .38; cursor: default; }
 .nav-item[disabled]:hover { background: transparent; color: var(--ink-2); }
+/* Apple-style flyout under a nav item (lives outside .nav, which clips overflow) */
+.flyout {
+  position: absolute; left: 0; right: 0; top: 100%;
+  background: var(--bg);
+  border-bottom: 1px solid var(--hairline);
+  opacity: 0; visibility: hidden; transform: translateY(-8px);
+  transition: opacity .18s ease, transform .24s ease, visibility 0s linear .24s;
+}
+.flyout.open { opacity: 1; visibility: visible; transform: none; transition: opacity .18s ease, transform .24s ease; }
+.flyout-inner { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 22px 24px 30px; }
+.flyout-label { font-size: 12px; color: var(--ink-muted); margin-bottom: 8px; }
+.flyout-link {
+  appearance: none; border: none; background: none; padding: 3px 0; cursor: pointer;
+  font: inherit; font-size: 24px; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); transition: color .15s ease;
+}
+.flyout-link:hover, .flyout-link:focus-visible { color: var(--accent); outline: none; }
+.flyout-backdrop {
+  position: fixed; inset: 0; z-index: 15; background: rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  opacity: 0; pointer-events: none; transition: opacity .2s ease;
+}
+.flyout-backdrop.open { opacity: 1; pointer-events: auto; }
 .topbar-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .today-pill { font-size: 13px; color: var(--ink-muted); white-space: nowrap; }
 .avatar {
@@ -275,38 +300,72 @@ main { padding: 32px 0 96px; }
 #view-wellness table.w-detail td.w-score { text-align: center; font-weight: 700; border-radius: 6px; }
 #view-wellness table.w-detail td.w-total { font-weight: 800; text-align: center; }
 
-/* ---------- Wellness > Trends (longitudinal view: team/player x day/week/month) ---------- */
-#view-wellness .w-trends { background: var(--w-card); border-radius: 20px; padding: 20px 24px; box-shadow: var(--shadow); }
-#view-wellness .w-trends h2 { margin: 0; }
-#view-wellness .w-trends-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 4px; }
-#view-wellness .w-trends-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-#view-wellness .w-trends-select {
-  font: inherit; font-size: 13px; font-weight: 600; color: var(--w-text); background: var(--surface-2);
-  border: 1px solid var(--w-border); border-radius: 10px; padding: 7px 10px; appearance: none;
+/* ---------- Wellness > Longitudinal ---------- */
+#view-longitudinal { padding-top: 40px; }
+.lg-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 28px; }
+.lg-eyebrow { font-size: 13px; font-weight: 600; color: var(--ink-muted); margin-bottom: 4px; }
+.lg-title { font-size: 34px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1; margin: 0; }
+.lg-sub { font-size: 14px; color: var(--ink-muted); margin: 6px 0 0; }
+.lg-seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--surface-2); }
+.lg-seg button {
+  appearance: none; border: none; background: transparent; cursor: pointer; font: inherit;
+  font-size: 13px; font-weight: 600; color: var(--ink-2); padding: 7px 20px; border-radius: 8px;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
 }
-#view-wellness .w-segmented {
-  display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px;
+.lg-seg button.active { background: var(--seg-active); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10); }
+
+.lg-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); padding: 22px 26px 16px; margin-bottom: 20px;
 }
-#view-wellness .w-segmented button {
-  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--w-muted); background: transparent;
-  border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; transition: background .15s, color .15s;
+.lg-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.lg-card-title { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+.lg-picker { display: flex; align-items: center; gap: 10px; }
+.lg-avatar {
+  width: 32px; height: 32px; border-radius: 50%; overflow: hidden; flex: none; background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--ink-muted);
 }
-#view-wellness .w-segmented button.active { background: var(--w-card); color: var(--w-text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
-#view-wellness .w-trends-summary { font-size: 13px; color: var(--w-muted); margin: 10px 0 6px; }
-#view-wellness .w-trends-chart { min-height: 220px; }
-#view-wellness .w-trends-svgwrap { position: relative; }
-#view-wellness .w-trends-svg { width: 100%; height: 220px; display: block; }
-#view-wellness .w-trends-crosshair { stroke: var(--w-muted); stroke-width: 1; stroke-dasharray: 3 3; }
-#view-wellness .w-trends-tooltip {
-  position: absolute; transform: translateX(-50%); background: var(--w-card); border: 1px solid var(--w-border);
-  border-radius: 10px; padding: 6px 10px; font-size: 12px; line-height: 1.5; box-shadow: var(--shadow);
-  pointer-events: none; white-space: nowrap; text-align: center;
+.lg-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lg-select {
+  appearance: none; -webkit-appearance: none; cursor: pointer; border: none; border-radius: 10px;
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); padding: 8px 34px 8px 12px;
+  background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23898781' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center;
 }
-#view-wellness .w-trends-tooltip b { display: block; font-size: 14px; }
-#view-wellness .w-trends-tooltip span { color: var(--w-muted); }
-#view-wellness .w-trends-empty { display: flex; align-items: center; justify-content: center; height: 220px; color: var(--w-muted); font-size: 13px; }
-#view-wellness .w-trends-legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--w-muted); }
-#view-wellness .w-trends-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+.lg-stat { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; min-height: 70px; }
+.lg-stat-label { font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-muted); }
+.lg-stat-row { display: flex; align-items: center; gap: 10px; }
+.lg-stat-value { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+.lg-stat-value small { font-size: 17px; font-weight: 600; color: var(--ink-muted); margin-left: 1px; }
+.lg-stat-range { font-size: 13px; color: var(--ink-muted); }
+.lg-badge {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  background: var(--surface-2); padding: 3px 10px 3px 8px; border-radius: 999px;
+}
+.lg-badge i, .lg-legend i, .lg-tooltip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+.lg-chart { position: relative; min-height: 240px; }
+.lg-svg { display: block; touch-action: pan-y; }
+.lg-grid { stroke: var(--hairline); stroke-width: 1; }
+.lg-axis { font-size: 11px; fill: var(--ink-muted); }
+.lg-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.lg-dot { stroke: var(--surface); stroke-width: 1.5; }
+.lg-crosshair { stroke: var(--ink-muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.lg-tooltip {
+  position: absolute; transform: translateX(-50%); pointer-events: none; white-space: nowrap; text-align: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 6px 12px; font-size: 12px; line-height: 1.45;
+}
+.lg-tooltip b { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 15px; color: var(--ink); }
+.lg-tooltip span { color: var(--ink-muted); }
+.lg-empty { display: flex; align-items: center; justify-content: center; height: 240px; font-size: 13.5px; color: var(--ink-muted); text-align: center; }
+.lg-legend { display: flex; flex-wrap: wrap; gap: 18px; padding: 2px 4px; font-size: 12.5px; color: var(--ink-muted); }
+.lg-legend span { display: inline-flex; align-items: center; gap: 7px; }
+@media (max-width: 640px) {
+  .lg-title { font-size: 28px; }
+  .lg-card { padding: 18px 16px 12px; }
+  .flyout-link { font-size: 21px; }
+}
 
 @media (max-width: 640px) {
   .wrap { padding: 0 16px; }
