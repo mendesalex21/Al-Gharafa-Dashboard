@@ -27,22 +27,31 @@ function fmtUpdated(ts) {
   return 'Updated ' + d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-/** ACWR zone: >1.5 red · 1.3–1.5 orange · 0.8–1.3 green · <0.8 low (underload). */
+/** ACWR zones (club Power BI code): >1.5 red · 1.37–1.5 amber · 0.78–1.37 green · 0.5–0.78 blue (underload) · <0.5 light blue. */
+const ACWR_TH = { vlow: 0.5, low: 0.78, high: 1.37, red: 1.5 };
+const ACWR_COL = { red: '#e5484d', amber: '#d4a800', green: '#34c759', low: '#3d95f0', vlow: '#9fc9f5' };
 function acwrLevel(v) {
   if (v == null) return null;
-  return v > 1.5 ? 'red' : v > 1.3 ? 'orange' : v >= 0.8 ? 'green' : 'low';
+  return v > ACWR_TH.red ? 'red' : v > ACWR_TH.high ? 'amber' : v >= ACWR_TH.low ? 'green' : v >= ACWR_TH.vlow ? 'low' : 'vlow';
 }
+function acwrColor(v) { return ACWR_COL[acwrLevel(v)] || STATUS_COL.na; }
 function acwrChip(v) {
   const lv = acwrLevel(v);
   if (!lv) return '<span class="chip-v na">—</span>';
   return `<span class="chip-v ${lv}">${v.toFixed(2)}</span>`;
 }
 const ACWR_BANDS = [
-  { from: 0, to: 0.8, color: STATUS_COL.orange, alpha: 0.06 },
-  { from: 0.8, to: 1.3, color: STATUS_COL.green, alpha: 0.09 },
-  { from: 1.3, to: 1.5, color: STATUS_COL.orange, alpha: 0.10 },
-  { from: 1.5, to: 9, color: STATUS_COL.red, alpha: 0.08 },
+  { from: 0, to: ACWR_TH.vlow, color: ACWR_COL.vlow, alpha: 0.10 },
+  { from: ACWR_TH.vlow, to: ACWR_TH.low, color: ACWR_COL.low, alpha: 0.08 },
+  { from: ACWR_TH.low, to: ACWR_TH.high, color: ACWR_COL.green, alpha: 0.09 },
+  { from: ACWR_TH.high, to: ACWR_TH.red, color: ACWR_COL.amber, alpha: 0.12 },
+  { from: ACWR_TH.red, to: 9, color: ACWR_COL.red, alpha: 0.08 },
 ];
+
+/** Team value vs its usual (z): blue below, green on target, orange slightly above, red well above. */
+const Z_COL = { on: '#34c759', below: '#2a78d6', above: '#ff9f0a', high: '#e5484d' };
+const Z_LABEL = { on: 'On target', below: 'Below', above: 'Slightly above', high: 'Well above' };
+function zLevel(z) { return z == null ? null : z <= -1 ? 'below' : z < 1 ? 'on' : z < 2 ? 'above' : 'high'; }
 
 /** Diverging tint for neutral z-scores (above / below the squad): blue below, burnt orange above. */
 function zTint(z) {

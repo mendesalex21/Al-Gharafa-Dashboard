@@ -53,14 +53,14 @@ function renderSquad() {
         <span class="legend-inline"><span><i style="background:#8e8e93"></i>bar = 7:28</span><span><i style="background:var(--ink)"></i>dash = 14:35</span></span>
         ${segHtml('sq-rank', RANK_METRICS.map(([k, l]) => [k, l]), WL.rank)}</div>
       <div class="chart" id="sq-rank-chart"></div>
-      <p class="panel-foot">Available players with ≥ 28 days of data. The slower 14:35 ratio confirms (or not) a spike seen on 7:28. Zones: 0.8 · 1.3 · 1.5.</p>
+      <p class="panel-foot">Available players with ≥ 28 days of data. The slower 14:35 ratio confirms (or not) a spike seen on 7:28. Zones: 0.5 · 0.78 · 1.37 · 1.5.</p>
     </section>
     <div class="panel-head bare"><h2 class="panel-title">Load by metric</h2>${segHtml('sq-metric', METRIC_KEYS.map((k) => [k, METRIC_SHORT[k]]), WL.metric)}</div>
     <div class="grid2">
       <section class="panel">
         <div class="panel-head"><h2 class="panel-title small">Acute vs chronic</h2><span class="panel-note">rolling averages per day</span></div>
         <div class="chart" id="sq-scatter"></div>
-        <p class="panel-foot">Dashed lines: ACWR 0.8 · 1.3 · 1.5. Shaded wedge: 0.8–1.3.</p>
+        <p class="panel-foot">Dashed lines: ACWR 0.78 · 1.37 · 1.5. Shaded wedge: 0.78–1.37.</p>
       </section>
       <section class="panel">
         <div class="panel-head"><h2 class="panel-title small">Squad weekly load</h2><span class="panel-note">average available player · weeks start Sunday</span></div>
@@ -70,9 +70,11 @@ function renderSquad() {
       </section>
     </div>
     <div class="legend-row">
-      <span><i style="background:${STATUS_COL.green}"></i>ACWR 0.8–1.3</span>
-      <span><i style="background:${STATUS_COL.orange}"></i>1.3–1.5 or &lt;0.8 (underload)</span>
-      <span><i style="background:${STATUS_COL.red}"></i>&gt;1.5 · spike z ≥ 2</span>
+      <span><i style="background:${ACWR_COL.green}"></i>ACWR 0.78–1.37</span>
+      <span><i style="background:${ACWR_COL.amber}"></i>1.37–1.5</span>
+      <span><i style="background:${ACWR_COL.red}"></i>&gt;1.5 · spike z ≥ 2</span>
+      <span><i style="background:${ACWR_COL.low}"></i>0.5–0.78 (underload)</span>
+      <span><i style="background:${ACWR_COL.vlow}"></i>&lt;0.5</span>
     </div>`;
   bindSeg('sq-model', (v) => { WL.model = v; drawSquad(); });
   bindSeg('sq-metric', (v) => { WL.metric = v; drawSquad(); });
@@ -132,11 +134,11 @@ function drawSquad() {
   const k = WL.metric;
   const pts = ps.filter((p) => p.status === 'available' && p.chronic[k] > 0).map((p) => {
     const lv = acwrLevel(p.acwr[k]);
-    return { id: p.id, x: p.chronic[k], y: p.acute[k], label: p.name, color: STATUS_COL[lv === 'low' ? 'orange' : lv] || STATUS_COL.na, showLabel: p.acwr[k] > 1.3 || p.acwr[k] < 0.6, r: p.acwr[k] };
+    return { id: p.id, x: p.chronic[k], y: p.acute[k], label: p.name, color: acwrColor(p.acwr[k]), showLabel: p.acwr[k] > ACWR_TH.high || p.acwr[k] < ACWR_TH.vlow, r: p.acwr[k] };
   });
   chScatter(document.getElementById('sq-scatter'), {
-    points: pts, height: 300, rays: [{ r: 0.8, color: '#ff9f0a', label: '0.8' }, { r: 1.3, color: '#ff9f0a', label: '1.3' }, { r: 1.5, color: '#ff3b30', label: '1.5' }],
-    zone: { from: 0.8, to: 1.3, color: STATUS_COL.green },
+    points: pts, height: 300, rays: [{ r: 0.78, color: ACWR_COL.low, label: '0.78' }, { r: 1.37, color: ACWR_COL.amber, label: '1.37' }, { r: 1.5, color: ACWR_COL.red, label: '1.5' }],
+    zone: { from: 0.78, to: 1.37, color: ACWR_COL.green },
     xLabel: `Chronic · 28-day avg ${METRIC_UNIT[k]}`, yLabel: `Acute · 7-day avg ${METRIC_UNIT[k]}`,
     tip: (p) => `<b>${escapeHtml(p.label)}</b><span>ACWR ${p.r.toFixed(2)} · acute ${fmtN(p.y)} · chronic ${fmtN(p.x)}</span>`,
     onClick: (p) => switchView('player', { player: p.id }),
@@ -163,13 +165,13 @@ function drawRanking() {
   const d = WL.data;
   const k = WL.rank;
   const ps = d.players.filter((p) => p.status === 'available' && p.acwr_all && p.acwr_all[k] != null).sort((a, b) => b.acwr_all[k] - a.acwr_all[k]);
-  const col = (v) => { const lv = acwrLevel(v); return lv === 'low' ? '#9fc2ee' : STATUS_COL[lv] || STATUS_COL.na; };
+  const col = (v) => acwrColor(v);
   const vals = ps.map((p) => Math.min(p.acwr_all[k], 3));
   chXY(document.getElementById('sq-rank-chart'), {
     x: ps.map((p) => p.name), height: 280, slantTicks: true, yMin: 0, yMax: Math.max(2, ...vals) * 1.05,
     bars: { values: vals, color: (v) => col(v) },
     markers: [{ values: ps.map((p) => (p.acwr14[k] == null ? null : Math.min(p.acwr14[k], 3))), color: 'var(--ink)' }],
-    refs: [{ y: 0.8, dash: true, label: '0.8' }, { y: 1.3, dash: true, color: '#ff9f0a', label: '1.3' }, { y: 1.5, color: '#ff3b30', label: '1.5' }],
+    refs: [{ y: 0.78, dash: true, color: ACWR_COL.low, label: '0.78' }, { y: 1.37, dash: true, color: ACWR_COL.amber, label: '1.37' }, { y: 1.5, color: ACWR_COL.red, label: '1.5' }],
     tip: (i) => `<b>${escapeHtml(ps[i].name)}</b><span>7:28 ${ps[i].acwr_all[k].toFixed(2)} · 14:35 ${ps[i].acwr14[k] == null ? '—' : ps[i].acwr14[k].toFixed(2)}</span>`,
     onClick: (i) => switchView('player', { player: ps[i].id }),
   });

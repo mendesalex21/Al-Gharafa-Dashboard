@@ -79,7 +79,7 @@ function drawSessions(opts) {
       </div>
       <div class="sh-meta">${fmtN(s.minutes)} min · ${s.n} players${s.n_core !== s.n ? ` · team averages on ${s.n_core} ${s.kind === 'match' ? 'players ≥60 min' : 'full-session players'}` : ''}</div>
     </section>
-    ${s.team_ref ? `<p class="note tiles-note">Team averages coloured by <b>z-score vs the usual ${s.md}${s.kind === 'match' ? ' (per 90 min)' : ''} of ${TYPE_LABEL[cyc.type].toLowerCase()} microcycles</b> (${s.team_ref.n} past sessions): <span class="zs on">on target</span> |z| &lt; 1 · <span class="zs above">above</span> · <span class="zs below">below</span></p>` : `<p class="note tiles-note">No reference for this day (outside a standard microcycle) — team averages only.</p>`}
+    ${s.team_ref ? `<p class="note tiles-note">Team averages coloured by <b>z-score vs the usual ${s.md}${s.kind === 'match' ? ' (per 90 min)' : ''} of ${TYPE_LABEL[cyc.type].toLowerCase()} microcycles</b> (${s.team_ref.n} past sessions): <span class="zs on">on target</span> |z| &lt; 1 · <span class="zs below">below</span> z ≤ −1 · <span class="zs above">slightly above</span> z 1–2 · <span class="zs high">well above</span> z ≥ 2</p>` : `<p class="note tiles-note">No reference for this day (outside a standard microcycle) — team averages only.</p>`}
     <div class="tiles">
       ${[['td', 'Total distance', 'm'], ['d15', 'Distance > 15 km/h', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'], ['spr_n', 'Sprints', ''], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE load', 'AU']].map(([k, l, u]) => teamTile(s, k, l, u)).join('')}
       <div class="tile"><div class="tile-label">Intensity</div><div class="tile-value">${fmtN(t.mpm)}<small> m/min</small></div><div class="tile-sub">max speed ${fmtN(t.vmax, 1)} km/h (avg) · ${fmtN(t.hit_n)} efforts >20</div></div>
@@ -112,8 +112,7 @@ function drawSessions(opts) {
   if (s.drills.length) drawDrills(s);
 }
 
-const Z_STATUS = { on: 'On target', above: 'Above', below: 'Below' };
-function zStatus(z) { return z == null ? null : z >= 1 ? 'above' : z <= -1 ? 'below' : 'on'; }
+const Z_STATUS = Z_LABEL, zStatus = zLevel; // shared colour code (ui.js)
 
 /** Team-average tile, coloured by the team z-score vs the usual for this MD tag and microcycle type. */
 function teamTile(s, k, label, unit) {
@@ -335,6 +334,7 @@ function renderObjectives(opts) {
     <div id="ob-body"><div class="panel"><div class="empty">Loading…</div></div></div>`;
   bindSeg('ob-type', (v) => { TR.type = v; drawObjectives(); });
   withData('objectives', (d) => { TR.obj = d; drawObjectives(); }, (err) => { root.innerHTML = loadError(err); });
+  withData('calendar', (d) => { CAL.data = d; drawObjectives(); }, () => {}); // staff edits of the next match date
 }
 
 function drawObjectives() {
@@ -350,7 +350,7 @@ function drawObjectives() {
     <section class="panel">
       <div class="panel-head"><h2 class="panel-title small">Microcycle totals across the season · done vs typical</h2><span class="panel-note">click a bar to open that microcycle</span></div>
       <div id="pl-season"></div>
-      <p class="panel-foot">Bar = team total of the microcycle's training days · line = what those same days usually add up to (median of each day). Green within ±15 %, orange above, blue below.</p>
+      <p class="panel-foot">Bar = team total of the microcycle's training days · line = what those same days usually add up to (median of each day). Green within ±15 %, blue below, orange 15–30 % above, red more than 30 % above.</p>
     </section>
     <section class="panel">
       <div class="panel-head"><h2 class="panel-title small">Targets by day · ${TYPE_LABEL[TR.type].toLowerCase()} microcycle</h2><span class="panel-note">median · interquartile range · % of match demands</span></div>
@@ -372,7 +372,7 @@ function drawObjectives() {
 // ------------------------------------------------------------------ Microcycle planner
 const PLAN_METRICS = [['td', 'TD', 'm'], ['d15', '>15', 'm'], ['hit', '>20', 'm'], ['spr', '>25', 'm'], ['acc_dec', 'Acc+Dec', ''], ['srpe', 'sRPE', 'AU']];
 const PLAN_LONG = { td: 'Total distance', d15: 'Distance > 15 km/h', hit: 'Distance > 20 km/h', spr: 'Distance > 25 km/h', acc_dec: 'HIT Acc + Dec', srpe: 'sRPE load' };
-const PLAN_COL = { on: '#34c759', above: '#ff9f0a', below: '#2a78d6' };
+const PLAN_COL = Z_COL;
 TR.cycle = 'next'; TR.planK = 'td'; TR.off = {};
 
 function planRound(v) { return v == null ? null : Math.abs(v) >= 1000 ? Math.round(v / 10) * 10 : Math.round(v); }
@@ -410,7 +410,7 @@ function shareOut(rem, items) {
  * Objective of a day = what was still left to do the evening before, shared over that day and the following ones.
  */
 function planMetric(days, k) {
-  const act = days.filter((d) => !d.off && d.cell[k]);
+  const act = days.filter((d) => !d.off && d.cell[k] && !(d.past && d.actual[k] == null)); // e.g. sRPE not entered yet
   const total = act.reduce((a, d) => a + d.cell[k].med, 0);
   let known = act.findIndex((d) => !d.past);
   if (known < 0) known = act.length;
@@ -423,7 +423,7 @@ function planMetric(days, k) {
     const obj = planRound(shareOut(total - done, items)[i - cut]);
     const c = d.cell[k], v = d.actual ? d.actual[k] : null;
     const tol = Math.max((c.p75 - c.p25) / 2, 0.1 * obj, 1);
-    const status = v == null ? null : v > obj + tol ? 'above' : v < obj - tol ? 'below' : 'on';
+    const status = v == null ? null : v > obj + 2 * tol ? 'high' : v > obj + tol ? 'above' : v < obj - tol ? 'below' : 'on';
     byDate[d.date] = { obj, usual: c.med, p25: c.p25, p75: c.p75, actual: v, status };
   });
   const done = act.slice(0, known).reduce((a, x) => a + (x.actual[k] || 0), 0);
@@ -432,10 +432,36 @@ function planMetric(days, k) {
   return { byDate, total, done, due, planned, left: act.length - known, known };
 }
 
+/** Past microcycles from the build + the upcoming one rebuilt here from the calendar (with staff edits applied). */
+function plannerCycles(o) {
+  const list = o.cycles || [];
+  if (!CAL.data || !o.prev_match) return list;
+  const nxt = upcomingCycle(o, CAL.data), rest = list.filter((c) => !c.upcoming);
+  return nxt ? [nxt, ...rest] : rest;
+}
+
+function upcomingCycle(o, cal) {
+  const today = todayIso(), when = (e) => e.confirmed_date || e.start;
+  const evs = applyCalendarEdits(cal).filter((e) => e.kind === 'match' && e.gharafa === 'yes' && !e.played_date && when(e) > today);
+  if (!evs.length) return null;
+  const nx = evs.reduce((a, b) => (when(a) <= when(b) ? a : b)), nd = when(nx), prev = o.prev_match;
+  const length = daysBetween(prev, nd), brk = length > 12;
+  let typ = cycleType(length), start = addDays(prev, 1);
+  if (!typ) { start = addDays(nd, -6); typ = 'normal'; } // long break: plan the last week as a normal microcycle
+  const firm = !!nx.confirmed_date || nx.start === nx.end; // a confirmed date beats the tags typed in the GPS file
+  const days = [];
+  for (let d = start; d < nd; d = addDays(d, 1)) {
+    const rec = o.recent && o.recent[d], calc = computedTag(d, brk ? null : prev, nd);
+    days.push({ date: d, tag: (firm ? calc : null) || (rec && rec.md) || calc, actual: rec ? rec.actual : null, n: rec ? rec.n : 0 });
+  }
+  return { id: 'next', from: addDays(start, -1), to: nd, type: typ, length, upcoming: true, break: brk, days,
+    label: `${nx.round || nx.competition}${nx.opponent ? ' · ' + nx.opponent : ''}`, provisional: !nx.confirmed_date && nx.start !== nx.end };
+}
+
 function drawPlanner() {
   const o = TR.obj, mount = document.getElementById('pl-panel');
   if (!mount) return;
-  const cycles = o.cycles || [];
+  const cycles = plannerCycles(o);
   if (!cycles.length) { mount.innerHTML = '<p class="note">No microcycle to plan yet.</p>'; return; }
   const cyc = cycles.find((c) => c.id === TR.cycle) || cycles[0];
   TR.cycle = cyc.id;
@@ -481,12 +507,12 @@ function drawPlanner() {
       <select class="select" id="pl-cycle" aria-label="Microcycle">${cycles.map(opt).join('')}</select></div>
     <p class="note">${intro} Match: ${fmtDay(matchDay, { weekday: 'long', day: 'numeric', month: 'long' })}. ${lead}</p>
     ${segHtml('pl-metric', PLAN_METRICS.map(([key, short]) => [key, short]), k)}
-    <div class="pl-legend"><span><i class="lg-band"></i>usual range (25–75th)</span><span><i class="lg-obj"></i>objective</span><span><i class="lg-todo"></i>to do</span><span><i style="background:${PLAN_COL.on}"></i>on target</span><span><i style="background:${PLAN_COL.above}"></i>above</span><span><i style="background:${PLAN_COL.below}"></i>below</span></div>
+    <div class="pl-legend"><span><i class="lg-band"></i>usual range (25–75th)</span><span><i class="lg-obj"></i>objective</span><span><i class="lg-todo"></i>to do</span><span><i style="background:${PLAN_COL.on}"></i>on target</span><span><i style="background:${PLAN_COL.below}"></i>below</span><span><i style="background:${PLAN_COL.above}"></i>slightly above</span><span><i style="background:${PLAN_COL.high}"></i>well above</span></div>
     <div id="pl-chart"></div>
     <div class="table-wrap"><table class="dtable compact plan"><thead><tr><th>Day</th><th>Tag</th>${PLAN_METRICS.map(([key, short, unit]) => `<th class="c ${key === k ? 'sel' : ''}">${short}${unit ? ` <small>${unit}</small>` : ''}</th>`).join('')}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
     <h3 class="pl-sub">Microcycle total · done / target</h3>
     <div class="pl-progs">${bars}</div>
-    <p class="panel-foot">Target of the microcycle = the usual (median) team value of each planned day, added up. Each day's objective = what is still left to do, shared over the remaining days in proportion to their usual load and kept within the club's usual range for that day (10th–90th percentile; MD-1 capped at the 75th to stay fresh). Every synced session re-adjusts the following days — e.g. after MD-2, the MD-1 objective absorbs what was over- or under-done. Coloured values = actual team average (green on target, orange above, blue below the objective). Use “set off” for a day without team training.</p>`;
+    <p class="panel-foot">Target of the microcycle = the usual (median) team value of each planned day, added up. Each day's objective = what is still left to do, shared over the remaining days in proportion to their usual load and kept within the club's usual range for that day (10th–90th percentile; MD-1 capped at the 75th to stay fresh). Every synced session re-adjusts the following days — e.g. after MD-2, the MD-1 objective absorbs what was over- or under-done. Coloured values = actual team average (green on target, blue below, orange slightly above, red well above the objective). Use “set off” for a day without team training.</p>`;
 
   document.getElementById('pl-cycle').addEventListener('change', (e) => { TR.cycle = e.target.value; drawPlanner(); drawPlanSeason(); });
   bindSeg('pl-metric', (v) => { TR.planK = v; drawPlanner(); drawPlanSeason(); });
@@ -549,7 +575,7 @@ function drawPlanSeason() {
     return { c, done, usual, n };
   }).filter((r) => r.n).reverse();
   if (!rows.length) { mount.innerHTML = emptyState('No completed microcycle this season yet.'); return; }
-  const stOf = (r) => { const g = (r.done - r.usual) / Math.max(r.usual, 1); return g > 0.15 ? 'above' : g < -0.15 ? 'below' : 'on'; };
+  const stOf = (r) => { const g = (r.done - r.usual) / Math.max(r.usual, 1); return g > 0.3 ? 'high' : g > 0.15 ? 'above' : g < -0.15 ? 'below' : 'on'; };
   chXY(mount, {
     x: rows.map((r) => r.c.to), height: 200,
     bars: { values: rows.map((r) => r.done), color: (v, i) => (rows[i].c.id === TR.cycle ? '#1d1d1f' : PLAN_COL[stOf(rows[i])]) },

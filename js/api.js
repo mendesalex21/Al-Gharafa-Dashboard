@@ -16,7 +16,9 @@ async function callApi(action, mockData) {
     // local development only: real data built by sync/build.py, read from disk (outside the published site/)
     const r = await fetch(`../sync/out/${action}.json`, { cache: 'no-store' });
     if (!r.ok) throw new Error(`No local ${action}.json — run sync/build.py --no-upload`);
-    return r.json();
+    const data = await r.json();
+    if (action === 'calendar') data.edits = demoEdits();
+    return data;
   }
   if (AUTH.demo) return Promise.resolve(structuredClone(mockData));
   let json;
@@ -41,6 +43,7 @@ async function callApi(action, mockData) {
     throw new Error(json.error || 'Unknown error');
   }
   AUTH.user = json.user;
+  if (json.edits) json.data.edits = json.edits; // staff calendar edits travel with the calendar payload
   cacheSet(action, json.data);
   return json.data;
 }
@@ -55,4 +58,22 @@ function loadData(action) {
       .catch((err) => { delete DATA_PROMISES[action]; throw err; });
   }
   return DATA_PROMISES[action];
+}
+
+/** Calendar edits (local demo: kept in this browser only). */
+function demoEdits() { try { return JSON.parse(localStorage.getItem('demo_cal_edits') || '[]'); } catch (err) { return []; } }
+async function saveCalendarEdit(id, data) {
+  if (AUTH.demo) {
+    const list = demoEdits().filter((e) => e.id !== id);
+    if (data) list.push({ id, data, by: 'demo', at: new Date().toISOString() });
+    try { localStorage.setItem('demo_cal_edits', JSON.stringify(list)); } catch (err) { /* private mode */ }
+    return list;
+  }
+  const resp = await fetch(window.APP_CONFIG.API_URL, {
+    method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'calendar_edit', token: AUTH.token, id, data }),
+  });
+  const json = await resp.json();
+  if (!json.ok) throw new Error(json.error === 'forbidden' ? 'This Google account isn’t authorized to edit.' : json.error || 'Save failed');
+  return json.edits;
 }
