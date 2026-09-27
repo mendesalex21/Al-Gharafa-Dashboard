@@ -3,7 +3,7 @@
  * Training › Objectives (targets by microcycle type from the club's own history + upcoming week plan).
  * Data: sync/build.py → "sessions" and "objectives" payloads.
  */
-const TR = { sessions: null, obj: null, date: null, type: 'normal', mode: 'bars', week: null, weekMode: 'train' };
+const TR = { sessions: null, obj: null, date: null, type: 'normal', mode: 'bars', mdz: 'td', week: null, weekMode: 'train' };
 const TYPE_LABEL = { short: 'Short', normal: 'Normal', long: 'Long' };
 const OBJ_METRICS = ['td', 'hit', 'spr', 'acc_dec', 'srpe'];
 
@@ -86,21 +86,69 @@ function drawSessions(opts) {
     <div class="panel-head bare"><h2 class="panel-title">Who did the most</h2>
       <span class="legend-inline"><span><i style="background:var(--accent)"></i>above team average</span><span><i style="background:#9fc2ee"></i>below</span><span><i class="ln dash"></i>team average</span><span>% = of his top-3 match</span></span></div>
     <div class="boards" id="se-boards">${SESSION_BOARDS.map((b) => boardHtml(s, b)).join('')}</div>
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title small">vs his usual for this day</h2>${s.mdref ? segHtml('se-mdz-metric', MDZ_METRICS.map(([k, l]) => [k, l]).concat([['all', 'All metrics']]), TR.mdz) : ''}</div>
+      <p class="note" id="se-mdz-note"></p>
+      <div id="se-mdz"></div>
+    </section>
     ${obj ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Objectives · ${s.md} of a ${TYPE_LABEL[cyc.type].toLowerCase()} microcycle</h2><span class="panel-note">from ${obj.n} similar sessions since ${fmtDay(TR.obj.since, { month: 'short', year: 'numeric' })}</span></div>
       <div class="bullets">${OBJ_METRICS.map((k) => bulletHtml(METRIC_LONG[k], METRIC_UNIT[k], t[k], obj[k])).join('')}${bulletHtml('Duration', 'min', s.minutes, obj.minutes)}</div></section>`
       : s.kind === 'training' ? `<section class="panel"><p class="note">No objective for this day${cyc.type ? '' : ' — it is outside a standard microcycle (break or pre-season)'}${s.md && cyc.type ? ` — not enough ${s.md} sessions in ${cyc.type} microcycles` : ''}.</p></section>` : ''}
     <section class="panel">
       <div class="panel-head"><h2 class="panel-title small">Players</h2>
-        <span class="panel-note">grouped by position · click a column to sort</span>${segHtml('se-mode', [['bars', 'Data bars'], ['z', 'z-score vs session']], TR.mode)}</div>
+        <span class="panel-note">grouped by position · click a column to sort</span>${segHtml('se-mode', [['bars', 'Data bars'], ['z', 'z vs session'], ...(s.mdref ? [['mdz', `z vs usual ${s.md}`]] : [])], s.mdref || TR.mode !== 'mdz' ? TR.mode : 'bars')}</div>
       <div class="table-wrap" id="se-players"></div>
       ${s.absent.length ? `<p class="panel-foot"><b>Not in the session:</b> ${s.absent.map((a) => `${escapeHtml(playerName(a.id))} <span class="muted">(${escapeHtml(a.type)})</span>`).join(', ')}</p>` : ''}
     </section>
     ${s.drills.length ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Drills</h2><span class="panel-note">team average per drill · "vs match" = per-minute intensity as % of the players' match intensity · tap a drill for players</span></div><div class="drills-wrap" id="se-drills"></div></section>` : ''}`;
 
   bindSeg('se-mode', (v) => { TR.mode = v; drawSessionPlayers(s); });
+  if (s.mdref) bindSeg('se-mdz-metric', (v) => { TR.mdz = v; drawMdz(s); });
+  drawMdz(s);
+  document.getElementById('se-mdz').onclick = (e) => { const r = e.target.closest('[data-id]'); if (r) switchView('player', { player: r.dataset.id }); };
   document.getElementById('se-boards').onclick = (e) => { const r = e.target.closest('[data-id]'); if (r) switchView('player', { player: r.dataset.id }); };
   drawSessionPlayers(s);
   if (s.drills.length) drawDrills(s);
+}
+
+const MDZ_METRICS = [['td', 'TD'], ['d15', '>15'], ['hit', '>20'], ['spr', '>25'], ['spr_n', 'Sprints'], ['acc_dec', 'Acc+Dec'], ['srpe', 'sRPE']];
+const MDZ_UNIT = { td: 'm', d15: 'm', hit: 'm', spr: 'm', spr_n: '', acc_dec: '', srpe: 'AU' };
+
+/** z-score of each player vs his own past sessions with the same MD tag in the same microcycle type. */
+function drawMdz(s) {
+  const note = document.getElementById('se-mdz-note'), mount = document.getElementById('se-mdz');
+  const ref = s.mdref;
+  if (!ref) {
+    note.textContent = 'No reference for this day: it is outside a standard microcycle (break or pre-season), or there is no comparable history yet.';
+    mount.innerHTML = '';
+    return;
+  }
+  const day = ref.tag === 'MD' ? `matches ending a ${TYPE_LABEL[ref.type].toLowerCase()} microcycle (per 90 min, players ≥ 45 min)` : `${ref.tag} sessions of ${TYPE_LABEL[ref.type].toLowerCase()} microcycles`;
+  note.innerHTML = `Each player is compared with <b>his own</b> previous ${day} since ${fmtDay(ref.since, { month: 'short', year: 'numeric' })} (${ref.sessions} sessions in the club history); with fewer than 5 of his own, the squad's is used. <span class="muted">z = (today − his usual) / his usual variation · orange = more than usual, blue = less.</span>`;
+  const ps = s.players.filter((p) => p.mdref);
+  if (!ps.length) { mount.innerHTML = emptyState('No player with a reference for this session.'); return; }
+  const srcTag = (m) => `<small class="muted">${m.src === 'own' ? `his ${m.n}` : 'squad'}</small>`;
+  if (TR.mdz === 'all') {
+    const cell = (z) => `<td class="c"><span class="cellv" style="${zTint(z)}">${z == null ? '—' : fmtSigned(z)}</span></td>`;
+    mount.innerHTML = `<div class="table-wrap"><table class="dtable compact"><thead><tr><th>Player</th>${MDZ_METRICS.map(([, l]) => `<th class="c">${l}</th>`).join('')}<th class="c">Reference</th></tr></thead><tbody>
+      ${ps.slice().sort((a, b) => (b.mdref.z.td ?? -9) - (a.mdref.z.td ?? -9)).map((p) => `<tr data-id="${p.id}" class="clickable"><td>${playerCell(p.id, playerName(p.id), p.type)}</td>${MDZ_METRICS.map(([k]) => cell(p.mdref.z[k])).join('')}<td class="c">${srcTag(p.mdref)}</td></tr>`).join('')}
+      </tbody></table></div>`;
+    return;
+  }
+  const k = TR.mdz;
+  const list = ps.filter((p) => p.mdref.z[k] != null).sort((a, b) => b.mdref.z[k] - a.mdref.z[k]);
+  const val = (p) => (p.mdref.per90 && p.min ? p[k] * 90 / p.min : p[k]);
+  mount.innerHTML = `<div class="dz-list">${list.map((p) => {
+    const z = p.mdref.z[k], c = Math.max(-3, Math.min(3, z));
+    const col = z >= 0 ? `rgba(200,88,26,${0.35 + Math.min(1, Math.abs(z) / 2) * 0.55})` : `rgba(42,120,214,${0.35 + Math.min(1, Math.abs(z) / 2) * 0.55})`;
+    return `<div class="dz-row" data-id="${p.id}">
+      <span class="lb-name">${escapeHtml(playerName(p.id))}</span>
+      <span class="dz-val">${fmtN(val(p))} <small>vs ${fmtN(p.mdref.mean[k])} ${MDZ_UNIT[k]}</small></span>
+      <span class="dz-track"><i class="mid"></i><b style="left:${c < 0 ? 50 + c / 3 * 50 : 50}%;width:${Math.abs(c) / 3 * 50}%;background:${col}"></b></span>
+      <span class="dz-z ${Math.abs(z) >= 2 ? 'strong' : ''}">${fmtSigned(z)}</span>
+      <span class="dz-src">${srcTag(p.mdref)}</span></div>`;
+  }).join('')}</div>
+  <div class="dz-axis"><span>less than usual</span><span>usual</span><span>more than usual</span></div>`;
 }
 
 const SESSION_BOARDS = [
@@ -131,21 +179,22 @@ const rpeTint = (v) => (v == null ? '' : `background:rgba(255,59,48,${Math.max(0
 
 function drawSessionPlayers(s) {
   const roster = TR.sessions.roster;
-  const zf = (k) => (r) => r.raw['z_' + k];
+  const mode = TR.mode === 'mdz' && !s.mdref ? 'bars' : TR.mode;
+  const zf = (k) => (r) => (mode === 'mdz' ? (r.raw.mdref ? r.raw.mdref.z[k] : null) : r.raw['z_' + k]);
   const pct = (k) => (r) => (r.v[k] == null ? '—' : `${r.v[k]}%`);
   const cols = [
     { key: 'min', label: 'Min' },
     { key: 'rpe', label: 'RPE', d: 0, tint: (r) => rpeTint(r.v.rpe) },
     { key: 'td', label: 'TD', unit: 'm', bar: true, z: zf('td') },
     { key: 'mpm', label: 'm/min' },
-    { key: 'd15', label: '>15', unit: 'm', bar: true },
+    { key: 'd15', label: '>15', unit: 'm', bar: true, z: zf('d15') },
     { key: 'hit', label: '>20', unit: 'm', bar: true, z: zf('hit') },
     { key: 'spr', label: '>25', unit: 'm', bar: true, z: zf('spr') },
     { key: 'vmax', label: 'Vmax', unit: 'km/h', d: 1 },
     { key: 'vmax_pct', label: '% Vmax', fmt: pct('vmax_pct'), tint: (r) => (r.v.vmax_pct >= 90 ? 'background:rgba(52,199,89,.18)' : '') },
     { key: 'days_hsv', label: 'Days ≥90%', tint: (r) => (r.v.days_hsv >= 10 ? 'background:rgba(255,59,48,.18);font-weight:700' : '') },
     { key: 'hit_n', label: 'Count >20', bar: true },
-    { key: 'spr_n', label: 'Sprints', bar: true },
+    { key: 'spr_n', label: 'Sprints', bar: true, z: zf('spr_n') },
     { key: 'acc', label: 'HIT Acc', bar: true },
     { key: 'dec', label: 'HIT Dec', bar: true },
     { key: 'acc_dec', label: 'Acc+Dec', bar: true, z: zf('acc_dec') },
@@ -154,7 +203,7 @@ function drawSessionPlayers(s) {
     { key: 'p3_hit', label: '>20 %top3', fmt: pct('p3_hit') },
   ];
   const rows = s.players.map((p) => ({ id: p.id, name: playerName(p.id), sub: p.type, pos: posOf(p.id, roster), v: p, raw: p }));
-  groupedTable(document.getElementById('se-players'), cols, rows, { mode: TR.mode, sortKey: 'td', onRow: (id) => switchView('player', { player: id }) });
+  groupedTable(document.getElementById('se-players'), cols, rows, { mode, sortKey: 'td', onRow: (id) => switchView('player', { player: id }) });
 }
 
 function playerName(id) {

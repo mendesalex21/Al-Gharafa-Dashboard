@@ -24,7 +24,7 @@ function switchView(view, opts) {
   Object.keys(VIEW_RENDER).forEach((v) => { document.getElementById('view-' + v).hidden = v !== view; });
   window.scrollTo(0, 0);
   CURRENT_VIEW = view;
-  if (location.hash.slice(1) !== view) history.pushState(null, '', '#' + view); // bookmarkable address + browser back
+  if (location.hash.slice(1).split('/')[0] !== view) history.pushState(null, '', '#' + view); // bookmarkable address + browser back
   if (!VIEWS[view]) { VIEWS[view] = true; VIEW_RENDER[view](opts); }
   else if (VIEW_REDRAW[view]) VIEW_REDRAW[view](opts); // widths may have changed while hidden
 }
@@ -94,9 +94,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('avatar').addEventListener('click', () => {
     if (!AUTH.demo && confirm('Sign out?')) signOut();
   });
-  const start = location.hash.slice(1);
+  const [start, arg] = decodeURIComponent(location.hash.slice(1)).split('/'); // e.g. #sessions/2026-09-04, #player/ounas
+  const opts = arg ? { sessions: { date: arg }, player: { player: arg }, testing: { athlete: arg, tab: 'profile' } }[start] : undefined;
   initAuth(() => {
-    switchView(VIEW_RENDER[start] ? start : 'wellness');
+    switchView(VIEW_RENDER[start] ? start : 'wellness', opts);
     window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEW_RENDER[v] && v !== CURRENT_VIEW) switchView(v); });
   });
 });

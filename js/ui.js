@@ -142,7 +142,7 @@ function groupedTable(mount, cols, rows, opts = {}) {
           const txt = c.fmt ? c.fmt(r) : v == null ? '—' : fmtN(v, c.d || 0);
           let style = c.tint ? c.tint(r) || '' : '';
           let cls = 'c';
-          if (!style && opts.mode === 'z' && c.z) style = zTint(c.z(r));
+          if (opts.mode && opts.mode !== 'bars' && c.bar) { if (!style && c.z) style = zTint(c.z(r)); }
           else if (!style && c.bar && v != null) { cls += ' bar'; style = `--w:${Math.round(Math.abs(v) / max[c.key] * 100)}%`; }
           return `<td class="${cls}" style="${style}">${txt}</td>`;
         }).join('')}</tr>`).join('');
