@@ -195,7 +195,8 @@ function drawWeek() {
   pick.onchange = () => { TR.week = pick.value; drawWeek(); };
   const w = list.find((x) => x.start === TR.week);
   const mode = TR.weekMode, bands = d.weeks.bands;
-  document.getElementById('wk-sub').textContent = `${fmtDay(w.start, { day: 'numeric', month: 'long' })} – ${fmtDay(w.end, { day: 'numeric', month: 'long' })} · ${mode === 'train' ? 'training sessions only ("target without game")' : 'all sessions incl. matches'} · % = share of the player's top-3 match`;
+  const partial = w.data_to && w.data_to < w.end;
+  document.getElementById('wk-sub').textContent = `Sunday ${fmtDay(w.start, { day: 'numeric', month: 'long' })} – Saturday ${fmtDay(w.end, { day: 'numeric', month: 'long' })}${partial ? ` · in progress, data up to ${fmtDay(w.data_to, { weekday: 'long', day: 'numeric' })}` : ''} · ${mode === 'train' ? 'training sessions only ("target without game")' : 'all sessions incl. matches'} · % = share of the player's top-3 match`;
 
   document.getElementById('wk-body').innerHTML = `
     <div class="panel-head bare"><h2 class="panel-title">Squad · day by day</h2><span class="panel-note">average of players in full training / match · dark = match day</span></div>

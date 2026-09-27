@@ -238,7 +238,7 @@ function drawPlayerLoad(opts) {
       <div id="pl-fatigue"></div>
     </section>
     <div class="grid2">
-      <section class="panel"><div class="panel-head"><h2 class="panel-title small">Weekly load z-score</h2><span class="panel-note">vs the player's previous 6 weeks · end of each week</span></div>
+      <section class="panel"><div class="panel-head"><h2 class="panel-title small">Weekly load z-score</h2><span class="panel-note">Sunday–Saturday weeks vs the player's previous 6 weeks</span></div>
         <div class="table-wrap" id="pl-z"></div></section>
       <section class="panel"><div class="panel-head"><h2 class="panel-title small">Availability · last ${s.cat.length} days</h2></div>
         <div id="pl-timeline"></div></section>
@@ -287,9 +287,13 @@ function drawPlayerCharts(p, s) {
 }
 
 function drawZTable(s) {
-  const n = s.cat.length, idx = [];
-  for (let i = n - 1; i >= 0 && idx.length < 8; i -= 7) idx.unshift(i);
-  const head = idx.map((i) => `<th class="c">${fmtDay(addDays(s.start, i), { day: 'numeric', month: 'short' })}</th>`).join('');
+  // one column per calendar week (Sunday–Saturday): the value on its Saturday, or on the last data day for the current week
+  const n = s.cat.length, idx = [n - 1];
+  for (let i = n - 1; i >= 0 && idx.length < 6; i--) if (dateOf(addDays(s.start, i)).getUTCDay() === 6 && i !== n - 1) idx.unshift(i);
+  const head = idx.map((i) => {
+    const dt = addDays(s.start, i), sat = dateOf(dt).getUTCDay() === 6;
+    return `<th class="c">${sat ? 'w/e ' : ''}${fmtDay(dt, { day: 'numeric', month: 'short' })}${sat ? '' : '<small> (so far)</small>'}</th>`;
+  }).join('');
   const body = METRIC_KEYS.map((k) => `<tr><td>${METRIC_SHORT[k]}</td>${idx.map((i) => {
     const z = s.z7[k][i];
     const cls = z == null ? '' : z >= 2 ? 'hz-red' : z >= 1.5 ? 'hz-orange' : z <= -2 ? 'hz-low' : '';
