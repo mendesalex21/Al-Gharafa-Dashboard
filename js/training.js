@@ -79,9 +79,10 @@ function drawSessions(opts) {
       </div>
       <div class="sh-meta">${fmtN(s.minutes)} min · ${s.n} players${s.n_core !== s.n ? ` · team averages on ${s.n_core} ${s.kind === 'match' ? 'players ≥60 min' : 'full-session players'}` : ''}</div>
     </section>
+    ${s.team_ref ? `<p class="note tiles-note">Team averages coloured by <b>z-score vs the usual ${s.md}${s.kind === 'match' ? ' (per 90 min)' : ''} of ${TYPE_LABEL[cyc.type].toLowerCase()} microcycles</b> (${s.team_ref.n} past sessions): <span class="zs on">on target</span> |z| &lt; 1 · <span class="zs above">above</span> · <span class="zs below">below</span></p>` : `<p class="note tiles-note">No reference for this day (outside a standard microcycle) — team averages only.</p>`}
     <div class="tiles">
-      ${[['td', 'Total distance', 'm'], ['d15', 'Distance > 15 km/h', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE load', 'AU']].map(([k, l, u]) => `<div class="tile"><div class="tile-label">${l}</div><div class="tile-value">${fmtN(t[k])}<small> ${u}</small></div><div class="tile-sub">team average${s.team_p3 && s.team_p3[k] != null ? ` · <b>${s.team_p3[k]}%</b> of top-3 match` : ''}</div></div>`).join('')}
-      <div class="tile"><div class="tile-label">Intensity</div><div class="tile-value">${fmtN(t.mpm)}<small> m/min</small></div><div class="tile-sub">max speed ${fmtN(t.vmax, 1)} km/h (avg) · ${fmtN(t.hit_n)} efforts >20 · ${fmtN(t.spr_n)} sprints</div></div>
+      ${[['td', 'Total distance', 'm'], ['d15', 'Distance > 15 km/h', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'], ['spr_n', 'Sprints', ''], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE load', 'AU']].map(([k, l, u]) => teamTile(s, k, l, u)).join('')}
+      <div class="tile"><div class="tile-label">Intensity</div><div class="tile-value">${fmtN(t.mpm)}<small> m/min</small></div><div class="tile-sub">max speed ${fmtN(t.vmax, 1)} km/h (avg) · ${fmtN(t.hit_n)} efforts >20</div></div>
     </div>
     <div class="panel-head bare"><h2 class="panel-title">Who did the most</h2>
       <span class="legend-inline"><span><i style="background:var(--accent)"></i>above team average</span><span><i style="background:#9fc2ee"></i>below</span><span><i class="ln dash"></i>team average</span><span>% = of his top-3 match</span></span></div>
@@ -109,6 +110,18 @@ function drawSessions(opts) {
   document.getElementById('se-boards').onclick = (e) => { const r = e.target.closest('[data-id]'); if (r) switchView('player', { player: r.dataset.id }); };
   drawSessionPlayers(s);
   if (s.drills.length) drawDrills(s);
+}
+
+const Z_STATUS = { on: 'On target', above: 'Above', below: 'Below' };
+function zStatus(z) { return z == null ? null : z >= 1 ? 'above' : z <= -1 ? 'below' : 'on'; }
+
+/** Team-average tile, coloured by the team z-score vs the usual for this MD tag and microcycle type. */
+function teamTile(s, k, label, unit) {
+  const ref = s.team_ref && s.team_ref[k], st = ref ? zStatus(ref.z) : null;
+  const perMatch = s.kind === 'match' ? ' / 90 min' : '';
+  return `<div class="tile ${st ? 'zt-' + st : ''}"><div class="tile-label">${label}</div>
+    <div class="tile-value">${fmtN(s.team[k])}<small> ${unit}</small></div>${st ? `<div class="tile-z"><span class="zs ${st}">${Z_STATUS[st]} · z ${fmtSigned(ref.z)}</span></div>` : ''}
+    <div class="tile-sub">${ref ? `usual ${fmtN(ref.mean)}${perMatch} · 25–75th ${fmtN(ref.p25)}–${fmtN(ref.p75)}` : 'team average'}</div></div>`;
 }
 
 const MDZ_METRICS = [['td', 'TD'], ['d15', '>15'], ['hit', '>20'], ['spr', '>25'], ['spr_n', 'Sprints'], ['acc_dec', 'Acc+Dec'], ['srpe', 'sRPE']];
@@ -314,7 +327,8 @@ function drawWeek() {
 }
 
 // ------------------------------------------------------------------ Objectives
-function renderObjectives() {
+function renderObjectives(opts) {
+  if (opts && opts.cycle) TR.cycle = opts.cycle;
   const root = document.getElementById('view-objectives');
   root.innerHTML = `
     ${pageHead('Training', 'Session objectives', 'ob-sub', segHtml('ob-type', [['short', 'Short'], ['normal', 'Normal'], ['long', 'Long']], TR.type))}
@@ -332,7 +346,12 @@ function drawObjectives() {
   const cell = (c, k, unit) => (c && c[k] ? `<b>${fmtN(c[k].med)}</b><small>${fmtN(c[k].p25)}–${fmtN(c[k].p75)}${unit ? ' ' + unit : ''}</small>${c[k].pct != null && k !== 'minutes' ? `<em>${c[k].pct}%</em>` : ''}` : '—');
   const body = document.getElementById('ob-body');
   body.innerHTML = `
-    ${planHtml(o)}
+    <section class="panel" id="pl-panel"></section>
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title small">Microcycle totals across the season · done vs typical</h2><span class="panel-note">click a bar to open that microcycle</span></div>
+      <div id="pl-season"></div>
+      <p class="panel-foot">Bar = team total of the microcycle's training days · line = what those same days usually add up to (median of each day). Green within ±15 %, orange above, blue below.</p>
+    </section>
     <section class="panel">
       <div class="panel-head"><h2 class="panel-title small">Targets by day · ${TYPE_LABEL[TR.type].toLowerCase()} microcycle</h2><span class="panel-note">median · interquartile range · % of match demands</span></div>
       <div class="table-wrap"><table class="dtable objectives"><thead><tr><th>Day</th><th class="c">n</th>${OBJ_METRICS.map((k) => `<th class="c">${METRIC_SHORT[k]}${METRIC_UNIT[k] ? ` <small>${METRIC_UNIT[k]}</small>` : ''}</th>`).join('')}<th class="c">Duration <small>min</small></th><th class="c">m/min</th></tr></thead>
@@ -346,30 +365,197 @@ function drawObjectives() {
         return `<span class="pbar" title="${METRIC_LONG[k]}"><i style="width:${Math.min(100, p || 0)}%"></i><small>${METRIC_SHORT[k]} ${p == null ? '—' : p + '%'}</small></span>`;
       }).join('')}</div>`).join('') || emptyState('Not enough sessions of this type yet.')}</div>
     </section>`;
+  drawPlanner();
+  drawPlanSeason();
 }
 
-function planHtml(o) {
-  const p = o.plan;
-  if (!p) return '<section class="panel"><p class="note">No upcoming Al Gharafa fixture found in the calendar.</p></section>';
-  const n = p.next;
-  const when = n.start === n.end || n.confirmed_date ? fmtDay(p.next_date, { weekday: 'long', day: 'numeric', month: 'long' }) : `${fmtDay(n.start, { day: 'numeric', month: 'short' })} – ${fmtDay(n.end, { day: 'numeric', month: 'short' })} (date TBC — planned on ${fmtDay(p.next_date, { day: 'numeric', month: 'short' })})`;
-  const intro = p.break
-    ? `${p.length} days since the last match (${fmtDay(p.prev_match, { day: 'numeric', month: 'short' })}) — no standard microcycle. The last 6 days before the match are planned as a <b>normal</b> microcycle.`
-    : `${TYPE_LABEL[p.type]} microcycle · ${p.length} days since the last match (${fmtDay(p.prev_match, { day: 'numeric', month: 'short' })}).`;
-  const rows = p.days.map((day) => {
-    const c = objectiveFor(o, p.type, day.tag);
-    const tgt = (k) => (c && c[k] ? `${fmtN(c[k].p25)}–${fmtN(c[k].p75)}` : '—');
-    const act = (k) => {
-      if (!day.actual) return '';
-      const comp = complianceOf(day.actual[k], c && c[k]);
-      return `<div class="act" style="color:${comp ? COMPLIANCE[comp][1] : 'inherit'}">${fmtN(day.actual[k])}</div>`;
-    };
-    return `<tr><td>${fmtDay(day.date)}</td><td><span class="tag">${day.tag || '—'}</span></td>${OBJ_METRICS.map((k) => `<td class="c">${tgt(k)}${act(k)}</td>`).join('')}</tr>`;
+// ------------------------------------------------------------------ Microcycle planner
+const PLAN_METRICS = [['td', 'TD', 'm'], ['d15', '>15', 'm'], ['hit', '>20', 'm'], ['spr', '>25', 'm'], ['acc_dec', 'Acc+Dec', ''], ['srpe', 'sRPE', 'AU']];
+const PLAN_LONG = { td: 'Total distance', d15: 'Distance > 15 km/h', hit: 'Distance > 20 km/h', spr: 'Distance > 25 km/h', acc_dec: 'HIT Acc + Dec', srpe: 'sRPE load' };
+const PLAN_COL = { on: '#34c759', above: '#ff9f0a', below: '#2a78d6' };
+TR.cycle = 'next'; TR.planK = 'td'; TR.off = {};
+
+function planRound(v) { return v == null ? null : Math.abs(v) >= 1000 ? Math.round(v / 10) * 10 : Math.round(v); }
+
+/** Cycle days with their usual values. Past days without a team session, MD+1 (recovery) and days set as off are not planned. */
+function planDays(o, cyc) {
+  return cyc.days.map((d) => {
+    const cell = objectiveFor(o, cyc.type, d.tag) || objectiveFor(o, 'long', d.tag) || objectiveFor(o, 'normal', d.tag); // MD-6/MD-5 only exist in long cycles
+    const past = d.date <= o.as_of;
+    const why = d.tag === 'MD+1' ? 'Recovery' : !cell ? 'No reference' : past && !d.actual ? 'No team session' : !past && TR.off[cyc.id + '|' + d.date] ? 'Off' : null;
+    return { ...d, cell, past, off: !!why, why };
+  });
+}
+
+/** Share `rem` over the days in proportion to their usual value, each kept within [lo, hi]. */
+function shareOut(rem, items) {
+  const out = items.map(() => null);
+  let free = items.map((_, i) => i), left = rem;
+  for (let pass = 0; pass <= items.length && free.length; pass++) {
+    const sum = free.reduce((a, i) => a + items[i].med, 0) || 1;
+    const fixed = [];
+    free.forEach((i) => {
+      const v = left * (items[i].med || 0) / sum;
+      if (v < items[i].lo) fixed.push([i, items[i].lo]); else if (v > items[i].hi) fixed.push([i, items[i].hi]);
+    });
+    if (!fixed.length) { free.forEach((i) => { out[i] = left * (items[i].med || 0) / sum; }); break; }
+    fixed.forEach(([i, v]) => { out[i] = v; left -= v; });
+    free = free.filter((i) => out[i] == null);
+  }
+  return out;
+}
+
+/**
+ * Adaptive plan for one metric. Target of the microcycle = sum of the usual (median) value of each planned day.
+ * Objective of a day = what was still left to do the evening before, shared over that day and the following ones.
+ */
+function planMetric(days, k) {
+  const act = days.filter((d) => !d.off && d.cell[k]);
+  const total = act.reduce((a, d) => a + d.cell[k].med, 0);
+  let known = act.findIndex((d) => !d.past);
+  if (known < 0) known = act.length;
+  const byDate = {};
+  act.forEach((d, i) => {
+    const cut = Math.min(i, known);
+    const done = act.slice(0, cut).reduce((a, x) => a + (x.actual[k] || 0), 0);
+    const rest = act.slice(cut);
+    const items = rest.map((x) => ({ med: x.cell[k].med, lo: x.cell[k].p10, hi: x.tag === 'MD-1' ? x.cell[k].p75 : x.cell[k].p90 }));
+    const obj = planRound(shareOut(total - done, items)[i - cut]);
+    const c = d.cell[k], v = d.actual ? d.actual[k] : null;
+    const tol = Math.max((c.p75 - c.p25) / 2, 0.1 * obj, 1);
+    const status = v == null ? null : v > obj + tol ? 'above' : v < obj - tol ? 'below' : 'on';
+    byDate[d.date] = { obj, usual: c.med, p25: c.p25, p75: c.p75, actual: v, status };
+  });
+  const done = act.slice(0, known).reduce((a, x) => a + (x.actual[k] || 0), 0);
+  const due = act.slice(0, known).reduce((a, x) => a + x.cell[k].med, 0);
+  const planned = act.slice(known).reduce((a, x) => a + byDate[x.date].obj, 0);
+  return { byDate, total, done, due, planned, left: act.length - known, known };
+}
+
+function drawPlanner() {
+  const o = TR.obj, mount = document.getElementById('pl-panel');
+  if (!mount) return;
+  const cycles = o.cycles || [];
+  if (!cycles.length) { mount.innerHTML = '<p class="note">No microcycle to plan yet.</p>'; return; }
+  const cyc = cycles.find((c) => c.id === TR.cycle) || cycles[0];
+  TR.cycle = cyc.id;
+  const days = planDays(o, cyc);
+  const plans = {};
+  PLAN_METRICS.forEach(([k]) => { plans[k] = planMetric(days, k); });
+  const k = TR.planK, p = plans[k];
+  const matchDay = cyc.to;
+  const opt = (c) => `<option value="${c.id}" ${c.id === cyc.id ? 'selected' : ''}>${c.upcoming ? 'Next · ' : ''}${fmtDay(c.to, { day: 'numeric', month: 'short' })} · ${escapeHtml(c.label || 'Match')}</option>`;
+  const intro = cyc.upcoming && cyc.break
+    ? `${cyc.length} days since the last match — no standard microcycle. The last ${cyc.days.length} days before the match are planned as a <b>${cyc.type}</b> microcycle${cyc.provisional ? ' (match date to be confirmed)' : ''}.`
+    : `<b>${TYPE_LABEL[cyc.type]} microcycle</b> · ${cyc.length} days${cyc.provisional ? ' · match date to be confirmed' : ''}.`;
+  const next = days.find((d) => !d.past && !d.off);
+  const lead = !next ? (cyc.upcoming ? '' : 'Microcycle completed — objectives shown as they were re-adjusted day by day.')
+    : `Proposed next: <b>${next.tag}</b> on ${fmtDay(next.date, { weekday: 'long', day: 'numeric', month: 'short' })}${p.known ? `, re-adjusted from the ${p.known} session${p.known > 1 ? 's' : ''} already done` : ''}.`;
+
+  const cellHtml = (d, key) => {
+    const r = plans[key].byDate[d.date];
+    if (!r) return '<td class="c muted">—</td>';
+    const act = r.actual != null ? `<div><span class="zs ${r.status}">${fmtN(r.actual)}</span></div>` : '';
+    return `<td class="c pl-cell ${key === k ? 'sel' : ''}"><b>${fmtN(r.obj)}</b><small>usual ${fmtN(r.usual)}</small>${act}</td>`;
+  };
+  const rows = days.map((d) => `<tr class="${d.off ? 'off' : ''} ${next && d.date === next.date ? 'is-next' : ''}">
+      <td>${fmtDay(d.date)}</td><td><span class="tag">${d.tag || '—'}</span></td>
+      ${d.off ? `<td class="c muted" colspan="${PLAN_METRICS.length}">${d.why}${!d.past && d.why === 'Off' ? ` · <button type="button" class="linkbtn" data-off="${d.date}">plan it</button>` : ''}</td>`
+        : PLAN_METRICS.map(([key]) => cellHtml(d, key)).join('')}
+      <td class="c">${!d.past && !d.off && d.tag !== 'MD+1' ? `<button type="button" class="linkbtn" data-off="${d.date}">set off</button>` : ''}</td></tr>`).join('');
+
+  const bars = PLAN_METRICS.map(([key, short, unit]) => {
+    const q = plans[key];
+    if (!q.total) return '';
+    const max = Math.max(q.total, q.done + q.planned) * 1.05;
+    const pc = (v) => Math.max(0, Math.min(100, v / max * 100));
+    const gap = q.known ? (q.done - q.due) / Math.max(q.due, 1) : null;
+    const st = gap == null ? null : gap > 0.15 ? 'above' : gap < -0.15 ? 'below' : 'on';
+    return `<div class="pl-prog ${key === k ? 'sel' : ''}" data-k="${key}">
+      <div class="pl-prog-head"><span>${PLAN_LONG[key]}</span><span><b>${fmtN(q.done)}</b> / ${fmtN(planRound(q.total))} ${unit}${st ? ` <span class="zs ${st}">${gap > 0 ? '+' : ''}${Math.round(gap * 100)}% vs usual so far</span>` : ''}</span></div>
+      <div class="pl-track"><i class="done" style="width:${pc(q.done)}%;background:${st ? PLAN_COL[st] : '#2a78d6'}"></i><i class="todo" style="left:${pc(q.done)}%;width:${pc(q.planned)}%"></i>${q.known ? `<span class="due" style="left:${pc(q.due)}%" title="usual by now"></span>` : ''}<span class="tot" style="left:${pc(q.total)}%"></span></div></div>`;
   }).join('');
-  return `<section class="panel">
-    <div class="panel-head"><h2 class="panel-title small">Next: ${escapeHtml(n.round || n.competition || '')}${n.opponent ? ' vs ' + escapeHtml(n.opponent) : ''}</h2><span class="panel-note">${when}</span></div>
-    <p class="note">${intro}</p>
-    <div class="table-wrap"><table class="dtable compact"><thead><tr><th>Day</th><th>Tag</th>${OBJ_METRICS.map((k) => `<th class="c">${METRIC_SHORT[k]} target</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
-    <p class="panel-foot">Actual team values appear under each target once the session is synced (green = on target, orange = outside the range).</p>
-  </section>`;
+
+  mount.innerHTML = `
+    <div class="panel-head"><h2 class="panel-title small">Microcycle planner · team average</h2>
+      <select class="select" id="pl-cycle" aria-label="Microcycle">${cycles.map(opt).join('')}</select></div>
+    <p class="note">${intro} Match: ${fmtDay(matchDay, { weekday: 'long', day: 'numeric', month: 'long' })}. ${lead}</p>
+    ${segHtml('pl-metric', PLAN_METRICS.map(([key, short]) => [key, short]), k)}
+    <div class="pl-legend"><span><i class="lg-band"></i>usual range (25–75th)</span><span><i class="lg-obj"></i>objective</span><span><i class="lg-todo"></i>to do</span><span><i style="background:${PLAN_COL.on}"></i>on target</span><span><i style="background:${PLAN_COL.above}"></i>above</span><span><i style="background:${PLAN_COL.below}"></i>below</span></div>
+    <div id="pl-chart"></div>
+    <div class="table-wrap"><table class="dtable compact plan"><thead><tr><th>Day</th><th>Tag</th>${PLAN_METRICS.map(([key, short, unit]) => `<th class="c ${key === k ? 'sel' : ''}">${short}${unit ? ` <small>${unit}</small>` : ''}</th>`).join('')}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <h3 class="pl-sub">Microcycle total · done / target</h3>
+    <div class="pl-progs">${bars}</div>
+    <p class="panel-foot">Target of the microcycle = the usual (median) team value of each planned day, added up. Each day's objective = what is still left to do, shared over the remaining days in proportion to their usual load and kept within the club's usual range for that day (10th–90th percentile; MD-1 capped at the 75th to stay fresh). Every synced session re-adjusts the following days — e.g. after MD-2, the MD-1 objective absorbs what was over- or under-done. Coloured values = actual team average (green on target, orange above, blue below the objective). Use “set off” for a day without team training.</p>`;
+
+  document.getElementById('pl-cycle').addEventListener('change', (e) => { TR.cycle = e.target.value; drawPlanner(); drawPlanSeason(); });
+  bindSeg('pl-metric', (v) => { TR.planK = v; drawPlanner(); drawPlanSeason(); });
+  mount.querySelectorAll('.pl-prog').forEach((el) => el.addEventListener('click', () => { TR.planK = el.dataset.k; drawPlanner(); drawPlanSeason(); }));
+  mount.querySelectorAll('[data-off]').forEach((b) => b.addEventListener('click', () => {
+    const key = cyc.id + '|' + b.dataset.off;
+    if (TR.off[key]) delete TR.off[key]; else TR.off[key] = true;
+    drawPlanner();
+  }));
+  planChart(document.getElementById('pl-chart'), days, p, k);
+}
+
+/** One column per day: usual range (band), objective (dark line), actual (bar coloured by status) or "to do" (hollow bar). */
+function planChart(mount, days, p, k) {
+  const W = Math.max(280, Math.round(mount.clientWidth)), H = 240, P = { l: 44, r: 12, t: 24, b: 40 };
+  const n = days.length, iw = W - P.l - P.r, ih = H - P.t - P.b, step = iw / n;
+  const vals = [0];
+  days.forEach((d) => { const r = p.byDate[d.date]; if (r) vals.push(r.obj, r.p75, r.actual || 0); });
+  const top = Math.max(...vals) * 1.12 || 1, ticks = chNiceTicks(0, top).filter((t) => t <= top);
+  const yMax = Math.max(top, ticks[ticks.length - 1]);
+  const xAt = (i) => P.l + step * (i + 0.5), yAt = (v) => P.t + ih * (1 - Math.max(0, Math.min(yMax, v)) / yMax);
+  const bw = Math.min(46, step * 0.5), base = yAt(0);
+  let s = '';
+  ticks.forEach((t) => { s += `<line class="ch-grid" x1="${P.l}" x2="${W - P.r}" y1="${yAt(t)}" y2="${yAt(t)}"/><text class="ch-axis" x="${P.l - 6}" y="${yAt(t) + 3.5}" text-anchor="end">${chFmt(t)}</text>`; });
+  days.forEach((d, i) => {
+    const r = p.byDate[d.date], x = xAt(i);
+    s += `<text class="ch-axis" x="${x}" y="${H - 22}" text-anchor="middle" style="font-weight:600">${d.tag || ''}</text><text class="ch-axis" x="${x}" y="${H - 8}" text-anchor="middle">${fmtDay(d.date, { weekday: 'short', day: 'numeric' })}</text>`;
+    if (!r) { s += `<text class="ch-axis" x="${x}" y="${base - 8}" text-anchor="middle">${d.why || ''}</text>`; return; }
+    const bx = x - bw / 2;
+    s += `<rect x="${bx - 6}" y="${yAt(r.p75)}" width="${bw + 12}" height="${Math.max(1, yAt(r.p25) - yAt(r.p75))}" rx="4" style="fill:var(--ink-muted)" opacity=".13"/>`;
+    if (r.actual != null) {
+      const y = yAt(r.actual), h = Math.max(1, base - y), rr = Math.min(4, h);
+      s += `<path d="M${bx},${base}V${y + rr}Q${bx},${y} ${bx + rr},${y}H${bx + bw - rr}Q${bx + bw},${y} ${bx + bw},${y + rr}V${base}Z" style="fill:${PLAN_COL[r.status]}"/>`;
+    } else {
+      s += `<rect x="${bx + 1}" y="${yAt(r.obj)}" width="${bw - 2}" height="${Math.max(1, base - yAt(r.obj))}" rx="4" style="fill:rgba(42,120,214,.08);stroke:#2a78d6" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+      s += `<text class="ch-axis" x="${x}" y="${yAt(r.obj) - 12}" text-anchor="middle" style="font-weight:700;fill:var(--ink)">${fmtN(r.obj)}</text>`;
+    }
+    s += `<line x1="${bx - 8}" x2="${bx + bw + 8}" y1="${yAt(r.obj)}" y2="${yAt(r.obj)}" style="stroke:var(--ink)" stroke-width="2.5" stroke-linecap="round"/>`;
+  });
+  mount.innerHTML = `<svg class="ch-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${s}</svg>`;
+  const svg = mount.querySelector('svg');
+  chHover(mount, svg, P.t, H - P.b, (rx) => {
+    const i = Math.floor((rx - P.l) / step);
+    if (i < 0 || i >= n) return null;
+    const d = days[i], r = p.byDate[d.date];
+    const html = r ? `<b>${d.tag} · ${fmtDay(d.date)}</b><span>Objective ${fmtN(r.obj)} · usual ${fmtN(r.usual)} (${fmtN(r.p25)}–${fmtN(r.p75)})</span>${r.actual != null ? `<span>Done ${fmtN(r.actual)} — ${Z_STATUS[r.status].toLowerCase()}</span>` : '<span>To do</span>'}`
+      : `<b>${d.tag || ''} · ${fmtDay(d.date)}</b><span>${d.why}</span>`;
+    return { x: xAt(i), y: r ? yAt(Math.max(r.obj, r.p75, r.actual || 0)) : base - 20, html };
+  });
+}
+
+/** Each past microcycle: team total done vs the usual total of the same days. */
+function drawPlanSeason() {
+  const o = TR.obj, mount = document.getElementById('pl-season');
+  if (!mount) return;
+  const k = TR.planK;
+  const rows = (o.cycles || []).filter((c) => !c.upcoming).map((c) => {
+    let done = 0, usual = 0, n = 0;
+    planDays(o, c).forEach((d) => { if (!d.off && d.actual && d.cell[k]) { done += d.actual[k] || 0; usual += d.cell[k].med; n++; } });
+    return { c, done, usual, n };
+  }).filter((r) => r.n).reverse();
+  if (!rows.length) { mount.innerHTML = emptyState('No completed microcycle this season yet.'); return; }
+  const stOf = (r) => { const g = (r.done - r.usual) / Math.max(r.usual, 1); return g > 0.15 ? 'above' : g < -0.15 ? 'below' : 'on'; };
+  chXY(mount, {
+    x: rows.map((r) => r.c.to), height: 200,
+    bars: { values: rows.map((r) => r.done), color: (v, i) => (rows[i].c.id === TR.cycle ? '#1d1d1f' : PLAN_COL[stOf(rows[i])]) },
+    markers: [{ values: rows.map((r) => r.usual), color: 'var(--ink)' }],
+    tick: (x) => fmtDay(x, { day: 'numeric', month: 'short' }),
+    tip: (i) => { const r = rows[i]; return `<b>${fmtN(r.done)} / ${fmtN(planRound(r.usual))}</b><span>${escapeHtml(r.c.label || '')} · ${fmtDay(r.c.to, { day: 'numeric', month: 'short' })}</span><span>${TYPE_LABEL[r.c.type]} · ${r.n} training day${r.n > 1 ? 's' : ''} · ${PLAN_LONG[k]}</span>`; },
+    onClick: (i) => { TR.cycle = rows[i].c.id; drawPlanner(); drawPlanSeason(); document.getElementById('pl-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+  });
 }

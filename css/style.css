@@ -418,6 +418,49 @@ main.page { padding-top: 40px; }
 .dtable.grouped td small.muted { margin-left: 3px; }
 .dtable.grouped td.bar { background: linear-gradient(90deg, rgba(42, 120, 214, .30) var(--w), transparent var(--w)); background-clip: content-box; }
 
+/* team z-score status (tiles, planner) */
+.tiles-note { margin: 0 2px 10px; font-size: 12.5px; color: var(--ink-muted); }
+.zs { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; letter-spacing: 0; }
+.zs.on { color: #1f8a3a; background: rgba(52, 199, 89, .16); }
+.zs.above { color: #a15c00; background: rgba(255, 159, 10, .18); }
+.zs.below { color: #1d5fae; background: rgba(42, 120, 214, .15); }
+.tile.zt-on { box-shadow: inset 4px 0 0 #34c759, var(--shadow); }
+.tile.zt-above { box-shadow: inset 4px 0 0 #ff9f0a, var(--shadow); }
+.tile.zt-below { box-shadow: inset 4px 0 0 #2a78d6, var(--shadow); }
+.tile .tile-z { margin: 4px 0 2px; }
+
+/* microcycle planner */
+#pl-panel .panel-head { flex-wrap: wrap; gap: 10px; }
+#pl-panel .seg { margin: 4px 0 10px; }
+.pl-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-muted); margin: 0 0 6px; }
+.pl-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.pl-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.pl-legend .lg-band { background: var(--ink-muted); opacity: .25; }
+.pl-legend .lg-obj { height: 3px; border-radius: 2px; background: var(--ink); }
+.pl-legend .lg-todo { border: 1.5px dashed #2a78d6; background: rgba(42, 120, 214, .08); }
+#pl-chart { position: relative; margin-bottom: 8px; }
+table.plan td.pl-cell b { display: block; font-size: 14px; }
+table.plan td.pl-cell small { display: block; color: var(--ink-muted); font-size: 11px; }
+table.plan td.pl-cell .zs { margin-top: 3px; }
+table.plan .sel { background: rgba(42, 120, 214, .05); }
+table.plan tr.off td { color: var(--ink-muted); }
+table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-weight: 700; }
+.linkbtn { border: 0; background: none; color: #2a78d6; font: inherit; font-size: 12px; cursor: pointer; padding: 2px 4px; }
+.linkbtn:hover { text-decoration: underline; }
+.pl-sub { font-size: 14px; font-weight: 600; margin: 18px 0 8px; }
+.pl-progs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px 28px; }
+.pl-prog { cursor: pointer; padding: 6px 8px; border-radius: 10px; }
+.pl-prog.sel { background: rgba(42, 120, 214, .06); }
+.pl-prog-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; margin-bottom: 6px; flex-wrap: wrap; }
+.pl-prog-head > span:first-child { color: var(--ink-muted); }
+.pl-track { position: relative; height: 10px; border-radius: 5px; background: rgba(120, 120, 128, .12); }
+.pl-track i { position: absolute; top: 0; bottom: 0; border-radius: 5px; }
+.pl-track i.done { left: 0; }
+.pl-track i.todo { background: rgba(42, 120, 214, .14); border: 1.5px dashed #2a78d6; box-sizing: border-box; }
+.pl-track .due, .pl-track .tot { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; border-radius: 1px; }
+.pl-track .due { background: var(--ink-muted); }
+.pl-track .tot { background: var(--ink); }
+
 /* session: z vs the player's usual for this MD tag and microcycle type */
 .dz-list { display: grid; gap: 3px; }
 .dz-row { display: grid; grid-template-columns: minmax(70px, 110px) minmax(110px, 150px) minmax(0, 1fr) 42px 56px; gap: 10px; align-items: center; font-size: 12.5px; padding: 2px 4px; border-radius: 6px; cursor: pointer; }

@@ -5,7 +5,7 @@ const VIEW_SECTION = {
 };
 const VIEW_RENDER = {
   wellness: () => renderWellness(), longitudinal: () => renderLongitudinal(),
-  sessions: (o) => renderSessions(o), week: () => renderWeek(), objectives: () => renderObjectives(), squad: () => renderSquad(),
+  sessions: (o) => renderSessions(o), week: () => renderWeek(), objectives: (o) => renderObjectives(o), squad: () => renderSquad(),
   player: (o) => renderPlayerLoad(o), readiness: () => renderReadiness(), testing: (o) => renderTesting(o), calendar: (o) => renderCalendar(o),
 };
 const VIEW_REDRAW = {
@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!AUTH.demo && confirm('Sign out?')) signOut();
   });
   const [start, arg] = decodeURIComponent(location.hash.slice(1)).split('/'); // e.g. #sessions/2026-09-04, #player/ounas
-  const opts = arg ? { sessions: { date: arg }, player: { player: arg }, testing: { athlete: arg, tab: 'profile' } }[start] : undefined;
+  const opts = arg ? { sessions: { date: arg }, player: { player: arg }, testing: { athlete: arg, tab: 'profile' }, objectives: { cycle: arg } }[start] : undefined;
   initAuth(() => {
     switchView(VIEW_RENDER[start] ? start : 'wellness', opts);
     window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEW_RENDER[v] && v !== CURRENT_VIEW) switchView(v); });
