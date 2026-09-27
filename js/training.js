@@ -3,7 +3,7 @@
  * Training › Objectives (targets by microcycle type from the club's own history + upcoming week plan).
  * Data: sync/build.py → "sessions" and "objectives" payloads.
  */
-const TR = { sessions: null, obj: null, date: null, type: 'normal', mode: 'bars', cmp: 'td', week: null, weekMode: 'train' };
+const TR = { sessions: null, obj: null, date: null, type: 'normal', mode: 'bars', week: null, weekMode: 'train' };
 const TYPE_LABEL = { short: 'Short', normal: 'Normal', long: 'Long' };
 const OBJ_METRICS = ['td', 'hit', 'spr', 'acc_dec', 'srpe'];
 
@@ -83,6 +83,9 @@ function drawSessions(opts) {
       ${[['td', 'Total distance', 'm'], ['d15', 'Distance > 15 km/h', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE load', 'AU']].map(([k, l, u]) => `<div class="tile"><div class="tile-label">${l}</div><div class="tile-value">${fmtN(t[k])}<small> ${u}</small></div><div class="tile-sub">team average${s.team_p3 && s.team_p3[k] != null ? ` · <b>${s.team_p3[k]}%</b> of top-3 match` : ''}</div></div>`).join('')}
       <div class="tile"><div class="tile-label">Intensity</div><div class="tile-value">${fmtN(t.mpm)}<small> m/min</small></div><div class="tile-sub">max speed ${fmtN(t.vmax, 1)} km/h (avg) · ${fmtN(t.hit_n)} efforts >20 · ${fmtN(t.spr_n)} sprints</div></div>
     </div>
+    <div class="panel-head bare"><h2 class="panel-title">Who did the most</h2>
+      <span class="legend-inline"><span><i style="background:var(--accent)"></i>above team average</span><span><i style="background:#9fc2ee"></i>below</span><span><i class="ln dash"></i>team average</span><span>% = of his top-3 match</span></span></div>
+    <div class="boards" id="se-boards">${SESSION_BOARDS.map((b) => boardHtml(s, b)).join('')}</div>
     ${obj ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Objectives · ${s.md} of a ${TYPE_LABEL[cyc.type].toLowerCase()} microcycle</h2><span class="panel-note">from ${obj.n} similar sessions since ${fmtDay(TR.obj.since, { month: 'short', year: 'numeric' })}</span></div>
       <div class="bullets">${OBJ_METRICS.map((k) => bulletHtml(METRIC_LONG[k], METRIC_UNIT[k], t[k], obj[k])).join('')}${bulletHtml('Duration', 'min', s.minutes, obj.minutes)}</div></section>`
       : s.kind === 'training' ? `<section class="panel"><p class="note">No objective for this day${cyc.type ? '' : ' — it is outside a standard microcycle (break or pre-season)'}${s.md && cyc.type ? ` — not enough ${s.md} sessions in ${cyc.type} microcycles` : ''}.</p></section>` : ''}
@@ -92,21 +95,38 @@ function drawSessions(opts) {
       <div class="table-wrap" id="se-players"></div>
       ${s.absent.length ? `<p class="panel-foot"><b>Not in the session:</b> ${s.absent.map((a) => `${escapeHtml(playerName(a.id))} <span class="muted">(${escapeHtml(a.type)})</span>`).join(', ')}</p>` : ''}
     </section>
-    <section class="panel">
-      <div class="panel-head"><h2 class="panel-title small">Players vs team and top-3 match</h2>${segHtml('se-cmp', SESSION_CMP.map(([k, l]) => [k, l]), TR.cmp)}</div>
-      <div class="chart" id="se-cmp-chart"></div>
-      <p class="panel-foot">Bars = session value (darker when ≥ 60% of the player's top-3 match). Dash = the player's top-3 match average (mean of his 3 highest full matches, past year). Dashed line = team average.</p>
-    </section>
     ${s.drills.length ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Drills</h2><span class="panel-note">team average per drill · "vs match" = per-minute intensity as % of the players' match intensity · tap a drill for players</span></div><div class="drills-wrap" id="se-drills"></div></section>` : ''}`;
 
   bindSeg('se-mode', (v) => { TR.mode = v; drawSessionPlayers(s); });
-  bindSeg('se-cmp', (v) => { TR.cmp = v; drawSessionCompare(s); });
+  document.getElementById('se-boards').onclick = (e) => { const r = e.target.closest('[data-id]'); if (r) switchView('player', { player: r.dataset.id }); };
   drawSessionPlayers(s);
-  drawSessionCompare(s);
   if (s.drills.length) drawDrills(s);
 }
 
-const SESSION_CMP = [['td', 'TD'], ['d15', '>15'], ['hit', '>20'], ['spr', '>25'], ['acc_dec', 'Acc+Dec'], ['spr_n', 'Sprints']];
+const SESSION_BOARDS = [
+  ['td', 'Total distance', 'm'], ['mpm', 'Intensity', 'm/min'], ['d15', 'Distance > 15 km/h', 'm'],
+  ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'], ['spr_n', 'Sprints', 'n'],
+  ['acc_dec', 'HIT Acc + Dec', 'n'], ['vmax', 'Max speed', 'km/h'], ['srpe', 'sRPE load', 'AU'],
+];
+
+/** Ranking of every player of the session on one metric: horizontal bars, top 3 highlighted, team-average line. */
+function boardHtml(s, [k, label, unit]) {
+  const list = s.players.filter((p) => p[k] != null && p.min > 0).sort((a, b) => b[k] - a[k]);
+  if (!list.length || !list[0][k]) return '';
+  const max = list[0][k];
+  const avg = s.team[k] != null ? s.team[k] : list.reduce((a, p) => a + p[k], 0) / list.length;
+  const d = k === 'vmax' ? 1 : 0;
+  const rows = list.map((p, i) => {
+    const extra = k === 'vmax' ? (p.vmax_pct != null ? `${p.vmax_pct}%` : '') : p['p3_' + k] != null ? `${p['p3_' + k]}%` : '';
+    const partial = p.cat !== 't' && p.cat !== 'm';
+    return `<div class="lb-row ${partial ? 'partial' : ''}" data-id="${p.id}" title="${escapeHtml(`${playerName(p.id)} · ${p.type} · ${p.min} min`)}">
+      <span class="lb-rank ${i < 3 ? 'r' + (i + 1) : ''}">${i + 1}</span>
+      <span class="lb-name">${escapeHtml(playerName(p.id))}${partial ? ` <small>${escapeHtml(p.type.toLowerCase())}</small>` : ''}</span>
+      <span class="lb-track"><i class="lb-bar ${p[k] >= avg ? 'hi' : ''}" style="width:${Math.max(1.5, p[k] / max * 100)}%"></i><i class="lb-avg" style="left:${avg / max * 100}%"></i></span>
+      <span class="lb-val">${fmtN(p[k], d)}${extra ? `<small>${extra}</small>` : ''}</span></div>`;
+  }).join('');
+  return `<section class="panel lb"><div class="panel-head"><h2 class="panel-title small">${label} <small class="muted">${unit}</small></h2><span class="panel-note">team ${fmtN(avg, d)}</span></div><div class="lb-list">${rows}</div></section>`;
+}
 const rpeTint = (v) => (v == null ? '' : `background:rgba(255,59,48,${Math.max(0, Math.min(1, (v - 3) / 7)) * 0.32})`);
 
 function drawSessionPlayers(s) {
@@ -135,20 +155,6 @@ function drawSessionPlayers(s) {
   ];
   const rows = s.players.map((p) => ({ id: p.id, name: playerName(p.id), sub: p.type, pos: posOf(p.id, roster), v: p, raw: p }));
   groupedTable(document.getElementById('se-players'), cols, rows, { mode: TR.mode, sortKey: 'td', onRow: (id) => switchView('player', { player: id }) });
-}
-
-function drawSessionCompare(s) {
-  const k = TR.cmp, label = SESSION_CMP.find((x) => x[0] === k)[1];
-  const ps = s.players.filter((p) => p[k] != null && (p.cat === 't' || p.cat === 'm' || p.cat === 'p')).sort((a, b) => (b[k] || 0) - (a[k] || 0));
-  const top3 = ps.map((p) => (p['p3_' + k] ? Math.round(p[k] / p['p3_' + k] * 100) : null));
-  const team = ps.length ? ps.reduce((a, p) => a + (p[k] || 0), 0) / ps.length : null;
-  chXY(document.getElementById('se-cmp-chart'), {
-    x: ps.map((p) => playerName(p.id)), height: 300, slantTicks: true,
-    bars: { values: ps.map((p) => p[k]), color: (v, i) => ((ps[i]['p3_' + k] || 0) >= 60 ? '#2a78d6' : '#9fc2ee') },
-    markers: [{ values: top3, color: '#ff9f0a' }],
-    refs: team != null ? [{ y: team, dash: true, label: `team ${fmtN(team)}` }] : [],
-    tip: (i) => `<b>${escapeHtml(playerName(ps[i].id))} · ${fmtN(ps[i][k])}</b><span>${label} · ${ps[i]['p3_' + k] == null ? 'no match reference' : `${ps[i]['p3_' + k]}% of top-3 match (${fmtN(top3[i])})`}</span>`,
-  });
 }
 
 function playerName(id) {
