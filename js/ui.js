@@ -108,6 +108,56 @@ function sortableTable(mount, head, rows, initial = { col: 0, dir: 1 }, rowAttrs
   draw();
 }
 
+const POS_ORDER = ['GK', 'CD', 'WD', 'CM', 'WM', 'FW'];
+const POS_LABEL = { GK: 'Goalkeepers', CD: 'Centre-backs', WD: 'Full-backs', CM: 'Midfielders', WM: 'Wingers', FW: 'Forwards' };
+function posOf(id, roster) { return (roster && roster[id] && roster[id].pos) || '—'; }
+
+/**
+ * Table grouped by position (Power BI style) with in-cell data bars, or z-score tint in mode 'z'.
+ * cols: [{key, label, unit, d (decimals), bar, z (row→z), tint (row→css), fmt (row→html), desc}]
+ * rows: [{id, name, sub, pos, v: {key: number}}]
+ */
+function groupedTable(mount, cols, rows, opts = {}) {
+  let st = { key: opts.sortKey || (cols.find((c) => c.bar) || cols[1]).key, dir: -1 };
+  const max = {};
+  cols.forEach((c) => { if (c.bar) max[c.key] = Math.max(1, ...rows.map((r) => Math.abs(r.v[c.key] || 0))); });
+  const draw = () => {
+    const groups = {};
+    rows.forEach((r) => { (groups[r.pos || '—'] = groups[r.pos || '—'] || []).push(r); });
+    const rank = (p) => { const i = POS_ORDER.indexOf(p); return i < 0 ? 99 : i; };
+    const cmp = (a, b) => {
+      if (st.key === 'name') return a.name.localeCompare(b.name) * st.dir;
+      const x = a.v[st.key], y = b.v[st.key];
+      if (x == null && y == null) return 0;
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return (x - y) * st.dir;
+    };
+    const head = `<tr><th data-k="name" class="${st.key === 'name' ? 'sorted' : ''}">Player</th>${cols.map((c) => `<th data-k="${c.key}" class="c ${st.key === c.key ? 'sorted' : ''}">${c.label}${c.unit ? `<small> ${c.unit}</small>` : ''}${st.key === c.key ? (st.dir > 0 ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr>`;
+    const body = Object.keys(groups).sort((a, b) => rank(a) - rank(b)).map((g) => {
+      const list = groups[g].slice().sort(cmp);
+      return `<tr class="grp"><td colspan="${cols.length + 1}">${POS_LABEL[g] || g} <span class="muted">${list.length}</span></td></tr>`
+        + list.map((r) => `<tr data-id="${r.id}" class="clickable"><td>${playerCell(r.id, r.name, r.sub)}</td>${cols.map((c) => {
+          const v = r.v[c.key];
+          const txt = c.fmt ? c.fmt(r) : v == null ? '—' : fmtN(v, c.d || 0);
+          let style = c.tint ? c.tint(r) || '' : '';
+          let cls = 'c';
+          if (!style && opts.mode === 'z' && c.z) style = zTint(c.z(r));
+          else if (!style && c.bar && v != null) { cls += ' bar'; style = `--w:${Math.round(Math.abs(v) / max[c.key] * 100)}%`; }
+          return `<td class="${cls}" style="${style}">${txt}</td>`;
+        }).join('')}</tr>`).join('');
+    }).join('');
+    mount.innerHTML = `<table class="dtable grouped"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+    mount.querySelectorAll('th[data-k]').forEach((th) => th.addEventListener('click', () => {
+      const k = th.dataset.k;
+      st = { key: k, dir: st.key === k ? -st.dir : k === 'name' ? 1 : -1 };
+      draw();
+    }));
+  };
+  draw();
+  if (opts.onRow) mount.onclick = (e) => { const tr = e.target.closest('tr[data-id]'); if (tr) opts.onRow(tr.dataset.id); };
+}
+
 /** Paint from the local copy of a payload immediately, then again when the fresh copy arrives. */
 async function withData(action, onData, onError) {
   const cached = !AUTH.demo && cacheGet(action);

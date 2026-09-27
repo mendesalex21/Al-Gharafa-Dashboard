@@ -1,16 +1,16 @@
 const VIEWS = {}; // view -> already rendered?
 const VIEW_SECTION = {
-  wellness: 'wellness', longitudinal: 'wellness', sessions: 'training', objectives: 'training',
-  squad: 'workload', player: 'workload', testing: 'testing', calendar: 'calendar',
+  wellness: 'wellness', longitudinal: 'wellness', sessions: 'training', week: 'training', objectives: 'training',
+  squad: 'workload', player: 'workload', readiness: 'workload', testing: 'testing', calendar: 'calendar',
 };
 const VIEW_RENDER = {
   wellness: () => renderWellness(), longitudinal: () => renderLongitudinal(),
-  sessions: (o) => renderSessions(o), objectives: () => renderObjectives(), squad: () => renderSquad(),
-  player: (o) => renderPlayerLoad(o), testing: (o) => renderTesting(o), calendar: (o) => renderCalendar(o),
+  sessions: (o) => renderSessions(o), week: () => renderWeek(), objectives: () => renderObjectives(), squad: () => renderSquad(),
+  player: (o) => renderPlayerLoad(o), readiness: () => renderReadiness(), testing: (o) => renderTesting(o), calendar: (o) => renderCalendar(o),
 };
 const VIEW_REDRAW = {
-  longitudinal: () => drawLongitudinal(), sessions: (o) => drawSessions(o), objectives: () => drawObjectives(),
-  squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), testing: (o) => drawTesting(o), calendar: () => drawCalendar(),
+  longitudinal: () => drawLongitudinal(), sessions: (o) => drawSessions(o), week: () => drawWeek(), objectives: () => drawObjectives(),
+  squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: () => drawCalendar(),
 };
 let CURRENT_VIEW = null;
 
@@ -24,6 +24,7 @@ function switchView(view, opts) {
   Object.keys(VIEW_RENDER).forEach((v) => { document.getElementById('view-' + v).hidden = v !== view; });
   window.scrollTo(0, 0);
   CURRENT_VIEW = view;
+  if (location.hash.slice(1) !== view) history.pushState(null, '', '#' + view); // bookmarkable address + browser back
   if (!VIEWS[view]) { VIEWS[view] = true; VIEW_RENDER[view](opts); }
   else if (VIEW_REDRAW[view]) VIEW_REDRAW[view](opts); // widths may have changed while hidden
 }
@@ -93,5 +94,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('avatar').addEventListener('click', () => {
     if (!AUTH.demo && confirm('Sign out?')) signOut();
   });
-  initAuth(() => switchView('wellness'));
+  const start = location.hash.slice(1);
+  initAuth(() => {
+    switchView(VIEW_RENDER[start] ? start : 'wellness');
+    window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEW_RENDER[v] && v !== CURRENT_VIEW) switchView(v); });
+  });
 });

@@ -3,7 +3,7 @@
  * Training › Objectives (targets by microcycle type from the club's own history + upcoming week plan).
  * Data: sync/build.py → "sessions" and "objectives" payloads.
  */
-const TR = { sessions: null, obj: null, date: null, type: 'normal' };
+const TR = { sessions: null, obj: null, date: null, type: 'normal', mode: 'bars', cmp: 'td', week: null, weekMode: 'train' };
 const TYPE_LABEL = { short: 'Short', normal: 'Normal', long: 'Long' };
 const OBJ_METRICS = ['td', 'hit', 'spr', 'acc_dec', 'srpe'];
 
@@ -80,36 +80,75 @@ function drawSessions(opts) {
       <div class="sh-meta">${fmtN(s.minutes)} min · ${s.n} players${s.n_core !== s.n ? ` · team averages on ${s.n_core} ${s.kind === 'match' ? 'players ≥60 min' : 'full-session players'}` : ''}</div>
     </section>
     <div class="tiles">
-      ${OBJ_METRICS.map((k) => `<div class="tile"><div class="tile-label">${METRIC_LONG[k]}</div><div class="tile-value">${fmtN(t[k])}<small> ${METRIC_UNIT[k]}</small></div><div class="tile-sub">team average</div></div>`).join('')}
-      <div class="tile"><div class="tile-label">Intensity</div><div class="tile-value">${fmtN(t.mpm)}<small> m/min</small></div><div class="tile-sub">max speed ${fmtN(t.vmax, 1)} km/h (avg)</div></div>
+      ${[['td', 'Total distance', 'm'], ['d15', 'Distance > 15 km/h', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE load', 'AU']].map(([k, l, u]) => `<div class="tile"><div class="tile-label">${l}</div><div class="tile-value">${fmtN(t[k])}<small> ${u}</small></div><div class="tile-sub">team average${s.team_p3 && s.team_p3[k] != null ? ` · <b>${s.team_p3[k]}%</b> of top-3 match` : ''}</div></div>`).join('')}
+      <div class="tile"><div class="tile-label">Intensity</div><div class="tile-value">${fmtN(t.mpm)}<small> m/min</small></div><div class="tile-sub">max speed ${fmtN(t.vmax, 1)} km/h (avg) · ${fmtN(t.hit_n)} efforts >20 · ${fmtN(t.spr_n)} sprints</div></div>
     </div>
     ${obj ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Objectives · ${s.md} of a ${TYPE_LABEL[cyc.type].toLowerCase()} microcycle</h2><span class="panel-note">from ${obj.n} similar sessions since ${fmtDay(TR.obj.since, { month: 'short', year: 'numeric' })}</span></div>
       <div class="bullets">${OBJ_METRICS.map((k) => bulletHtml(METRIC_LONG[k], METRIC_UNIT[k], t[k], obj[k])).join('')}${bulletHtml('Duration', 'min', s.minutes, obj.minutes)}</div></section>`
       : s.kind === 'training' ? `<section class="panel"><p class="note">No objective for this day${cyc.type ? '' : ' — it is outside a standard microcycle (break or pre-season)'}${s.md && cyc.type ? ` — not enough ${s.md} sessions in ${cyc.type} microcycles` : ''}.</p></section>` : ''}
     <section class="panel">
-      <div class="panel-head"><h2 class="panel-title small">Players</h2><span class="panel-note">colour = z-score vs the team average of this session · blue below, orange above</span></div>
+      <div class="panel-head"><h2 class="panel-title small">Players</h2>
+        <span class="panel-note">grouped by position · click a column to sort</span>${segHtml('se-mode', [['bars', 'Data bars'], ['z', 'z-score vs session']], TR.mode)}</div>
       <div class="table-wrap" id="se-players"></div>
       ${s.absent.length ? `<p class="panel-foot"><b>Not in the session:</b> ${s.absent.map((a) => `${escapeHtml(playerName(a.id))} <span class="muted">(${escapeHtml(a.type)})</span>`).join(', ')}</p>` : ''}
     </section>
-    ${s.drills.length ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Drills</h2><span class="panel-note">team average per drill · tap a drill for players</span></div><div id="se-drills"></div></section>` : ''}`;
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title small">Players vs team and top-3 match</h2>${segHtml('se-cmp', SESSION_CMP.map(([k, l]) => [k, l]), TR.cmp)}</div>
+      <div class="chart" id="se-cmp-chart"></div>
+      <p class="panel-foot">Bars = session value (darker when ≥ 60% of the player's top-3 match). Dash = the player's top-3 match average (mean of his 3 highest full matches, past year). Dashed line = team average.</p>
+    </section>
+    ${s.drills.length ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Drills</h2><span class="panel-note">team average per drill · "vs match" = per-minute intensity as % of the players' match intensity · tap a drill for players</span></div><div class="drills-wrap" id="se-drills"></div></section>` : ''}`;
 
-  const rows = s.players.map((p) => ({
-    id: p.id,
-    cells: [playerCell(p.id, playerName(p.id), p.type), fmtN(p.min),
-      ...OBJ_METRICS.map((k) => `<span class="cellv" style="${zTint(p['z_' + k])}">${fmtN(p[k])}</span>`),
-      p.rpe == null ? '—' : fmtN(p.rpe), fmtN(p.mpm), p.vmax == null ? '—' : `${fmtN(p.vmax, 1)}${p.vmax_pct ? ` <small class="muted">${p.vmax_pct}%</small>` : ''}`,
-      p.pct_td == null ? '—' : `${p.pct_td}%`],
-    keys: [playerName(p.id), p.min, ...OBJ_METRICS.map((k) => p[k]), p.rpe, p.mpm, p.vmax, p.pct_td],
-  }));
-  sortableTable(document.getElementById('se-players'), [
-    { label: 'Player' }, { label: 'Min', cls: 'c', desc: true }, ...OBJ_METRICS.map((k) => ({ label: `${METRIC_SHORT[k]}${METRIC_UNIT[k] ? ` <small>${METRIC_UNIT[k]}</small>` : ''}`, cls: 'c', desc: true })),
-    { label: 'RPE', cls: 'c', desc: true }, { label: 'm/min', cls: 'c', desc: true }, { label: 'Vmax <small>km/h</small>', cls: 'c', desc: true }, { label: 'TD % match', cls: 'c', desc: true },
-  ], rows, { col: 2, dir: -1 }, (r) => `data-id="${r.id}" class="clickable"`);
-  document.getElementById('se-players').onclick = (e) => {
-    const tr = e.target.closest('tr[data-id]');
-    if (tr) switchView('player', { player: tr.dataset.id });
-  };
+  bindSeg('se-mode', (v) => { TR.mode = v; drawSessionPlayers(s); });
+  bindSeg('se-cmp', (v) => { TR.cmp = v; drawSessionCompare(s); });
+  drawSessionPlayers(s);
+  drawSessionCompare(s);
   if (s.drills.length) drawDrills(s);
+}
+
+const SESSION_CMP = [['td', 'TD'], ['d15', '>15'], ['hit', '>20'], ['spr', '>25'], ['acc_dec', 'Acc+Dec'], ['spr_n', 'Sprints']];
+const rpeTint = (v) => (v == null ? '' : `background:rgba(255,59,48,${Math.max(0, Math.min(1, (v - 3) / 7)) * 0.32})`);
+
+function drawSessionPlayers(s) {
+  const roster = TR.sessions.roster;
+  const zf = (k) => (r) => r.raw['z_' + k];
+  const pct = (k) => (r) => (r.v[k] == null ? '—' : `${r.v[k]}%`);
+  const cols = [
+    { key: 'min', label: 'Min' },
+    { key: 'rpe', label: 'RPE', d: 0, tint: (r) => rpeTint(r.v.rpe) },
+    { key: 'td', label: 'TD', unit: 'm', bar: true, z: zf('td') },
+    { key: 'mpm', label: 'm/min' },
+    { key: 'd15', label: '>15', unit: 'm', bar: true },
+    { key: 'hit', label: '>20', unit: 'm', bar: true, z: zf('hit') },
+    { key: 'spr', label: '>25', unit: 'm', bar: true, z: zf('spr') },
+    { key: 'vmax', label: 'Vmax', unit: 'km/h', d: 1 },
+    { key: 'vmax_pct', label: '% Vmax', fmt: pct('vmax_pct'), tint: (r) => (r.v.vmax_pct >= 90 ? 'background:rgba(52,199,89,.18)' : '') },
+    { key: 'days_hsv', label: 'Days ≥90%', tint: (r) => (r.v.days_hsv >= 10 ? 'background:rgba(255,59,48,.18);font-weight:700' : '') },
+    { key: 'hit_n', label: 'Count >20', bar: true },
+    { key: 'spr_n', label: 'Sprints', bar: true },
+    { key: 'acc', label: 'HIT Acc', bar: true },
+    { key: 'dec', label: 'HIT Dec', bar: true },
+    { key: 'acc_dec', label: 'Acc+Dec', bar: true, z: zf('acc_dec') },
+    { key: 'srpe', label: 'sRPE', bar: true, z: zf('srpe') },
+    { key: 'p3_td', label: 'TD %top3', fmt: pct('p3_td') },
+    { key: 'p3_hit', label: '>20 %top3', fmt: pct('p3_hit') },
+  ];
+  const rows = s.players.map((p) => ({ id: p.id, name: playerName(p.id), sub: p.type, pos: posOf(p.id, roster), v: p, raw: p }));
+  groupedTable(document.getElementById('se-players'), cols, rows, { mode: TR.mode, sortKey: 'td', onRow: (id) => switchView('player', { player: id }) });
+}
+
+function drawSessionCompare(s) {
+  const k = TR.cmp, label = SESSION_CMP.find((x) => x[0] === k)[1];
+  const ps = s.players.filter((p) => p[k] != null && (p.cat === 't' || p.cat === 'm' || p.cat === 'p')).sort((a, b) => (b[k] || 0) - (a[k] || 0));
+  const top3 = ps.map((p) => (p['p3_' + k] ? Math.round(p[k] / p['p3_' + k] * 100) : null));
+  const team = ps.length ? ps.reduce((a, p) => a + (p[k] || 0), 0) / ps.length : null;
+  chXY(document.getElementById('se-cmp-chart'), {
+    x: ps.map((p) => playerName(p.id)), height: 300, slantTicks: true,
+    bars: { values: ps.map((p) => p[k]), color: (v, i) => ((ps[i]['p3_' + k] || 0) >= 60 ? '#2a78d6' : '#9fc2ee') },
+    markers: [{ values: top3, color: '#ff9f0a' }],
+    refs: team != null ? [{ y: team, dash: true, label: `team ${fmtN(team)}` }] : [],
+    tip: (i) => `<b>${escapeHtml(playerName(ps[i].id))} · ${fmtN(ps[i][k])}</b><span>${label} · ${ps[i]['p3_' + k] == null ? 'no match reference' : `${ps[i]['p3_' + k]}% of top-3 match (${fmtN(top3[i])})`}</span>`,
+  });
 }
 
 function playerName(id) {
@@ -119,15 +158,103 @@ function playerName(id) {
 
 function drawDrills(s) {
   const totalTd = s.drills.reduce((a, dr) => a + (dr.team.td || 0), 0) || 1;
+  const vs = (v) => (v == null ? '<span class="muted">—</span>' : `<span class="${v > 110 ? 'chip-v orange' : 'num'}">${v}%</span>`);
   document.getElementById('se-drills').innerHTML = `
-    <div class="drill-row drill-head"><span>Drill</span><span>Min</span><span>n</span><span>TD</span><span>m/min</span><span>HIT</span><span>Sprint</span><span>Acc+Dec</span><span>Share of TD</span></div>
+    <div class="drill-row drill-head"><span>Drill</span><span>Min</span><span>n</span><span>TD</span><span>m/min</span><span>>15</span><span>>20</span><span>>25</span><span>Acc+Dec</span><span>m/min vs match</span><span>>20 vs match</span><span>Acc+Dec vs match</span><span>Share of TD</span></div>
     ${s.drills.map((dr) => `<details class="drill"><summary class="drill-row">
       <span class="dname">${escapeHtml(dr.name)}${dr.ampm && dr.ampm !== 'PM' && dr.ampm !== 'nan' && dr.ampm !== '0' ? ` <small class="muted">${escapeHtml(dr.ampm)}</small>` : ''}</span>
-      <span>${fmtN(dr.min)}</span><span>${dr.n}</span><span>${fmtN(dr.team.td)}</span><span>${fmtN(dr.team.mpm)}</span><span>${fmtN(dr.team.hit)}</span><span>${fmtN(dr.team.spr)}</span><span>${fmtN(dr.team.acc_dec)}</span>
+      <span>${fmtN(dr.min)}</span><span>${dr.n}</span><span>${fmtN(dr.team.td)}</span><span>${fmtN(dr.team.mpm)}</span><span>${fmtN(dr.team.d15)}</span><span>${fmtN(dr.team.hit)}</span><span>${fmtN(dr.team.spr)}</span><span>${fmtN(dr.team.acc_dec)}</span>
+      <span>${vs(dr.vs_match && dr.vs_match.td)}</span><span>${vs(dr.vs_match && dr.vs_match.hit)}</span><span>${vs(dr.vs_match && dr.vs_match.acc_dec)}</span>
       <span class="share"><i style="width:${Math.round((dr.team.td || 0) / totalTd * 100)}%"></i><small>${Math.round((dr.team.td || 0) / totalTd * 100)}%</small></span></summary>
-      <table class="dtable compact"><thead><tr><th>Player</th><th class="c">Min</th><th class="c">TD</th><th class="c">m/min</th><th class="c">HIT</th><th class="c">Sprint</th><th class="c">Acc+Dec</th><th class="c">Vmax</th></tr></thead><tbody>
-      ${Object.entries(dr.players).sort((a, b) => (b[1][1] || 0) - (a[1][1] || 0)).map(([id, v]) => `<tr><td>${escapeHtml(playerName(id))}</td><td class="c">${fmtN(v[0])}</td><td class="c">${fmtN(v[1])}</td><td class="c">${v[0] ? fmtN(v[1] / v[0]) : '—'}</td><td class="c">${fmtN(v[2])}</td><td class="c">${fmtN(v[3])}</td><td class="c">${fmtN(v[4])}</td><td class="c">${fmtN(v[5], 1)}</td></tr>`).join('')}
+      <table class="dtable compact"><thead><tr><th>Player</th><th class="c">Min</th><th class="c">TD</th><th class="c">m/min</th><th class="c">>15</th><th class="c">>20</th><th class="c">>25</th><th class="c">Sprints</th><th class="c">Acc+Dec</th><th class="c">Vmax</th></tr></thead><tbody>
+      ${Object.entries(dr.players).sort((a, b) => (b[1][1] || 0) - (a[1][1] || 0)).map(([id, v]) => `<tr><td>${escapeHtml(playerName(id))}</td><td class="c">${fmtN(v[0])}</td><td class="c">${fmtN(v[1])}</td><td class="c">${v[0] ? fmtN(v[1] / v[0]) : '—'}</td><td class="c">${fmtN(v[6])}</td><td class="c">${fmtN(v[2])}</td><td class="c">${fmtN(v[3])}</td><td class="c">${fmtN(v[7])}</td><td class="c">${fmtN(v[4])}</td><td class="c">${fmtN(v[5], 1)}</td></tr>`).join('')}
       </tbody></table></details>`).join('')}`;
+}
+
+// ------------------------------------------------------------------ Week
+const WEEK_TARGET_METRICS = [['td', 'Total distance'], ['hit', 'Distance > 20 km/h'], ['spr_n', 'Sprints (count)'], ['acc_dec', 'HIT Acc + Dec']];
+
+function renderWeek() {
+  const root = document.getElementById('view-week');
+  root.innerHTML = `
+    ${pageHead('Training', 'Week load', 'wk-sub', `<select class="select" id="wk-pick" aria-label="Week"></select>${segHtml('wk-mode', [['train', 'Training only'], ['all', 'All sessions']], TR.weekMode)}`)}
+    <div id="wk-body"><div class="panel"><div class="empty">Loading…</div></div></div>`;
+  bindSeg('wk-mode', (v) => { TR.weekMode = v; drawWeek(); });
+  withData('sessions', (d) => { TR.sessions = d; drawWeek(); }, (err) => { root.innerHTML = loadError(err); });
+  withData('workload', (d) => { WL.data = d; drawWeek(); }, () => {});
+}
+
+function drawWeek() {
+  const d = TR.sessions;
+  if (!d || !d.weeks || document.getElementById('view-week').hidden) return;
+  const list = d.weeks.list;
+  if (!TR.week || !list.find((w) => w.start === TR.week)) TR.week = list[0].start;
+  const pick = document.getElementById('wk-pick');
+  if (pick.options.length !== list.length) pick.innerHTML = list.map((w) => `<option value="${w.start}">Week of ${fmtDay(w.start, { day: 'numeric', month: 'short' })}</option>`).join('');
+  pick.value = TR.week;
+  pick.onchange = () => { TR.week = pick.value; drawWeek(); };
+  const w = list.find((x) => x.start === TR.week);
+  const mode = TR.weekMode, bands = d.weeks.bands;
+  document.getElementById('wk-sub').textContent = `${fmtDay(w.start, { day: 'numeric', month: 'long' })} – ${fmtDay(w.end, { day: 'numeric', month: 'long' })} · ${mode === 'train' ? 'training sessions only ("target without game")' : 'all sessions incl. matches'} · % = share of the player's top-3 match`;
+
+  document.getElementById('wk-body').innerHTML = `
+    <div class="panel-head bare"><h2 class="panel-title">Squad · day by day</h2><span class="panel-note">average of players in full training / match · dark = match day</span></div>
+    <div class="grid4">${[['td', 'Total distance', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE', 'AU']].map(([k, l, u]) => `<section class="panel mini"><div class="panel-head"><h2 class="panel-title small">${l}</h2><span class="panel-note">${u}</span></div><div class="chart" id="wk-day-${k}"></div></section>`).join('')}</div>
+    <div class="panel-head bare"><h2 class="panel-title">Weekly load vs top-3 match</h2><span class="panel-note">shaded = target range (${d.weeks.bands_source === 'config' ? 'staff targets' : `interquartile range of ${d.weeks.bands_n} past competitive player-weeks`})</span></div>
+    <div class="grid2">${WEEK_TARGET_METRICS.map(([k, l]) => `<section class="panel"><div class="panel-head"><h2 class="panel-title small">% of top-3 match · ${l}</h2><span class="panel-note">${bands[k] ? `target ${bands[k][0]}–${bands[k][1]}%` : ''}</span></div><div class="chart" id="wk-pct-${k}"></div></section>`).join('')}</div>
+    <section class="panel"><div class="panel-head"><h2 class="panel-title small">Players · week totals</h2><span class="panel-note">grouped by position · % of top-3 match next to each total</span></div><div class="table-wrap" id="wk-table"></div></section>
+    <div class="panel-head bare"><h2 class="panel-title">Squad · week by week</h2><span class="panel-note">average available player · last 16 weeks</span></div>
+    <div class="grid4">${[['td', 'Total distance'], ['hit', 'HIT distance'], ['acc_dec', 'HIT Acc + Dec'], ['srpe', 'sRPE']].map(([k, l]) => `<section class="panel mini"><div class="panel-head"><h2 class="panel-title small">${l}</h2></div><div class="chart" id="wk-season-${k}"></div></section>`).join('')}</div>`;
+
+  ['td', 'hit', 'acc_dec', 'srpe'].forEach((k) => chXY(document.getElementById('wk-day-' + k), {
+    x: w.days.map((x) => x.date), height: 170,
+    bars: { values: w.days.map((x) => x[k]), color: (v, i) => (w.days[i].match ? '#1d3f73' : '#2a78d6') },
+    tick: (x) => fmtDay(x, { weekday: 'short' }),
+    tip: (i) => `<b>${fmtN(w.days[i][k])}</b><span>${fmtDay(w.days[i].date)} · ${w.days[i].n} players${w.days[i].match ? ' · match' : ''}</span>`,
+  }));
+
+  const roster = d.roster;
+  const ids = Object.keys(w.players);
+  WEEK_TARGET_METRICS.forEach(([k]) => {
+    const vals = ids.map((id) => ({ id, v: w.players[id][mode + '_p3'][k] })).filter((x) => x.v != null && x.v > 0).sort((a, b) => b.v - a.v);
+    const b = bands[k];
+    chXY(document.getElementById('wk-pct-' + k), {
+      x: vals.map((x) => playerName(x.id)), height: 270, slantTicks: true, yMin: 0,
+      bands: b ? [{ from: b[0], to: b[1], color: STATUS_COL.green, alpha: 0.12 }] : [],
+      bars: { values: vals.map((x) => x.v), color: (v) => (!b ? '#2a78d6' : v > b[1] * 1.25 ? STATUS_COL.red : v > b[1] ? STATUS_COL.orange : v >= b[0] ? '#34c759' : '#9fc2ee') },
+      refs: [{ y: 100, dash: true, label: '1 match' }],
+      tip: (i) => `<b>${escapeHtml(playerName(vals[i].id))} · ${vals[i].v}%</b><span>${fmtN(w.players[vals[i].id][mode][k])} this week${b ? ` · target ${b[0]}–${b[1]}%` : ''}</span>`,
+    });
+  });
+
+  const pc = (k) => (r) => { const p = r.raw[mode + '_p3'][k]; return `${fmtN(r.v[k])}${p != null ? ` <small class="muted">${p}%</small>` : ''}`; };
+  const cols = [
+    { key: 'minutes', label: 'Time', unit: 'min' },
+    { key: 'srpe', label: 'sRPE', bar: true },
+    { key: 'td', label: 'TD', unit: 'm', bar: true, fmt: pc('td') },
+    { key: 'd15', label: '>15', unit: 'm', bar: true, fmt: pc('d15') },
+    { key: 'hit', label: '>20', unit: 'm', bar: true, fmt: pc('hit') },
+    { key: 'spr', label: '>25', unit: 'm', bar: true, fmt: pc('spr') },
+    { key: 'vmax', label: 'Vmax', unit: 'km/h', d: 1 },
+    { key: 'spr_n', label: 'Sprints', bar: true, fmt: pc('spr_n') },
+    { key: 'acc_dec', label: 'Acc+Dec', bar: true, fmt: pc('acc_dec') },
+    { key: 'n', label: 'Sessions', fmt: (r) => `${r.raw.n_train}${r.raw.n_match ? ` + ${r.raw.n_match} match` : ''}${r.raw.unavail ? ` <small class="muted">· ${r.raw.unavail} d out</small>` : ''}` },
+  ];
+  const rows = ids.map((id) => {
+    const p = w.players[id];
+    return { id, name: playerName(id), pos: posOf(id, roster), raw: p, v: { ...p[mode], vmax: p.vmax, n: p.n_train + p.n_match } };
+  });
+  groupedTable(document.getElementById('wk-table'), cols, rows, { sortKey: 'td', onRow: (id) => switchView('player', { player: id }) });
+
+  if (WL.data) {
+    const weeks = WL.data.team.weeks;
+    ['td', 'hit', 'acc_dec', 'srpe'].forEach((k) => chXY(document.getElementById('wk-season-' + k), {
+      x: weeks.map((x) => x.start), height: 170,
+      bars: { values: weeks.map((x) => x[k]), color: (v, i) => (weeks[i].start === w.start ? '#1d3f73' : weeks[i].days < 7 ? 'rgba(42,120,214,.45)' : '#2a78d6') },
+      tick: (x) => fmtDay(x, { day: 'numeric', month: 'short' }),
+      tip: (i) => `<b>${fmtN(weeks[i][k])}</b><span>Week of ${fmtDay(weeks[i].start, { day: 'numeric', month: 'short' })}${weeks[i].days < 7 ? ` · ${weeks[i].days} days` : ''}</span>`,
+    }));
+  }
 }
 
 // ------------------------------------------------------------------ Objectives

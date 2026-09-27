@@ -58,11 +58,13 @@ function chHover(mount, svg, top, bottom, pick) {
  *       refs:[{y,color,dash}], tick:(x,i)=>label|null, tip:(i)=>html, onClick:(i)=>void }
  */
 function chXY(mount, o) {
-  const W = Math.max(280, Math.round(mount.clientWidth)), H = o.height || 240, P = CH_PAD;
+  const W = Math.max(280, Math.round(mount.clientWidth)), H = o.height || 240;
+  const P = o.slantTicks ? { ...CH_PAD, b: 64 } : CH_PAD;
   const n = o.x.length, iw = W - P.l - P.r, ih = H - P.t - P.b;
   if (!n) { mount.innerHTML = '<div class="empty">No data for this period.</div>'; return; }
   const all = [];
-  (o.bars ? [o.bars.values] : []).concat((o.lines || []).map((l) => l.values)).forEach((arr) => arr.forEach((v) => { if (v != null) all.push(v); }));
+  (o.bars ? [o.bars.values] : []).concat((o.lines || []).map((l) => l.values), (o.markers || []).map((m) => m.values), (o.refs || []).map((r) => [r.y]))
+    .forEach((arr) => arr.forEach((v) => { if (v != null) all.push(v); }));
   let yMin = o.yMin ?? Math.min(0, ...all), yMax = o.yMax ?? Math.max(...all, 0) * 1.08;
   if (yMax <= yMin) yMax = yMin + 1;
   const ticks = o.yTicks || chNiceTicks(yMin, yMax);
@@ -79,7 +81,8 @@ function chXY(mount, o) {
     s += `<line class="ch-grid" x1="${P.l}" x2="${W - P.r}" y1="${yAt(t)}" y2="${yAt(t)}"/><text class="ch-axis" x="${P.l - 6}" y="${yAt(t) + 3.5}" text-anchor="end">${fmt(t)}</text>`;
   });
   (o.refs || []).forEach((r) => {
-    s += `<line x1="${P.l}" x2="${W - P.r}" y1="${yAt(r.y)}" y2="${yAt(r.y)}" style="stroke:${r.color || 'var(--ink-muted)'}" stroke-width="1" ${r.dash ? 'stroke-dasharray="4 3"' : ''}/>`;
+    s += `<line x1="${P.l}" x2="${W - P.r}" y1="${yAt(r.y)}" y2="${yAt(r.y)}" style="stroke:${r.color || 'var(--ink-muted)'}" stroke-width="${r.width || 1}" ${r.dash ? 'stroke-dasharray="4 3"' : ''}/>`;
+    if (r.label) s += `<text class="ch-axis" x="${W - P.r}" y="${yAt(r.y) - 4}" text-anchor="end" style="fill:${r.color || 'var(--ink-muted)'}">${escapeHtml(r.label)}</text>`;
   });
   if (o.bars) {
     const bw = Math.max(1, Math.min(22, step * 0.72)), base = yAt(Math.max(0, yMin));
@@ -102,8 +105,19 @@ function chXY(mount, o) {
       if (c) s += `<circle class="ch-dot" cx="${xAt(i)}" cy="${yAt(v)}" r="${n > 60 ? 2.4 : 3.4}" style="fill:${c}"/>`;
     });
   });
+  (o.markers || []).forEach((mk) => mk.values.forEach((v, i) => {  // e.g. each player's top-3 match value
+    if (v == null) return;
+    const hw = Math.max(4, Math.min(11, step * 0.36));
+    s += `<line x1="${xAt(i) - hw}" x2="${xAt(i) + hw}" y1="${yAt(v)}" y2="${yAt(v)}" style="stroke:${mk.color}" stroke-width="3" stroke-linecap="round"/>`;
+  }));
+  if (o.slantTicks) {
+    o.x.forEach((x, i) => {
+      const lab = o.tick ? o.tick(x, i) : x;
+      s += `<text class="ch-axis" x="${xAt(i)}" y="${H - P.b + 14}" text-anchor="end" transform="rotate(-38 ${xAt(i)} ${H - P.b + 14})">${escapeHtml(String(lab))}</text>`;
+    });
+  }
   const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(iw / 70))));
-  o.x.forEach((x, i) => {
+  if (!o.slantTicks) o.x.forEach((x, i) => {
     if ((n - 1 - i) % every) return;
     const lab = o.tick ? o.tick(x, i) : x;
     if (lab == null) return;
@@ -117,13 +131,51 @@ function chXY(mount, o) {
     const i = Math.floor((rx - P.l) / step);
     if (i < 0 || i >= n) return null;
     const firstLine = (o.lines || []).find((l) => l.values[i] != null);
-    const yv = firstLine ? firstLine.values[i] : o.bars ? o.bars.values[i] : null;
+    const yv = firstLine ? firstLine.values[i] : o.bars ? Math.max(o.bars.values[i] || 0, ...(o.markers || []).map((m) => m.values[i] || 0)) : null;
     return { x: xAt(i), y: yv != null ? yAt(yv) : P.t, html: o.tip(i) };
   });
   if (o.onClick) svg.addEventListener('click', (e) => {
     const i = Math.floor((e.clientX - svg.getBoundingClientRect().left - P.l) / step);
     if (i >= 0 && i < n) o.onClick(i);
   });
+}
+
+/**
+ * Quadrant scatter centred on (0,0): o = { points:[{x,y,color,label,id}], xRange, yRange, xLabel, yLabel,
+ * quadrants:{tl,tr,bl,br}, tip:(p)=>html, onClick:(p)=>void }
+ */
+function chQuad(mount, o) {
+  const W = Math.max(280, Math.round(mount.clientWidth)), H = o.height || 340, P = { l: 46, r: 16, t: 14, b: 38 };
+  const iw = W - P.l - P.r, ih = H - P.t - P.b;
+  const pts = o.points.filter((p) => p.x != null && p.y != null);
+  const xr = Math.max(o.xRange || 1, ...pts.map((p) => Math.abs(p.x) * 1.15)), yr = Math.max(o.yRange || 1, ...pts.map((p) => Math.abs(p.y) * 1.15));
+  const xAt = (v) => P.l + iw * (v + xr) / (2 * xr), yAt = (v) => P.t + ih * (1 - (v + yr) / (2 * yr));
+  let s = `<rect x="${P.l}" y="${P.t}" width="${iw / 2}" height="${ih / 2}" style="fill:${STATUS_COL.orange}" opacity=".05"/>
+    <rect x="${P.l + iw / 2}" y="${P.t + ih / 2}" width="${iw / 2}" height="${ih / 2}" style="fill:${STATUS_COL.orange}" opacity=".05"/>
+    <rect x="${P.l}" y="${P.t + ih / 2}" width="${iw / 2}" height="${ih / 2}" style="fill:${STATUS_COL.red}" opacity=".07"/>
+    <rect x="${P.l + iw / 2}" y="${P.t}" width="${iw / 2}" height="${ih / 2}" style="fill:${STATUS_COL.green}" opacity=".07"/>`;
+  chNiceTicks(-xr, xr).forEach((t) => { s += `<text class="ch-axis" x="${xAt(t)}" y="${H - 20}" text-anchor="middle">${chFmt(t)}</text>`; });
+  chNiceTicks(-yr, yr).forEach((t) => { s += `<text class="ch-axis" x="${P.l - 6}" y="${yAt(t) + 3.5}" text-anchor="end">${chFmt(t)}</text>`; });
+  s += `<line class="ch-grid" x1="${P.l}" x2="${W - P.r}" y1="${yAt(0)}" y2="${yAt(0)}" style="stroke:var(--ink-muted)"/><line class="ch-grid" y1="${P.t}" y2="${H - P.b}" x1="${xAt(0)}" x2="${xAt(0)}" style="stroke:var(--ink-muted)"/>`;
+  const q = o.quadrants || {};
+  s += `<text class="ch-qlabel" x="${P.l + 8}" y="${P.t + 16}">${q.tl || ''}</text><text class="ch-qlabel" x="${W - P.r - 8}" y="${P.t + 16}" text-anchor="end">${q.tr || ''}</text>
+    <text class="ch-qlabel" x="${P.l + 8}" y="${H - P.b - 8}">${q.bl || ''}</text><text class="ch-qlabel" x="${W - P.r - 8}" y="${H - P.b - 8}" text-anchor="end">${q.br || ''}</text>`;
+  if (o.xLabel) s += `<text class="ch-axis" x="${P.l + iw / 2}" y="${H - 3}" text-anchor="middle">${o.xLabel}</text>`;
+  if (o.yLabel) s += `<text class="ch-axis" x="12" y="${P.t + ih / 2}" text-anchor="middle" transform="rotate(-90 12 ${P.t + ih / 2})">${o.yLabel}</text>`;
+  pts.forEach((p) => {
+    s += `<circle class="ch-dot" cx="${xAt(p.x)}" cy="${yAt(p.y)}" r="5.5" style="fill:${p.color}${o.onClick ? ';cursor:pointer' : ''}"/>`;
+    if (p.showLabel) s += `<text class="ch-label" x="${xAt(p.x) + 8}" y="${yAt(p.y) + 4}">${escapeHtml(p.label)}</text>`;
+  });
+  mount.innerHTML = pts.length ? `<svg class="ch-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${s}</svg>` : '<div class="empty">No player has both measures yet.</div>';
+  if (!pts.length) return;
+  const svg = mount.querySelector('svg');
+  const nearest = (rx, ry) => {
+    let best = null, bd = 500;
+    pts.forEach((p) => { const dd = (xAt(p.x) - rx) ** 2 + (yAt(p.y) - ry) ** 2; if (dd < bd) { bd = dd; best = p; } });
+    return best;
+  };
+  if (o.tip) chHover(mount, svg, P.t, H - P.b, (rx, ry) => { const p = nearest(rx, ry); return p ? { x: xAt(p.x), y: yAt(p.y), html: o.tip(p), cross: false } : null; });
+  if (o.onClick) svg.addEventListener('click', (e) => { const r = svg.getBoundingClientRect(); const p = nearest(e.clientX - r.left, e.clientY - r.top); if (p) o.onClick(p); });
 }
 
 /**

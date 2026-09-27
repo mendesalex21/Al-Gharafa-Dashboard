@@ -2,7 +2,8 @@
  * Connexion Google restreinte au staff. Sans GOOGLE_CLIENT_ID configuré, le site s'ouvre en
  * mode démonstration (données fictives) pour pouvoir valider le design avant le déploiement final.
  */
-const AUTH = { token: null, demo: !window.APP_CONFIG.GOOGLE_CLIENT_ID, user: null };
+const LOCAL_DEMO = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has('demo'); // local testing only
+const AUTH = { token: null, demo: !window.APP_CONFIG.GOOGLE_CLIENT_ID || LOCAL_DEMO, user: null };
 
 function initAuth(onReady) {
   const gate = document.getElementById('signin-gate');

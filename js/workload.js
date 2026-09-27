@@ -3,7 +3,7 @@
  * Data: sync/build.py → "workload" payload (ACWR rolling 7:28 + EWMA, weekly load z-scores, monotony,
  * high-speed exposure, availability). Wellness and tests payloads are joined in for the 360° view.
  */
-const WL = { data: null, wellness: null, tests: null, model: 'acwr', metric: 'td', player: null, plMetric: 'td', plModel: 'acwr' };
+const WL = { data: null, wellness: null, tests: null, history: null, model: 'acwr', metric: 'td', rank: 'hit', player: null, plMetric: 'td', plModel: 'acwr' };
 const RISK_ORDER = { red: 0, orange: 1, green: 2, na: 3 };
 const STATUS_LABEL = { available: 'Available', injured: 'Injured', rehab: 'Rehab', sick: 'Sick', 'national team': 'National team', absent: 'Absent' };
 
@@ -48,6 +48,13 @@ function renderSquad() {
         <span class="panel-note">ACWR per metric · spike = this week's load vs the player's previous 6 weeks (z) · click a player</span></div>
       <div class="table-wrap" id="sq-board"><div class="empty">Loading…</div></div>
     </section>
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title small">ACWR ranking</h2>
+        <span class="legend-inline"><span><i style="background:#8e8e93"></i>bar = 7:28</span><span><i style="background:var(--ink)"></i>dash = 14:35</span></span>
+        ${segHtml('sq-rank', RANK_METRICS.map(([k, l]) => [k, l]), WL.rank)}</div>
+      <div class="chart" id="sq-rank-chart"></div>
+      <p class="panel-foot">Available players with ≥ 28 days of data. The slower 14:35 ratio confirms (or not) a spike seen on 7:28. Zones: 0.8 · 1.3 · 1.5.</p>
+    </section>
     <div class="panel-head bare"><h2 class="panel-title">Load by metric</h2>${segHtml('sq-metric', METRIC_KEYS.map((k) => [k, METRIC_SHORT[k]]), WL.metric)}</div>
     <div class="grid2">
       <section class="panel">
@@ -69,6 +76,7 @@ function renderSquad() {
     </div>`;
   bindSeg('sq-model', (v) => { WL.model = v; drawSquad(); });
   bindSeg('sq-metric', (v) => { WL.metric = v; drawSquad(); });
+  bindSeg('sq-rank', (v) => { WL.rank = v; drawRanking(); });
   withData('workload', (d) => { WL.data = d; drawSquad(); }, (err) => { root.innerHTML = loadError(err); });
   withData('wellness', (d) => { WL.wellness = d; drawSquad(); }, () => {});
 }
@@ -120,6 +128,7 @@ function drawSquad() {
   ], rows, { col: 0, dir: 1 }, (r) => `data-id="${r.id}" class="clickable"`);
   board.onclick = (e) => { const tr = e.target.closest('tr[data-id]'); if (tr) switchView('player', { player: tr.dataset.id }); };
 
+  drawRanking();
   const k = WL.metric;
   const pts = ps.filter((p) => p.status === 'available' && p.chronic[k] > 0).map((p) => {
     const lv = acwrLevel(p.acwr[k]);
@@ -148,6 +157,24 @@ function drawSquad() {
   });
 }
 
+const RANK_METRICS = [['td', 'TD'], ['hit', 'HIT >20'], ['spr', 'Sprint dist.'], ['spr_n', 'Sprints'], ['acc_dec', 'Acc+Dec'], ['srpe', 'sRPE']];
+
+function drawRanking() {
+  const d = WL.data;
+  const k = WL.rank;
+  const ps = d.players.filter((p) => p.status === 'available' && p.acwr_all && p.acwr_all[k] != null).sort((a, b) => b.acwr_all[k] - a.acwr_all[k]);
+  const col = (v) => { const lv = acwrLevel(v); return lv === 'low' ? '#9fc2ee' : STATUS_COL[lv] || STATUS_COL.na; };
+  const vals = ps.map((p) => Math.min(p.acwr_all[k], 3));
+  chXY(document.getElementById('sq-rank-chart'), {
+    x: ps.map((p) => p.name), height: 280, slantTicks: true, yMin: 0, yMax: Math.max(2, ...vals) * 1.05,
+    bars: { values: vals, color: (v) => col(v) },
+    markers: [{ values: ps.map((p) => (p.acwr14[k] == null ? null : Math.min(p.acwr14[k], 3))), color: 'var(--ink)' }],
+    refs: [{ y: 0.8, dash: true, label: '0.8' }, { y: 1.3, dash: true, color: '#ff9f0a', label: '1.3' }, { y: 1.5, color: '#ff3b30', label: '1.5' }],
+    tip: (i) => `<b>${escapeHtml(ps[i].name)}</b><span>7:28 ${ps[i].acwr_all[k].toFixed(2)} · 14:35 ${ps[i].acwr14[k] == null ? '—' : ps[i].acwr14[k].toFixed(2)}</span>`,
+    onClick: (i) => switchView('player', { player: ps[i].id }),
+  });
+}
+
 // ------------------------------------------------------------------ Player
 function renderPlayerLoad(opts) {
   if (opts && opts.player) WL.player = opts.player;
@@ -158,6 +185,7 @@ function renderPlayerLoad(opts) {
   withData('workload', (d) => { WL.data = d; drawPlayerLoad(); }, (err) => { root.innerHTML = loadError(err); });
   withData('wellness', (d) => { WL.wellness = d; drawPlayerLoad(); }, () => {});
   withData('tests', (d) => { WL.tests = d; drawPlayerLoad(); }, () => {});
+  withData('wellness_history', (d) => { WL.history = d; drawPlayerLoad(); }, () => {});
 }
 
 function drawPlayerLoad(opts) {
@@ -205,6 +233,10 @@ function drawPlayerLoad(opts) {
         ${segHtml('pl-model', [['acwr', 'Rolling 7:28'], ['ewma', 'EWMA']], WL.plModel)}</div>
       <div class="chart" id="pl-acwr"></div>
     </section>
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title small">Fatigue · load, wellness, CMJ</h2><span class="panel-note">same days on each row · last 60 days</span><a class="link" id="pl-ready-link">Squad readiness</a></div>
+      <div id="pl-fatigue"></div>
+    </section>
     <div class="grid2">
       <section class="panel"><div class="panel-head"><h2 class="panel-title small">Weekly load z-score</h2><span class="panel-note">vs the player's previous 6 weeks · end of each week</span></div>
         <div class="table-wrap" id="pl-z"></div></section>
@@ -212,15 +244,20 @@ function drawPlayerLoad(opts) {
         <div id="pl-timeline"></div></section>
     </div>
     <div class="grid2">
-      <section class="panel"><div class="panel-head"><h2 class="panel-title small">Match demands · per 90 min</h2><span class="panel-note">${p.match_ref_n ? `median of last ${p.match_ref_n} matches ≥60 min` : 'no recent full match — positional reference'}</span></div>
-        <div class="kv">${METRIC_KEYS.map((k) => `<div><span>${METRIC_LONG[k]}</span><b>${fmtN(p.match_ref[k])} <small>${METRIC_UNIT[k]}</small></b></div>`).join('')}</div></section>
+      <section class="panel"><div class="panel-head"><h2 class="panel-title small">Match references</h2><span class="panel-note">${p.top3_src === 'own' ? `${p.top3_n} full matches (≥75 min) in the past year` : `not enough full matches — ${p.top3_src} reference`}</span></div>
+        <table class="dtable compact"><thead><tr><th></th><th class="c">Median / 90 min</th><th class="c">Top-3 match avg</th></tr></thead><tbody>
+        ${[['td', 'Total distance', 'm'], ['d15', 'Distance > 15 km/h', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'], ['spr_n', 'Sprints', ''], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE', 'AU']]
+          .map(([k, l, u]) => `<tr><td>${l}</td><td class="c">${p.match_ref[k] == null ? '—' : fmtN(p.match_ref[k])}</td><td class="c"><b>${fmtN(p.top3[k])}</b> <small class="muted">${u}</small></td></tr>`).join('')}
+        </tbody></table></section>
       <section class="panel"><div class="panel-head"><h2 class="panel-title small">Physical tests</h2><a class="link" id="pl-tests-link">Open tests</a></div>
         <div id="pl-tests"></div></section>
     </div>`;
   bindSeg('pl-metric', (v) => { WL.plMetric = v; drawPlayerCharts(p, s); });
   bindSeg('pl-model', (v) => { WL.plModel = v; drawPlayerCharts(p, s); });
   document.getElementById('pl-tests-link').onclick = () => switchView('testing', { athlete: p.id, tab: 'profile' });
+  document.getElementById('pl-ready-link').onclick = () => switchView('readiness');
   drawPlayerCharts(p, s);
+  fatigueTimeline(document.getElementById('pl-fatigue'), p.id, 60);
   drawZTable(s);
   drawTimeline(s);
   drawPlayerTests(p);
