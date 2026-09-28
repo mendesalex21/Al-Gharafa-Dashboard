@@ -104,8 +104,8 @@ function svReading(plan) {
 }
 
 function svMcChart(m, k) {
-  const W = 560, H = 236, P = { l: 44, r: 8, t: 24, b: 42 }, n = m.rows.length || 1;
-  const iw = W - P.l - P.r, ih = H - P.t - P.b, step = iw / n, bw = Math.min(54, step * 0.46);
+  const W = 560, H = 196, P = { l: 40, r: 6, t: 20, b: 36 }, n = m.rows.length || 1;
+  const iw = W - P.l - P.r, ih = H - P.t - P.b, step = iw / n, bw = Math.min(50, step * 0.46);
   const raw = Math.max(1, ...m.rows.map((r) => Math.max(r.v || 0, r.u || 0, r.obj || 0))) * 1.12;
   const e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e;
   const top = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e;
@@ -115,7 +115,7 @@ function svMcChart(m, k) {
   [0, top / 2, top].forEach((t) => { g += `<line x1="${P.l}" x2="${W - P.r}" y1="${y(t)}" y2="${y(t)}" style="stroke:var(--hairline)"/><text x="${P.l - 6}" y="${y(t) + 4}" text-anchor="end">${fv(t)}</text>`; });
   m.rows.forEach((r, i) => {
     const x = P.l + step * (i + 0.5), bx = x - bw / 2;
-    if (r.today) g += `<rect x="${P.l + step * i + 3}" y="4" width="${step - 6}" height="${H - 8}" rx="10" style="fill:rgba(0,113,227,.07)"/>`;
+    if (r.today) g += `<rect x="${P.l + step * i + 3}" y="2" width="${step - 6}" height="${H - 4}" rx="10" style="fill:rgba(0,113,227,.07)"/>`;
     if (r.past && r.absent) g += `<text x="${x}" y="${base - 8}" text-anchor="middle">absent</text>`;
     else if (r.past) {
       const lv = r.z != null ? zLevel(r.z) : r.sd ? zLevel((r.v - r.u) / r.sd) : null;
@@ -125,17 +125,13 @@ function svMcChart(m, k) {
       g += `<rect x="${bx + 1}" y="${y(r.obj)}" width="${bw - 2}" height="${Math.max(1, base - y(r.obj))}" rx="5" style="fill:rgba(42,120,214,.08);stroke:#2a78d6" stroke-width="1.5" stroke-dasharray="4 3"/><text class="v" x="${x}" y="${Math.max(12, y(r.obj) - 6)}" text-anchor="middle" style="fill:#1d5fae">${fv(r.obj)}</text>`;
     }
     g += `<line x1="${bx - 7}" x2="${bx + bw + 7}" y1="${y(r.u)}" y2="${y(r.u)}" style="stroke:var(--ink)" stroke-width="2.5" stroke-linecap="round"/>`;
-    g += `<text x="${x}" y="${H - 22}" text-anchor="middle" style="font-weight:700;fill:var(--ink-2)">${r.md}</text><text x="${x}" y="${H - 8}" text-anchor="middle">${r.today ? 'today' : fmtDay(r.date, { weekday: 'short', day: 'numeric' })}</text>`;
+    g += `<text x="${x}" y="${H - 20}" text-anchor="middle" style="font-weight:700;fill:var(--ink-2)">${r.md}</text><text x="${x}" y="${H - 6}" text-anchor="middle">${r.today ? 'today' : fmtDay(r.date, { weekday: 'short', day: 'numeric' })}</text>`;
   });
-  return `<svg class="sv-mc-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${SV_LBL[k]} day by day">${g}</svg>
-    <div class="sv-mc-cap"><b>${SV_LBL[k]}</b> · bar = done (colour vs his usual for that day) · dashed = his objective for the days left · dark line = his usual for that day</div>`;
+  return `<svg class="sv-mc-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${SV_LBL[k]} day by day">${g}</svg>`;
 }
 
-function svMicrocycleHtml(s, p) {
-  const mc = svMicrocycle(s);
-  if (!mc || !mc.days.length) return `<div class="sv-mc"><h4 class="sv-h">His microcycle</h4><p class="note">No microcycle plan on a match day or outside a standard microcycle.</p></div>`;
-  const plan = svPlan(p, mc), rd = svReading(plan);
-  const left = mc.days.filter((d) => d.date > mc.today).map((d) => d.md).join(' / ');
+/** Plain-language reading of his microcycle: joker, behind (top-up), volume already done, missed sessions. */
+function svInsights(s, plan, rd, left) {
   const pc = (a, b) => Math.round(a / b * 100), u = (k) => (SV_UNIT[k] ? ' ' + SV_UNIT[k] : '');
   const ins = [];
   if (rd.reached.length && left) ins.push({ lv: 'on', i: '✓', t: `<b>High-speed target already reached</b> — ${rd.reached.map((k) => `${SV_LBL[k]} ${pc(plan[k].done, plan[k].target)}%`).join(' · ')} of his microcycle total.${rd.joker ? ` He can be a <b>joker</b> in the high-speed drills of ${left}.` : ''}` });
@@ -144,24 +140,8 @@ function svMicrocycleHtml(s, p) {
   if (vol.length) ins.push({ lv: 'above', i: '!', t: `<b>${vol.map((k) => SV_LBL[k]).join(', ')}</b> already at his microcycle total — keep ${left} light for him.` });
   const absent = (plan.td.rows || []).filter((r) => r.absent);
   if (absent.length) ins.push({ lv: 'below', i: '·', t: `Not in the team session on ${absent.map((r) => `${fmtDay(r.date, { weekday: 'short', day: 'numeric' })} (${r.md})`).join(', ')} — counted as 0.` });
-  if (!ins.length) ins.push({ lv: 'on', i: '✓', t: left ? `On track on every metric — his objectives for ${left} are below.` : 'Microcycle complete.' });
-  if (!plan[SV.mc] || !plan[SV.mc].target) SV.mc = 'td';
-  const rows = SV_M.map(([k, l]) => {
-    const m = plan[k];
-    if (!m.target) return '';
-    const max = Math.max(m.target, m.done + m.planned) * 1.08, w = (v) => Math.max(0, Math.min(100, v / max * 100)), st = svMcStatus(m);
-    return `<button type="button" class="sv-mc-row ${k === SV.mc ? 'sel' : ''}" data-mck="${k}" title="done ${fmtN(m.done)} · usual by ${s.md} ${fmtN(m.expected)} · microcycle target ${fmtN(m.target)}${m.planned ? ` · still to do ${fmtN(m.planned)}` : ''}"><span class="sv-mc-l">${l}</span>
-      <span class="sv-mc-track"><i class="done" style="width:${w(m.done)}%;background:${Z_COL[st.lv]}"></i>${m.planned ? `<i class="todo" style="left:${w(m.done)}%;width:${w(m.planned)}%"></i>` : ''}${m.left ? `<s style="left:${w(m.expected)}%"></s>` : ''}<b style="left:${w(m.target)}%"></b></span>
-      <em>${fmtN(m.done)} <small>/ ${fmtN(m.target)}${u(k)}</small></em><span class="zs ${st.lv}">${st.t}</span></button>`;
-  }).join('');
-  return `<div class="sv-mc">
-    <div class="sv-mc-head"><h4 class="sv-h">His microcycle · done so far and still to do before the match of ${fmtDay(mc.matchDate, { weekday: 'short', day: 'numeric', month: 'short' })}</h4>
-      <small class="muted">${TYPE_LABEL[mc.type]} microcycle · as of ${s.md} · target = his own usual for each day from ${mc.days[0].md} to MD-1, added up · re-planned after every session</small></div>
-    <div class="sv-mc-ins">${ins.map((x) => `<div class="sv-in ${x.lv}"><i>${x.i}</i><span>${x.t}</span></div>`).join('')}</div>
-    <div class="sv-mc-grid">
-      <div>${rows}<div class="sv-mc-leg"><span><i class="lg-done"></i>done</span><span><i class="lg-todo"></i>his objective for the days left</span><span><i class="lg-exp"></i>his usual by today</span><span><i class="lg-tgt"></i>microcycle target</span><span>click a line for the day-by-day chart</span></div></div>
-      <div>${svMcChart(plan[SV.mc], SV.mc)}</div>
-    </div></div>`;
+  if (!ins.length) ins.push({ lv: 'on', i: '✓', t: left ? `On track on every metric — his objectives for ${left} are in the chart.` : 'Microcycle complete.' });
+  return ins;
 }
 
 // ------------------------------------------------------------------ Attention today
@@ -278,7 +258,7 @@ function svRankHtml(s) {
 
 // ------------------------------------------------------------------ individual panel (table / rankings)
 function svIndividualHtml(s) {
-  return `<section class="panel" id="sv-ind">
+  return `<section class="panel sv-bleed" id="sv-ind">
     <div class="panel-head"><h2 class="panel-title small">Individual ${s.kind === 'match' ? 'match' : 'training'} · full session</h2>${SV.view === 'table' ? svLegend() : ''}${segHtml('sv-view', [['table', 'Table'], ['rank', 'Rankings']], SV.view)}</div>
     ${SV.view === 'table' ? svTableHtml(s) : svRankHtml(s)}
     ${s.absent.length ? `<p class="panel-foot"><b>Not in the session:</b> ${s.absent.map((a) => `${escapeHtml(playerName(a.id))} <span class="muted">(${escapeHtml(a.type)})</span>`).join(', ')}</p>` : ''}
@@ -301,8 +281,12 @@ function svBindIndividual(s) {
   }
   el.querySelectorAll('[data-id]').forEach((r) => r.addEventListener('click', () => svOpen(s, r.dataset.id)));
 }
+/** Width of the page scrollbar, so the full-width table panel stays centred on Windows too. */
+function svScrollbarVar() { document.documentElement.style.setProperty('--sbw', `${Math.max(0, window.innerWidth - document.documentElement.clientWidth)}px`); }
+window.addEventListener('resize', svScrollbarVar);
 /** Called by drawSessions: fills the attention and individual sections and binds their clicks. */
 function svMount(s) {
+  svScrollbarVar();
   document.getElementById('sv-attention').innerHTML = svAttentionHtml(s);
   document.querySelectorAll('#sv-attention [data-id]').forEach((r) => r.addEventListener('click', () => svOpen(s, r.dataset.id)));
   document.querySelectorAll('#sv-attention [data-more]').forEach((b) => b.addEventListener('click', () => { b.closest('.sv-plan').classList.add('all'); b.remove(); }));
@@ -324,33 +308,63 @@ function svClose() {
   document.getElementById('sv-dim').hidden = true;
   document.body.classList.remove('sv-noscroll');
 }
-function svSheetHtml(s, p) {
-  const kpi = (l, v, u, sub) => `<div class="sv-kpi"><span>${l}</span><b>${v}<small> ${u}</small></b><em>${sub}</em></div>`;
+/** Player sheet on one screen: KPIs, then one line per metric — today vs his usual (zones), his microcycle
+ * (done / still to do / target), % of the team and of his match — then the advice and the day-by-day chart. */
+function svSheetHtml(s, p, nav) {
+  const mc = svMicrocycle(s);
+  const plan = mc && mc.days.length ? svPlan(p, mc) : null;
+  const rd = plan ? svReading(plan) : null;
+  const left = plan ? mc.days.filter((d) => d.date > mc.today).map((d) => d.md).join(' / ') : '';
+  if (plan && (!plan[SV.mc] || !plan[SV.mc].target)) SV.mc = 'td';
   const per90 = p.mdref && p.mdref.per90;
-  const bullets = p.mdref ? SV_M.filter(([k]) => p[k] != null && svUsual(p, k) != null).map(([k, l, u]) => zBulletHtml(l, u, p[k], { mean: svUsual(p, k), sd: svSd(p, k), z: svZ(p, k) })).join('') : '';
-  const cmp = SV_M.filter(([k]) => p[k] != null).map(([k, l]) => {
-    const vt = s.team[k] ? Math.round(p[k] / s.team[k] * 100) : null, vm = p['p3_' + k];
-    const bar = (x, col, mid) => (x == null ? '<span class="muted">—</span>' : `<span class="sv-pb"><b><i style="width:${Math.min(100, x / (mid ? 2 : 1))}%;background:${col}"></i>${mid ? '<u></u>' : ''}</b><em>${x > 300 ? '>300' : x}%</em></span>`);
-    return `<tr><td>${l}</td><td>${bar(vt, 'rgba(92,164,240,.6)', true)}</td><td>${bar(vm, 'rgba(236,128,84,.6)', false)}</td></tr>`;
+  const unit = (k) => (SV_UNIT[k] ? `<small> ${SV_UNIT[k]}</small>` : '');
+  const kp = (l, v, sub, warn) => `<div class="sv-k ${warn ? 'warn' : ''}"><span>${l}</span><b>${v}</b>${sub ? `<em>${sub}</em>` : ''}</div>`;
+  const kpis = `<div class="sv-kstrip">${kp('Time', `${fmtN(p.min)}<small> min</small>`, `session ${fmtN(s.minutes)}`)}${kp('RPE', fmtN(p.rpe), `sRPE ${fmtN(p.srpe)} AU`)}${kp('Intensity', `${fmtN(p.mpm)}<small> m/min</small>`, `team ${fmtN(s.team.mpm)}`)}${kp('Max speed', `${fmtN(p.vmax, 1)}<small> km/h</small>`, p.vmax_pct != null ? `${p.vmax_pct}% of his max` : '')}${kp('Last ≥ 90% Vmax', p.days_hsv == null ? '—' : `${p.days_hsv}<small> ${p.days_hsv === 1 ? 'day' : 'days'}</small>`, p.days_hsv >= 10 ? 'exposure needed' : 'ago', p.days_hsv >= 10)}</div>`;
+  const rows = SV_M.map(([key, l]) => {
+    const v = p[key];
+    if (v == null) return '';
+    const m = svUsual(p, key), z = svZ(p, key), lv = zLevel(z);
+    let today = `<td></td><td class="num">${fmtN(v)}${unit(key)}</td><td></td>`;
+    if (m != null) {
+      const sd = svSd(p, key) || Math.max(0.15 * m, 1);
+      const max = Math.max(m + 2.6 * sd, v * 1.06, 1), pc = (x) => Math.max(0, Math.min(100, x / max * 100));
+      const lo = Math.max(0, m - sd), hi = m + sd, hi2 = m + 2 * sd;
+      today = `<td><span class="sv-zt" title="his usual ${fmtN(m)} (${fmtN(lo)}–${fmtN(hi)})${z != null ? ' · z ' + fmtSigned(z) : ''}"><i class="b" style="width:${pc(lo)}%"></i><i class="g" style="left:${pc(lo)}%;width:${pc(hi) - pc(lo)}%"></i><i class="o" style="left:${pc(hi)}%;width:${pc(hi2) - pc(hi)}%"></i><i class="r" style="left:${pc(hi2)}%;right:0"></i><u style="left:${pc(m)}%"></u><b style="left:${pc(v)}%;background:${lv ? Z_COL[lv] : '#aeaeb2'}"></b></span></td>
+        <td class="num">${fmtN(v)}${unit(key)}<small class="sv-us">/ ${fmtN(m)}</small></td><td class="c">${lv ? `<span class="zs ${lv}">${fmtSigned(z)}</span>` : ''}</td>`;
+    }
+    let cyc = '<td class="sep"></td><td></td><td></td>';
+    const mm = plan && plan[key];
+    if (mm && mm.target) {
+      const mx = Math.max(mm.target, mm.done + mm.planned) * 1.08, w = (x) => Math.max(0, Math.min(100, x / mx * 100)), st = svMcStatus(mm);
+      cyc = `<td class="sep"><span class="sv-pt" title="done ${fmtN(mm.done)} · usual by ${s.md} ${fmtN(mm.expected)} · target ${fmtN(mm.target)}${mm.planned ? ` · still to do ${fmtN(mm.planned)}` : ''}"><i class="done" style="width:${w(mm.done)}%;background:${Z_COL[st.lv]}"></i>${mm.planned ? `<i class="todo" style="left:${w(mm.done)}%;width:${w(mm.planned)}%"></i>` : ''}${mm.left ? `<s style="left:${w(mm.expected)}%"></s>` : ''}<b style="left:${w(mm.target)}%"></b></span></td>
+        <td class="num">${fmtN(mm.done)}<small class="sv-us">/ ${fmtN(mm.target)}</small></td><td class="c"><span class="zs ${st.lv}">${st.t}</span></td>`;
+    }
+    const vt = s.team[key] ? Math.round(v / s.team[key] * 100) : null, vm = p['p3_' + key];
+    return `<tr class="m ${plan && key === SV.mc ? 'sel' : ''}" ${plan && mm && mm.target ? `data-mck="${key}"` : ''}><td class="lbl">${l}</td>${today}${cyc}<td class="num sep">${vt == null ? '—' : `${vt > 300 ? '>300' : vt}%`}</td><td class="num">${vm == null ? '—' : `${vm}%`}</td></tr>`;
   }).join('');
+  const refTxt = p.mdref ? `${p.mdref.src === 'own' ? `his ${p.mdref.n} sessions` : 'squad reference'}${per90 ? ', to his minutes' : ''}` : 'no reference';
+  const cycTxt = plan ? `His microcycle → match ${fmtDay(mc.matchDate, { weekday: 'short', day: 'numeric', month: 'short' })} <small>${mc.days[0].md} → MD-1 · as of ${s.md}</small>` : 'His microcycle <small>no plan on a match day or a break</small>';
+  const ins = plan ? svInsights(s, plan, rd, left) : [];
   return `
-    <div class="sv-head">${avatarHtml(p.id, playerName(p.id), 64)}<div><h3>${escapeHtml(playerName(p.id))}</h3><p>${escapeHtml(svPos(p.id))}${svPos(p.id) ? ' · ' : ''}${escapeHtml(p.type || '')} · ${fmtDay(s.date, { weekday: 'long', day: 'numeric', month: 'long' })} · ${s.kind === 'match' ? 'match' : s.md || 'training'}${s.cycle.type ? ` of a ${TYPE_LABEL[s.cycle.type].toLowerCase()} microcycle` : ''}</p>
-      <button type="button" class="sv-link" data-load="${p.id}">Workload history ›</button></div></div>
-    <div class="sv-kpis">${kpi('Time', fmtN(p.min), 'min', `session ${fmtN(s.minutes)} min`)}${kpi('RPE', fmtN(p.rpe), '', `sRPE ${fmtN(p.srpe)} AU`)}${kpi('Intensity', fmtN(p.mpm), 'm/min', `team ${fmtN(s.team.mpm)}`)}${kpi('Max speed', fmtN(p.vmax, 1), 'km/h', p.vmax_pct != null ? `${p.vmax_pct}% of his max` : '')}${kpi('Last ≥ 90% Vmax', p.days_hsv == null ? '—' : p.days_hsv, p.days_hsv === 1 ? 'day' : 'days', p.days_hsv >= 10 ? '<span class="sv-warn">exposure needed</span>' : 'ago')}</div>
-    <div class="sv-cols">
-      <div><h4 class="sv-h">Today vs his usual ${s.kind === 'match' ? 'match' : s.md || ''} <small class="muted">${p.mdref ? `(${p.mdref.src === 'own' ? `his ${p.mdref.n} sessions` : 'squad reference'}${per90 ? ', brought to his minutes' : ''})` : ''}</small></h4>
-        ${bullets ? `<div class="bullets sv-bullets">${bullets}</div>` : '<p class="note">No reference for this day: outside a standard microcycle or not enough history yet.</p>'}</div>
-      <div><h4 class="sv-h">Today vs the team · vs his match</h4>
-        <table class="sv-cmp"><thead><tr><th></th><th>% of team average <small>(line = 100%)</small></th><th>% of his top-3 match</th></tr></thead><tbody>${cmp}</tbody></table></div>
-    </div>
-    ${svMicrocycleHtml(s, p)}`;
+    <div class="sv-top">${avatarHtml(p.id, playerName(p.id), 48)}<div class="sv-id"><h3>${escapeHtml(playerName(p.id))}</h3>
+      <p>${escapeHtml(svPos(p.id))}${svPos(p.id) ? ' · ' : ''}${escapeHtml(p.type || '')} · ${fmtDay(s.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${s.kind === 'match' ? 'match' : s.md || 'training'}${s.cycle.type ? ` of a ${TYPE_LABEL[s.cycle.type].toLowerCase()} microcycle` : ''} · <button type="button" class="sv-link" data-load="${p.id}">Workload history ›</button></p></div>${nav}</div>
+    ${kpis}
+    <div class="sv-grid-wrap"><table class="sv-grid">
+      <colgroup><col style="width:104px"><col><col style="width:112px"><col style="width:58px"><col><col style="width:112px"><col style="width:92px"><col style="width:56px"><col style="width:56px"></colgroup>
+      <thead><tr class="grp"><th></th><th colspan="3">Today vs his usual ${s.kind === 'match' ? 'match' : s.md || ''} <small>${refTxt}</small></th><th colspan="3" class="sep">${cycTxt}</th><th colspan="2" class="sep">Today vs</th></tr>
+        <tr><th>Metric</th><th>blue · green usual · orange · red &nbsp;● today &nbsp;| usual</th><th class="r">today / usual</th><th class="c">z</th><th class="sep">done · to do · target</th><th class="r">done / target</th><th class="c">status</th><th class="r sep">team</th><th class="r">match</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    ${plan ? `<div class="sv-bottom"><div class="sv-ins">${ins.map((x) => `<div class="sv-in ${x.lv}"><i>${x.i}</i><span>${x.t}</span></div>`).join('')}
+        <div class="sv-leg"><span><i class="lg-done"></i>done</span><span><i class="lg-todo"></i>his objective for the days left</span><span><i class="lg-exp"></i>his usual by today</span><span><i class="lg-tgt"></i>microcycle target</span><span>target = his own usual for each day, added up · re-planned after every session</span></div></div>
+      <div class="sv-chart"><div class="sv-chart-h"><b>${SV_LBL[SV.mc]}</b> day by day <small>· click a line above to change · dark line = his usual for that day · dashed = his objective</small></div>${svMcChart(plan[SV.mc], SV.mc)}</div></div>` : ''}`;
 }
 function svOpen(s, id) {
   const list = svFlat(s), i = list.findIndex((x) => x.id === id);
   if (i < 0) return;
   svEnsureDrawer();
   const p = list[i], sheet = document.getElementById('sv-sheet');
-  sheet.innerHTML = `<div class="sv-nav"><button type="button" data-go="${i - 1}" ${i ? '' : 'disabled'}>‹ ${i ? escapeHtml(playerName(list[i - 1].id)) : ''}</button><button type="button" data-go="${i + 1}" ${i < list.length - 1 ? '' : 'disabled'}>${i < list.length - 1 ? escapeHtml(playerName(list[i + 1].id)) : ''} ›</button><button type="button" class="sv-x" aria-label="Close">×</button></div>${svSheetHtml(s, p)}`;
+  const nav = `<div class="sv-nav"><button type="button" data-go="${i - 1}" ${i ? '' : 'disabled'} title="${i ? escapeHtml(playerName(list[i - 1].id)) : ''}">‹ ${i ? escapeHtml(playerName(list[i - 1].id)) : ''}</button><button type="button" data-go="${i + 1}" ${i < list.length - 1 ? '' : 'disabled'}>${i < list.length - 1 ? escapeHtml(playerName(list[i + 1].id)) : ''} ›</button><button type="button" class="sv-x" aria-label="Close">×</button></div>`;
+  sheet.innerHTML = svSheetHtml(s, p, nav);
   const dr = document.getElementById('sv-drawer');
   const wasHidden = dr.hidden;
   dr.hidden = false;
