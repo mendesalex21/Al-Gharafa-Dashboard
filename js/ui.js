@@ -152,11 +152,11 @@ function groupedTable(mount, cols, rows, opts = {}) {
           let style = c.tint ? c.tint(r) || '' : '';
           let cls = 'c';
           if (opts.mode && opts.mode !== 'bars' && c.bar) { if (!style && c.z) style = zTint(c.z(r)); }
-          else if (!style && c.bar && v != null) { cls += ' bar'; style = `--w:${Math.round(Math.abs(v) / max[c.key] * 100)}%`; }
+          else if (!style && c.bar && v != null) { cls += ' bar'; style = `--w:${Math.round(Math.abs(v) / max[c.key] * 100)}%${c.color ? `;--bc:${c.color}` : ''}`; }
           return `<td class="${cls}" style="${style}">${txt}</td>`;
         }).join('')}</tr>`).join('');
     }).join('');
-    mount.innerHTML = `<table class="dtable grouped"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+    mount.innerHTML = `<table class="dtable grouped ${opts.cls || ''}"><thead>${head}</thead><tbody>${body}</tbody></table>`;
     mount.querySelectorAll('th[data-k]').forEach((th) => th.addEventListener('click', () => {
       const k = th.dataset.k;
       st = { key: k, dir: st.key === k ? -st.dir : k === 'name' ? 1 : -1 };

@@ -10,22 +10,41 @@ const OBJ_METRICS = ['td', 'hit', 'spr', 'acc_dec', 'srpe'];
 function objectiveFor(obj, type, tag) {
   return obj && type && tag && obj.table[type] ? obj.table[type][tag] || null : null;
 }
-function complianceOf(v, cell) {
-  if (v == null || !cell || cell.p25 == null) return null;
-  return v < cell.p25 ? 'below' : v > cell.p75 ? 'above' : 'on';
-}
-const COMPLIANCE = { on: ['On target', STATUS_COL.green], above: ['Above', STATUS_COL.orange], below: ['Below', STATUS_COL.orange] };
+const OBJ_BARS = [
+  ['td', 'Total distance', 'm'], ['d15', 'Distance > 15 km/h', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'],
+  ['spr_n', 'Sprints', ''], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE load', 'AU'], ['mpm', 'Intensity', 'm/min'], ['minutes', 'Duration', 'min'],
+];
 
-/** Bullet bar: interquartile target band, median tick, actual marker. */
-function bulletHtml(label, unit, actual, cell) {
-  const max = Math.max(cell.p75 * 1.35, (actual || 0) * 1.08, 1);
+/**
+ * Objective bar of one team metric: zones from the usual (mean ± SD of the same MD in the same microcycle type) —
+ * blue below, green on target, orange slightly above, red well above — and today's team value as the dot.
+ * Status = team z, the same number as the calendar and the planner.
+ */
+function zBulletHtml(label, unit, actual, ref) {
+  const lv = zLevel(ref.z), m = ref.mean, sd = ref.sd || 1;
+  const max = Math.max(m + 2.6 * sd, (actual || 0) * 1.06, 1);
   const pct = (v) => Math.max(0, Math.min(100, (v / max) * 100));
-  const c = complianceOf(actual, cell);
+  const lo = Math.max(0, m - sd), hi = m + sd, hi2 = m + 2 * sd;
   return `<div class="bullet">
-    <div class="bl-head"><span>${label}</span><span class="bl-val">${fmtN(actual)} <small>${unit}</small>${c ? ` <em style="color:${COMPLIANCE[c][1]}">${COMPLIANCE[c][0]}</em>` : ''}</span></div>
-    <div class="bl-track"><span class="bl-range" style="left:${pct(cell.p25)}%;width:${pct(cell.p75) - pct(cell.p25)}%"></span>
-      <span class="bl-med" style="left:${pct(cell.med)}%"></span>${actual != null ? `<span class="bl-act" style="left:${pct(actual)}%"></span>` : ''}</div>
-    <div class="bl-foot">target ${fmtN(cell.p25)}–${fmtN(cell.p75)} · median ${fmtN(cell.med)}${cell.pct != null ? ` · ${cell.pct}% of match` : ''}</div></div>`;
+    <div class="bl-head"><span>${label}</span><span class="bl-val">${fmtN(actual)} <small>${unit}</small></span></div>
+    <div class="bl-track zb"><span class="zb-b" style="left:0;width:${pct(lo)}%"></span><span class="zb-g" style="left:${pct(lo)}%;width:${pct(hi) - pct(lo)}%"></span><span class="zb-o" style="left:${pct(hi)}%;width:${pct(hi2) - pct(hi)}%"></span><span class="zb-r" style="left:${pct(hi2)}%;width:${100 - pct(hi2)}%"></span>
+      <span class="bl-med" style="left:${pct(m)}%"></span>${actual != null ? `<span class="bl-act" style="left:${pct(actual)}%;background:${Z_COL[lv]}"></span>` : ''}</div>
+    <div class="bl-foot zf"><span>usual ${fmtN(m)} · on target ${fmtN(lo)}–${fmtN(hi)}</span><span class="zs ${lv}">${Z_LABEL[lv]} · z ${fmtSigned(ref.z)}</span></div></div>`;
+}
+
+function objectivesPanel(s) {
+  const cyc = s.cycle, ref = s.team_ref;
+  const per90 = s.kind === 'match';
+  if (!ref) {
+    return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Team averages</h2><span class="panel-note">no objective: outside a standard microcycle (break or pre-season)</span></div>
+      <div class="obj-plain">${OBJ_BARS.map(([k, l, u]) => { const v = k === 'minutes' ? s.minutes : s.team[k]; return v == null ? '' : `<div><span>${l}</span><b>${fmtN(v)}<small> ${u}</small></b></div>`; }).join('')}</div></section>`;
+  }
+  const bars = OBJ_BARS.filter(([k]) => ref[k] && ref[k].z != null)
+    .map(([k, l, u]) => zBulletHtml(l, u + (per90 && k !== 'mpm' ? ' /90' : ''), ref[k].v, ref[k])).join(''); // v = value behind the z
+  return `<section class="panel">
+    <div class="panel-head"><h2 class="panel-title small">Objectives · ${s.md} of a ${TYPE_LABEL[cyc.type].toLowerCase()} microcycle${per90 ? ' (per 90 min)' : ''}</h2><span class="panel-note">team average vs ${ref.n} past ${s.md} sessions since ${fmtDay(TR.obj ? TR.obj.since : '2024-07-01', { month: 'short', year: 'numeric' })}</span></div>
+    <div class="bullets">${bars}</div>
+    <p class="panel-foot">Green = usual ± 1 SD (on target, |z| &lt; 1) · blue below · orange 1–2 SD above · red more than 2 SD above. Dark tick = usual. Same z-scores as the calendar and the planner.</p></section>`;
 }
 
 // ------------------------------------------------------------------ Sessions
@@ -64,9 +83,7 @@ function drawSessions(opts) {
   document.getElementById('se-sub').textContent = `${list.length} sessions since the start of the season · ${fmtUpdated(d.generated_at)}`;
 
   const cyc = s.cycle;
-  const cycText = cyc.type ? `${TYPE_LABEL[cyc.type]} microcycle · ${cyc.length} days` : cyc.length ? `${cyc.length}-day gap` : 'Outside a microcycle';
-  const obj = s.kind === 'training' ? objectiveFor(TR.obj, cyc.type, s.md) : null;
-  const t = s.team;
+  const cycText = cyc.pre_match ? `Match week after a ${cyc.length}-day gap · compared as normal` : cyc.type ? `${TYPE_LABEL[cyc.type]} microcycle · ${cyc.length} days` : cyc.length ? `${cyc.length}-day gap` : 'Outside a microcycle';
   const body = document.getElementById('se-body');
   body.innerHTML = `
     <section class="panel sess-head">
@@ -79,27 +96,17 @@ function drawSessions(opts) {
       </div>
       <div class="sh-meta">${fmtN(s.minutes)} min · ${s.n} players${s.n_core !== s.n ? ` · team averages on ${s.n_core} ${s.kind === 'match' ? 'players ≥60 min' : 'full-session players'}` : ''}</div>
     </section>
-    ${s.team_ref ? `<p class="note tiles-note">Team averages coloured by <b>z-score vs the usual ${s.md}${s.kind === 'match' ? ' (per 90 min)' : ''} of ${TYPE_LABEL[cyc.type].toLowerCase()} microcycles</b> (${s.team_ref.n} past sessions): <span class="zs on">on target</span> |z| &lt; 1 · <span class="zs below">below</span> z ≤ −1 · <span class="zs above">slightly above</span> z 1–2 · <span class="zs high">well above</span> z ≥ 2</p>` : `<p class="note tiles-note">No reference for this day (outside a standard microcycle) — team averages only.</p>`}
-    <div class="tiles">
-      ${[['td', 'Total distance', 'm'], ['d15', 'Distance > 15 km/h', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'], ['spr_n', 'Sprints', ''], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE load', 'AU']].map(([k, l, u]) => teamTile(s, k, l, u)).join('')}
-      <div class="tile"><div class="tile-label">Intensity</div><div class="tile-value">${fmtN(t.mpm)}<small> m/min</small></div><div class="tile-sub">max speed ${fmtN(t.vmax, 1)} km/h (avg) · ${fmtN(t.hit_n)} efforts >20</div></div>
-    </div>
-    <div class="panel-head bare"><h2 class="panel-title">Who did the most</h2>
-      <span class="legend-inline"><span><i style="background:var(--accent)"></i>above team average</span><span><i style="background:#9fc2ee"></i>below</span><span><i class="ln dash"></i>team average</span><span>% = of his top-3 match</span></span></div>
-    <div class="boards" id="se-boards">${SESSION_BOARDS.map((b) => boardHtml(s, b)).join('')}</div>
+    ${objectivesPanel(s)}
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title small">Individual ${s.kind === 'match' ? 'match' : 'training'} · full session</h2>
+        <span class="panel-note">grouped by position · click a column to sort · click a player for his load</span>${segHtml('se-mode', [['bars', 'Data bars'], ['z', 'z vs session'], ...(s.mdref ? [['mdz', `z vs usual ${s.md}`]] : [])], s.mdref || TR.mode !== 'mdz' ? TR.mode : 'bars')}</div>
+      <div class="table-wrap" id="se-players"></div>
+      ${s.absent.length ? `<p class="panel-foot"><b>Not in the session:</b> ${s.absent.map((a) => `${escapeHtml(playerName(a.id))} <span class="muted">(${escapeHtml(a.type)})</span>`).join(', ')}</p>` : ''}
+    </section>
     <section class="panel">
       <div class="panel-head"><h2 class="panel-title small">vs his usual for this day</h2>${s.mdref ? segHtml('se-mdz-metric', MDZ_METRICS.map(([k, l]) => [k, l]).concat([['all', 'All metrics']]), TR.mdz) : ''}</div>
       <p class="note" id="se-mdz-note"></p>
       <div id="se-mdz"></div>
-    </section>
-    ${obj ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Objectives · ${s.md} of a ${TYPE_LABEL[cyc.type].toLowerCase()} microcycle</h2><span class="panel-note">from ${obj.n} similar sessions since ${fmtDay(TR.obj.since, { month: 'short', year: 'numeric' })}</span></div>
-      <div class="bullets">${OBJ_METRICS.map((k) => bulletHtml(METRIC_LONG[k], METRIC_UNIT[k], t[k], obj[k])).join('')}${bulletHtml('Duration', 'min', s.minutes, obj.minutes)}</div></section>`
-      : s.kind === 'training' ? `<section class="panel"><p class="note">No objective for this day${cyc.type ? '' : ' — it is outside a standard microcycle (break or pre-season)'}${s.md && cyc.type ? ` — not enough ${s.md} sessions in ${cyc.type} microcycles` : ''}.</p></section>` : ''}
-    <section class="panel">
-      <div class="panel-head"><h2 class="panel-title small">Players</h2>
-        <span class="panel-note">grouped by position · click a column to sort</span>${segHtml('se-mode', [['bars', 'Data bars'], ['z', 'z vs session'], ...(s.mdref ? [['mdz', `z vs usual ${s.md}`]] : [])], s.mdref || TR.mode !== 'mdz' ? TR.mode : 'bars')}</div>
-      <div class="table-wrap" id="se-players"></div>
-      ${s.absent.length ? `<p class="panel-foot"><b>Not in the session:</b> ${s.absent.map((a) => `${escapeHtml(playerName(a.id))} <span class="muted">(${escapeHtml(a.type)})</span>`).join(', ')}</p>` : ''}
     </section>
     ${s.drills.length ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Drills</h2><span class="panel-note">team average per drill · "vs match" = per-minute intensity as % of the players' match intensity · tap a drill for players</span></div><div class="drills-wrap" id="se-drills"></div></section>` : ''}`;
 
@@ -107,21 +114,11 @@ function drawSessions(opts) {
   if (s.mdref) bindSeg('se-mdz-metric', (v) => { TR.mdz = v; drawMdz(s); });
   drawMdz(s);
   document.getElementById('se-mdz').onclick = (e) => { const r = e.target.closest('[data-id]'); if (r) switchView('player', { player: r.dataset.id }); };
-  document.getElementById('se-boards').onclick = (e) => { const r = e.target.closest('[data-id]'); if (r) switchView('player', { player: r.dataset.id }); };
   drawSessionPlayers(s);
   if (s.drills.length) drawDrills(s);
 }
 
 const Z_STATUS = Z_LABEL, zStatus = zLevel; // shared colour code (ui.js)
-
-/** Team-average tile, coloured by the team z-score vs the usual for this MD tag and microcycle type. */
-function teamTile(s, k, label, unit) {
-  const ref = s.team_ref && s.team_ref[k], st = ref ? zStatus(ref.z) : null;
-  const perMatch = s.kind === 'match' ? ' / 90 min' : '';
-  return `<div class="tile ${st ? 'zt-' + st : ''}"><div class="tile-label">${label}</div>
-    <div class="tile-value">${fmtN(s.team[k])}<small> ${unit}</small></div>${st ? `<div class="tile-z"><span class="zs ${st}">${Z_STATUS[st]} · z ${fmtSigned(ref.z)}</span></div>` : ''}
-    <div class="tile-sub">${ref ? `usual ${fmtN(ref.mean)}${perMatch} · 25–75th ${fmtN(ref.p25)}–${fmtN(ref.p75)}` : 'team average'}</div></div>`;
-}
 
 const MDZ_METRICS = [['td', 'TD'], ['d15', '>15'], ['hit', '>20'], ['spr', '>25'], ['spr_n', 'Sprints'], ['acc_dec', 'Acc+Dec'], ['srpe', 'sRPE']];
 const MDZ_UNIT = { td: 'm', d15: 'm', hit: 'm', spr: 'm', spr_n: '', acc_dec: '', srpe: 'AU' };
@@ -163,30 +160,6 @@ function drawMdz(s) {
   <div class="dz-axis"><span>less than usual</span><span>usual</span><span>more than usual</span></div>`;
 }
 
-const SESSION_BOARDS = [
-  ['td', 'Total distance', 'm'], ['mpm', 'Intensity', 'm/min'], ['d15', 'Distance > 15 km/h', 'm'],
-  ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'], ['spr_n', 'Sprints', 'n'],
-  ['acc_dec', 'HIT Acc + Dec', 'n'], ['vmax', 'Max speed', 'km/h'], ['srpe', 'sRPE load', 'AU'],
-];
-
-/** Ranking of every player of the session on one metric: horizontal bars, top 3 highlighted, team-average line. */
-function boardHtml(s, [k, label, unit]) {
-  const list = s.players.filter((p) => p[k] != null && p.min > 0).sort((a, b) => b[k] - a[k]);
-  if (!list.length || !list[0][k]) return '';
-  const max = list[0][k];
-  const avg = s.team[k] != null ? s.team[k] : list.reduce((a, p) => a + p[k], 0) / list.length;
-  const d = k === 'vmax' ? 1 : 0;
-  const rows = list.map((p, i) => {
-    const extra = k === 'vmax' ? (p.vmax_pct != null ? `${p.vmax_pct}%` : '') : p['p3_' + k] != null ? `${p['p3_' + k]}%` : '';
-    const partial = p.cat !== 't' && p.cat !== 'm';
-    return `<div class="lb-row ${partial ? 'partial' : ''}" data-id="${p.id}" title="${escapeHtml(`${playerName(p.id)} · ${p.type} · ${p.min} min`)}">
-      <span class="lb-rank ${i < 3 ? 'r' + (i + 1) : ''}">${i + 1}</span>
-      <span class="lb-name">${escapeHtml(playerName(p.id))}${partial ? ` <small>${escapeHtml(p.type.toLowerCase())}</small>` : ''}</span>
-      <span class="lb-track"><i class="lb-bar ${p[k] >= avg ? 'hi' : ''}" style="width:${Math.max(1.5, p[k] / max * 100)}%"></i><i class="lb-avg" style="left:${avg / max * 100}%"></i></span>
-      <span class="lb-val">${fmtN(p[k], d)}${extra ? `<small>${extra}</small>` : ''}</span></div>`;
-  }).join('');
-  return `<section class="panel lb"><div class="panel-head"><h2 class="panel-title small">${label} <small class="muted">${unit}</small></h2><span class="panel-note">team ${fmtN(avg, d)}</span></div><div class="lb-list">${rows}</div></section>`;
-}
 const rpeTint = (v) => (v == null ? '' : `background:rgba(255,59,48,${Math.max(0, Math.min(1, (v - 3) / 7)) * 0.32})`);
 
 function drawSessionPlayers(s) {
@@ -194,28 +167,37 @@ function drawSessionPlayers(s) {
   const mode = TR.mode === 'mdz' && !s.mdref ? 'bars' : TR.mode;
   const zf = (k) => (r) => (mode === 'mdz' ? (r.raw.mdref ? r.raw.mdref.z[k] : null) : r.raw['z_' + k]);
   const pct = (k) => (r) => (r.v[k] == null ? '—' : `${r.v[k]}%`);
+  // Power BI page-1 look: one colour per metric family, bars for volumes, heat for counts and rates
+  const top = (k) => Math.max(1, ...s.players.map((p) => p[k] || 0));
+  const heat = (rgb, k, a = 0.55, floor = 0) => (r) => {
+    const v = r.v[k];
+    if (v == null) return '';
+    const lo = floor ? Math.min(...s.players.filter((p) => p[k] != null).map((p) => p[k])) : 0;
+    const f = Math.max(0, Math.min(1, (v - lo) / Math.max(1, top(k) - lo)));
+    return f < 0.05 ? '' : `background:rgba(${rgb},${(0.08 + f * a).toFixed(2)})`;
+  };
+  const PBI = { td: 'rgba(92,164,240,.42)', d15: 'rgba(232,200,70,.45)', hit: 'rgba(236,128,84,.45)', spr: 'rgba(222,86,104,.42)',
+    vmax: 'rgba(142,142,147,.34)', acc: 'rgba(232,200,70,.45)', dec: 'rgba(222,86,104,.42)', acc_dec: 'rgba(52,199,89,.48)', srpe: 'rgba(191,90,242,.30)' };
   const cols = [
-    { key: 'min', label: 'Min' },
-    { key: 'rpe', label: 'RPE', d: 0, tint: (r) => rpeTint(r.v.rpe) },
-    { key: 'td', label: 'TD', unit: 'm', bar: true, z: zf('td') },
-    { key: 'mpm', label: 'm/min' },
-    { key: 'd15', label: '>15', unit: 'm', bar: true, z: zf('d15') },
-    { key: 'hit', label: '>20', unit: 'm', bar: true, z: zf('hit') },
-    { key: 'spr', label: '>25', unit: 'm', bar: true, z: zf('spr') },
-    { key: 'vmax', label: 'Vmax', unit: 'km/h', d: 1 },
-    { key: 'vmax_pct', label: '% Vmax', fmt: pct('vmax_pct'), tint: (r) => (r.v.vmax_pct >= 90 ? 'background:rgba(52,199,89,.18)' : '') },
-    { key: 'days_hsv', label: 'Days ≥90%', tint: (r) => (r.v.days_hsv >= 10 ? 'background:rgba(255,59,48,.18);font-weight:700' : '') },
-    { key: 'hit_n', label: 'Count >20', bar: true },
-    { key: 'spr_n', label: 'Sprints', bar: true, z: zf('spr_n') },
-    { key: 'acc', label: 'HIT Acc', bar: true },
-    { key: 'dec', label: 'HIT Dec', bar: true },
-    { key: 'acc_dec', label: 'Acc+Dec', bar: true, z: zf('acc_dec') },
-    { key: 'srpe', label: 'sRPE', bar: true, z: zf('srpe') },
-    { key: 'p3_td', label: 'TD %top3', fmt: pct('p3_td') },
-    { key: 'p3_hit', label: '>20 %top3', fmt: pct('p3_hit') },
+    { key: 'min', label: 'Time' },
+    { key: 'rpe', label: 'RPE', d: 0, tint: (r) => (r.v.rpe == null ? '' : `background:rgba(229,72,77,${(Math.max(0, Math.min(1, (r.v.rpe - 2) / 8)) * 0.75).toFixed(2)});${r.v.rpe >= 7 ? 'color:#fff;font-weight:700' : ''}`) },
+    { key: 'td', label: 'Total distance', unit: 'm', bar: true, color: PBI.td, z: zf('td') },
+    { key: 'mpm', label: 'm/min', tint: heat('42,120,214', 'mpm', 0.6, true) },
+    { key: 'd15', label: '>15', unit: 'm', bar: true, color: PBI.d15, z: zf('d15') },
+    { key: 'hit', label: '>20', unit: 'm', bar: true, color: PBI.hit, z: zf('hit') },
+    { key: 'spr', label: '>25', unit: 'm', bar: true, color: PBI.spr, z: zf('spr') },
+    { key: 'vmax', label: 'Max speed', unit: 'km/h', d: 1, bar: true, color: PBI.vmax },
+    { key: 'vmax_pct', label: '%', fmt: (r) => (r.v.vmax_pct == null ? '—' : (r.v.vmax_pct / 100).toFixed(2)), tint: (r) => (r.v.vmax_pct >= 90 ? 'background:rgba(52,199,89,.28)' : '') },
+    { key: 'days_hsv', label: 'Days', tint: (r) => (r.v.days_hsv >= 10 ? 'background:rgba(229,72,77,.75);color:#fff;font-weight:700' : r.v.days_hsv === 0 ? 'background:rgba(52,199,89,.18)' : '') },
+    { key: 'hit_n', label: 'Count 20', tint: heat('232,190,40', 'hit_n') },
+    { key: 'spr_n', label: 'Sprints', tint: heat('222,86,104', 'spr_n'), z: zf('spr_n') },
+    { key: 'acc', label: 'HIT Acc', bar: true, color: PBI.acc },
+    { key: 'dec', label: 'HIT Dec', bar: true, color: PBI.dec },
+    { key: 'acc_dec', label: 'Acc+Dec', bar: true, color: PBI.acc_dec, z: zf('acc_dec') },
+    { key: 'srpe', label: 'sRPE', unit: 'AU', bar: true, color: PBI.srpe, z: zf('srpe') },
   ];
   const rows = s.players.map((p) => ({ id: p.id, name: playerName(p.id), sub: p.type, pos: posOf(p.id, roster), v: p, raw: p }));
-  groupedTable(document.getElementById('se-players'), cols, rows, { mode, sortKey: 'td', onRow: (id) => switchView('player', { player: id }) });
+  groupedTable(document.getElementById('se-players'), cols, rows, { mode, cls: 'pbi', sortKey: 'td', onRow: (id) => switchView('player', { player: id }) });
 }
 
 function playerName(id) {
