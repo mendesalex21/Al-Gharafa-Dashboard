@@ -3,7 +3,7 @@
  * Training › Objectives (targets by microcycle type from the club's own history + upcoming week plan).
  * Data: sync/build.py → "sessions" and "objectives" payloads.
  */
-const TR = { sessions: null, obj: null, date: null, type: 'normal', mode: 'bars', mdz: 'td', week: null, weekMode: 'train' };
+const TR = { sessions: null, obj: null, date: null, type: 'normal', mdz: 'td', week: null, weekMode: 'train' };
 const TYPE_LABEL = { short: 'Short', normal: 'Normal', long: 'Long' };
 const OBJ_METRICS = ['td', 'hit', 'spr', 'acc_dec', 'srpe'];
 
@@ -50,6 +50,7 @@ function objectivesPanel(s) {
 // ------------------------------------------------------------------ Sessions
 function renderSessions(opts) {
   if (opts && opts.date) TR.date = opts.date;
+  if (opts && opts.player) TR.openPlayer = opts.player; // #sessions/<date>/<player> opens his sheet
   const root = document.getElementById('view-sessions');
   root.innerHTML = `
     ${pageHead('Training', 'Sessions', 'se-sub', `<div class="stepper"><button type="button" id="se-prev" aria-label="Previous session">‹</button><select class="select" id="se-pick" aria-label="Session"></select><button type="button" id="se-next" aria-label="Next session">›</button></div>`)}
@@ -97,12 +98,8 @@ function drawSessions(opts) {
       <div class="sh-meta">${fmtN(s.minutes)} min · ${s.n} players${s.n_core !== s.n ? ` · team averages on ${s.n_core} ${s.kind === 'match' ? 'players ≥60 min' : 'full-session players'}` : ''}</div>
     </section>
     ${objectivesPanel(s)}
-    <section class="panel">
-      <div class="panel-head"><h2 class="panel-title small">Individual ${s.kind === 'match' ? 'match' : 'training'} · full session</h2>
-        <span class="panel-note">grouped by position · click a column to sort · click a player for his load</span>${segHtml('se-mode', [['bars', 'Data bars'], ['z', 'z vs session'], ...(s.mdref ? [['mdz', `z vs usual ${s.md}`]] : [])], s.mdref || TR.mode !== 'mdz' ? TR.mode : 'bars')}</div>
-      <div class="table-wrap" id="se-players"></div>
-      ${s.absent.length ? `<p class="panel-foot"><b>Not in the session:</b> ${s.absent.map((a) => `${escapeHtml(playerName(a.id))} <span class="muted">(${escapeHtml(a.type)})</span>`).join(', ')}</p>` : ''}
-    </section>
+    <div id="sv-attention"></div>
+    ${svIndividualHtml(s)}
     <section class="panel">
       <div class="panel-head"><h2 class="panel-title small">vs his usual for this day</h2>${s.mdref ? segHtml('se-mdz-metric', MDZ_METRICS.map(([k, l]) => [k, l]).concat([['all', 'All metrics']]), TR.mdz) : ''}</div>
       <p class="note" id="se-mdz-note"></p>
@@ -110,12 +107,12 @@ function drawSessions(opts) {
     </section>
     ${s.drills.length ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Drills</h2><span class="panel-note">team average per drill · "vs match" = per-minute intensity as % of the players' match intensity · tap a drill for players</span></div><div class="drills-wrap" id="se-drills"></div></section>` : ''}`;
 
-  bindSeg('se-mode', (v) => { TR.mode = v; drawSessionPlayers(s); });
   if (s.mdref) bindSeg('se-mdz-metric', (v) => { TR.mdz = v; drawMdz(s); });
   drawMdz(s);
-  document.getElementById('se-mdz').onclick = (e) => { const r = e.target.closest('[data-id]'); if (r) switchView('player', { player: r.dataset.id }); };
-  drawSessionPlayers(s);
+  document.getElementById('se-mdz').onclick = (e) => { const r = e.target.closest('[data-id]'); if (r) svOpen(s, r.dataset.id); };
+  svMount(s);
   if (s.drills.length) drawDrills(s);
+  if (TR.openPlayer) { svOpen(s, TR.openPlayer); TR.openPlayer = null; }
 }
 
 const Z_STATUS = Z_LABEL, zStatus = zLevel; // shared colour code (ui.js)
@@ -158,46 +155,6 @@ function drawMdz(s) {
       <span class="dz-src">${srcTag(p.mdref)}</span></div>`;
   }).join('')}</div>
   <div class="dz-axis"><span>less than usual</span><span>usual</span><span>more than usual</span></div>`;
-}
-
-const rpeTint = (v) => (v == null ? '' : `background:rgba(255,59,48,${Math.max(0, Math.min(1, (v - 3) / 7)) * 0.32})`);
-
-function drawSessionPlayers(s) {
-  const roster = TR.sessions.roster;
-  const mode = TR.mode === 'mdz' && !s.mdref ? 'bars' : TR.mode;
-  const zf = (k) => (r) => (mode === 'mdz' ? (r.raw.mdref ? r.raw.mdref.z[k] : null) : r.raw['z_' + k]);
-  const pct = (k) => (r) => (r.v[k] == null ? '—' : `${r.v[k]}%`);
-  // Power BI page-1 look: one colour per metric family, bars for volumes, heat for counts and rates
-  const top = (k) => Math.max(1, ...s.players.map((p) => p[k] || 0));
-  const heat = (rgb, k, a = 0.55, floor = 0) => (r) => {
-    const v = r.v[k];
-    if (v == null) return '';
-    const lo = floor ? Math.min(...s.players.filter((p) => p[k] != null).map((p) => p[k])) : 0;
-    const f = Math.max(0, Math.min(1, (v - lo) / Math.max(1, top(k) - lo)));
-    return f < 0.05 ? '' : `background:rgba(${rgb},${(0.08 + f * a).toFixed(2)})`;
-  };
-  const PBI = { td: 'rgba(92,164,240,.42)', d15: 'rgba(232,200,70,.45)', hit: 'rgba(236,128,84,.45)', spr: 'rgba(222,86,104,.42)',
-    vmax: 'rgba(142,142,147,.34)', acc: 'rgba(232,200,70,.45)', dec: 'rgba(222,86,104,.42)', acc_dec: 'rgba(52,199,89,.48)', srpe: 'rgba(191,90,242,.30)' };
-  const cols = [
-    { key: 'min', label: 'Time' },
-    { key: 'rpe', label: 'RPE', d: 0, tint: (r) => (r.v.rpe == null ? '' : `background:rgba(229,72,77,${(Math.max(0, Math.min(1, (r.v.rpe - 2) / 8)) * 0.75).toFixed(2)});${r.v.rpe >= 7 ? 'color:#fff;font-weight:700' : ''}`) },
-    { key: 'td', label: 'Total distance', unit: 'm', bar: true, color: PBI.td, z: zf('td') },
-    { key: 'mpm', label: 'm/min', tint: heat('42,120,214', 'mpm', 0.6, true) },
-    { key: 'd15', label: '>15', unit: 'm', bar: true, color: PBI.d15, z: zf('d15') },
-    { key: 'hit', label: '>20', unit: 'm', bar: true, color: PBI.hit, z: zf('hit') },
-    { key: 'spr', label: '>25', unit: 'm', bar: true, color: PBI.spr, z: zf('spr') },
-    { key: 'vmax', label: 'Max speed', unit: 'km/h', d: 1, bar: true, color: PBI.vmax },
-    { key: 'vmax_pct', label: '%', fmt: (r) => (r.v.vmax_pct == null ? '—' : (r.v.vmax_pct / 100).toFixed(2)), tint: (r) => (r.v.vmax_pct >= 90 ? 'background:rgba(52,199,89,.28)' : '') },
-    { key: 'days_hsv', label: 'Days', tint: (r) => (r.v.days_hsv >= 10 ? 'background:rgba(229,72,77,.75);color:#fff;font-weight:700' : r.v.days_hsv === 0 ? 'background:rgba(52,199,89,.18)' : '') },
-    { key: 'hit_n', label: 'Count 20', tint: heat('232,190,40', 'hit_n') },
-    { key: 'spr_n', label: 'Sprints', tint: heat('222,86,104', 'spr_n'), z: zf('spr_n') },
-    { key: 'acc', label: 'HIT Acc', bar: true, color: PBI.acc },
-    { key: 'dec', label: 'HIT Dec', bar: true, color: PBI.dec },
-    { key: 'acc_dec', label: 'Acc+Dec', bar: true, color: PBI.acc_dec, z: zf('acc_dec') },
-    { key: 'srpe', label: 'sRPE', unit: 'AU', bar: true, color: PBI.srpe, z: zf('srpe') },
-  ];
-  const rows = s.players.map((p) => ({ id: p.id, name: playerName(p.id), sub: p.type, pos: posOf(p.id, roster), v: p, raw: p }));
-  groupedTable(document.getElementById('se-players'), cols, rows, { mode, cls: 'pbi', sortKey: 'td', onRow: (id) => switchView('player', { player: id }) });
 }
 
 function playerName(id) {
