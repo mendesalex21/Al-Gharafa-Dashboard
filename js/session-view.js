@@ -232,12 +232,12 @@ function svTableHtml(s) {
     ${SV_M.map(([k]) => `<td>${svCell(p[k], max[k], svZ(p, k), svUsual(p, k))}</td>`).join('')}
     <td class="c">${fmtN(p.vmax, 1)} <small class="muted">${p.vmax_pct != null ? p.vmax_pct + '%' : ''}</small></td>
     <td class="c"><span class="sv-chip" style="${p.days_hsv >= 10 ? 'background:rgba(229,72,77,.78);color:#fff' : ''}">${p.days_hsv == null ? '—' : p.days_hsv}</span></td></tr>`;
-  const team = `<tr class="team"><td>Team average <small class="muted">${per90 ? '' : 'vs objective'}</small></td><td class="c">${fmtN(s.minutes)}</td><td class="c"></td><td class="c">${fmtN(s.team.mpm)}</td>
+  const team = `<tr class="team"><td>Team <small class="muted">${per90 ? 'average' : 'vs objective'}</small></td><td class="c">${fmtN(s.minutes)}</td><td class="c"></td><td class="c">${fmtN(s.team.mpm)}</td>
     ${SV_M.map(([k]) => `<td>${!per90 && tr[k] ? svCell(tr[k].v, max[k], tr[k].z, tr[k].mean) : svCell(s.team[k], max[k], null, null)}</td>`).join('')}<td class="c">${fmtN(s.team.vmax, 1)}</td><td></td></tr>`;
   const body = SV.sort ? svFlat(s).slice().sort((a, b) => (b[SV.sort] ?? -1) - (a[SV.sort] ?? -1)).map(row).join('')
     : svGroups(s).map((g) => `<tr class="grp"><td colspan="${SV_M.length + 6}">${g.label} <span class="muted">${g.list.length}</span></td></tr>${g.list.map(row).join('')}`).join('');
   const th = (k, l, cls = '') => `<th class="${cls} ${SV.sort === k || (!SV.sort && k === 'name') ? 'sorted' : ''}" data-k="${k}">${l}${SV.sort === k ? ' ↓' : ''}</th>`;
-  return `<div class="table-wrap"><table class="sv-tab"><colgroup><col style="width:13%"><col style="width:3.6%"><col style="width:3.8%"><col style="width:4%">${SV_M.map(() => '<col>').join('')}<col style="width:6.5%"><col style="width:4.4%"></colgroup>
+  return `<div class="table-wrap"><table class="sv-tab"><colgroup><col style="width:13.5%"><col style="width:4.2%"><col style="width:4.2%"><col style="width:4.8%">${SV_M.map(() => '<col>').join('')}<col style="width:7.8%"><col style="width:4.8%"></colgroup>
     <thead><tr>${th('name', 'Player')}${th('min', 'Time', 'c')}${th('rpe', 'RPE', 'c')}${th('mpm', 'm/min', 'c')}${SV_M.map(([k, l]) => th(k, l)).join('')}${th('vmax', 'Max speed', 'c')}${th('days_hsv', '≥90%', 'c')}</tr></thead>
     <tbody>${team}${body}</tbody></table></div>`;
 }

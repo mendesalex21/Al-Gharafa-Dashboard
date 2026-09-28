@@ -29,7 +29,7 @@ function zBulletHtml(label, unit, actual, ref) {
     <div class="bl-head"><span>${label}</span><span class="bl-val">${fmtN(actual)} <small>${unit}</small></span></div>
     <div class="bl-track zb"><span class="zb-b" style="left:0;width:${pct(lo)}%"></span><span class="zb-g" style="left:${pct(lo)}%;width:${pct(hi) - pct(lo)}%"></span><span class="zb-o" style="left:${pct(hi)}%;width:${pct(hi2) - pct(hi)}%"></span><span class="zb-r" style="left:${pct(hi2)}%;width:${100 - pct(hi2)}%"></span>
       <span class="bl-med" style="left:${pct(m)}%"></span>${actual != null ? `<span class="bl-act" style="left:${pct(actual)}%;background:${Z_COL[lv]}"></span>` : ''}</div>
-    <div class="bl-foot zf"><span>usual ${fmtN(m)} · on target ${fmtN(lo)}–${fmtN(hi)}</span><span class="zs ${lv}">${Z_LABEL[lv]} · z ${fmtSigned(ref.z)}</span></div></div>`;
+    <div class="bl-foot zf"><span>usual ${fmtN(m)} <span class="muted">(${fmtN(lo)}–${fmtN(hi)})</span></span><span class="zs ${lv}">${Z_LABEL[lv]} · z ${fmtSigned(ref.z)}</span></div></div>`;
 }
 
 function objectivesPanel(s) {
