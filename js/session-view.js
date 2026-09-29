@@ -388,6 +388,35 @@ function svClose() {
   document.getElementById('sv-dim').hidden = true;
   document.body.classList.remove('sv-noscroll');
 }
+/** Today's wellness (not the session day): photo inside the score ring, as on the Wellness page. */
+function svWellHtml(p) {
+  const w = TR.wellness, info = w && w.byId ? w.byId[p.id] : null, has = info && info.today;
+  const photo = typeof PHOTO_DATA !== 'undefined' && PHOTO_DATA[p.id];
+  const img = photo ? `<img src="${photo}" alt="">` : `<span>${escapeHtml(initialsOf(playerName(p.id)))}</span>`;
+  const date = w && w.date ? (/^\d{4}-\d{2}-\d{2}$/.test(w.date) ? fmtDay(w.date, { weekday: 'short', day: 'numeric', month: 'short' }) : escapeHtml(w.date)) : '';
+  const diff = has && info.diff != null ? `<div class="sv-wdiff ${info.diff < -3 ? 'down' : info.diff > 3 ? 'up' : ''}">${diffLabel(info.diff).html}</div>` : '';
+  const worst = has && info.worst && info.status !== 'green' ? `<div class="sv-wworst" style="color:${WCOLORS[info.status]}">↓ ${escapeHtml(info.worst.label)} (${info.worst.value}/5)</div>` : '';
+  return `<div class="sv-well"><div class="sv-well-h">Today's wellness${date ? `<small>${date}</small>` : ''}</div>
+    <div class="sv-ring ${has ? '' : 'off'}">${scoreRingSvg(has ? info.status : null, has ? info.score / 100 : null)}<div class="sv-ring-photo">${img}</div>${has ? `<div class="sv-ring-score" style="color:${WCOLORS[info.status]}">${info.score}%</div>` : ''}</div>
+    ${has ? diff + worst : `<div class="sv-wdiff">${w ? 'No check-in today' : 'Loading…'}</div>`}</div>`;
+}
+const SV_AC = [['td', 'Total distance'], ['acc_dec', 'HI Acc + Dec'], ['hit', 'HIT > 20'], ['spr_n', 'Nb sprints']];
+/** A:C 7:28 and 14:35 on the session day (club zones: 0.78 · 1.37 · 1.5). */
+function svAcHtml(s, p) {
+  const wl = TR.workload, ser = wl && wl.series ? wl.series[p.id] : null;
+  const i = ser && ser.a7 ? daysBetween(ser.start, s.date) : -1;
+  const ok = ser && ser.a7 && i >= 0 && i < (ser.a7.td || []).length;
+  const v = (set, k) => (ok && ser[set][k] ? ser[set][k][i] : null);
+  return `<div class="sv-ac"><table><thead><tr><th>A:C <small>${fmtDay(s.date, { day: 'numeric', month: 'short' })}</small></th><th>7:28</th><th>14:35</th></tr></thead><tbody>
+    ${SV_AC.map(([k, l]) => `<tr><td>${l}</td><td>${acwrChip(v('a7', k))}</td><td>${acwrChip(v('a14', k))}</td></tr>`).join('')}</tbody></table>
+    ${wl ? (ok ? '' : '<small class="muted">no load history for this day</small>') : '<small class="muted">Loading…</small>'}</div>`;
+}
+/** Re-draws an open sheet once the wellness / workload data has arrived. */
+function svRefresh() {
+  const dr = document.getElementById('sv-drawer');
+  if (dr && !dr.hidden && SV.open) svOpen(SV.open.s, SV.open.id);
+}
+
 /** Player sheet on one screen: KPIs, then one line per metric — today vs his usual (zones), his microcycle
  * (done / still to do / target), % of the team and of his match — then the advice and the day-by-day chart. */
 function svSheetHtml(s, p, nav) {
@@ -399,7 +428,7 @@ function svSheetHtml(s, p, nav) {
   const per90 = p.mdref && p.mdref.per90;
   const unit = (k) => (SV_UNIT[k] ? `<small> ${SV_UNIT[k]}</small>` : '');
   const kp = (l, v, sub, warn) => `<div class="sv-k ${warn ? 'warn' : ''}"><span>${l}</span><b>${v}</b>${sub ? `<em>${sub}</em>` : ''}</div>`;
-  const kpis = `<div class="sv-kstrip">${kp('Time', `${fmtN(p.min)}<small> min</small>`, `session ${fmtN(s.minutes)}`)}${kp('RPE', fmtN(p.rpe), `sRPE ${fmtN(p.srpe)} AU`)}${kp('Intensity', `${fmtN(p.mpm)}<small> m/min</small>`, `team ${fmtN(s.team.mpm)}`)}${kp('Max speed', `${fmtN(p.vmax, 1)}<small> km/h</small>`, p.vmax_pct != null ? `${p.vmax_pct}% of his max` : '')}${kp('Last ≥ 90% Vmax', p.days_hsv == null ? '—' : `${p.days_hsv}<small> ${p.days_hsv === 1 ? 'day' : 'days'}</small>`, p.days_hsv >= 10 ? 'exposure needed' : 'ago', p.days_hsv >= 10)}</div>`;
+  const kpis = `<div class="sv-kstrip">${kp('Time', `${fmtN(p.min)}<small> min</small>`, `session ${fmtN(s.minutes)}`)}${kp('RPE', fmtN(p.rpe), `sRPE ${fmtN(p.srpe)} AU`)}${kp('Intensity', `${fmtN(p.mpm)}<small> m/min</small>`, `team ${fmtN(s.team.mpm)}`)}${kp('Max speed', `${fmtN(p.vmax, 1)}<small> km/h</small>`, p.vmax_pct != null ? `${p.vmax_pct}% of max` : '')}${kp('Last ≥ 90% Vmax', p.days_hsv == null ? '—' : `${p.days_hsv}<small> ${p.days_hsv === 1 ? 'day' : 'days'}</small>`, p.days_hsv >= 10 ? 'exposure needed' : 'ago', p.days_hsv >= 10)}</div>`;
   const rows = SV_M.map(([key, l]) => {
     const v = p[key];
     if (v == null) return '';
@@ -426,9 +455,11 @@ function svSheetHtml(s, p, nav) {
   const cycTxt = plan ? `His microcycle → match ${fmtDay(mc.matchDate, { weekday: 'short', day: 'numeric', month: 'short' })} <small>${mc.days[0].md} → MD-1 · as of ${s.md}</small>` : 'His microcycle <small>no plan on a match day or a break</small>';
   const ins = plan ? svInsights(s, plan, rd, left) : [];
   return `
-    <div class="sv-top">${avatarHtml(p.id, playerName(p.id), 48)}<div class="sv-id"><h3>${escapeHtml(playerName(p.id))}</h3>
-      <p>${escapeHtml(svPos(p.id))}${svPos(p.id) ? ' · ' : ''}${escapeHtml(p.type || '')} · ${fmtDay(s.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${s.kind === 'match' ? 'match' : s.md || 'training'}${s.cycle.type ? ` of a ${TYPE_LABEL[s.cycle.type].toLowerCase()} microcycle` : ''} · <button type="button" class="sv-link" data-load="${p.id}">Workload history ›</button></p></div>${nav}</div>
-    ${kpis}
+    <div class="sv-head3">${svWellHtml(p)}
+      <div class="sv-mid"><div class="sv-top"><div class="sv-id"><h3>${escapeHtml(playerName(p.id))}</h3>
+        <p>${escapeHtml(svPos(p.id))}${svPos(p.id) ? ' · ' : ''}${escapeHtml(p.type || '')} · ${fmtDay(s.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${s.kind === 'match' ? 'match' : s.md || 'training'}${s.cycle.type ? ` of a ${TYPE_LABEL[s.cycle.type].toLowerCase()} microcycle` : ''} · <button type="button" class="sv-link" data-load="${p.id}">Workload history ›</button></p></div>${nav}</div>
+        ${kpis}</div>
+      ${svAcHtml(s, p)}</div>
     <div class="sv-grid-wrap"><table class="sv-grid">
       <colgroup><col style="width:104px"><col><col style="width:112px"><col style="width:58px"><col><col style="width:112px"><col style="width:92px"><col style="width:56px"><col style="width:56px"></colgroup>
       <thead><tr class="grp"><th></th><th colspan="3">Today vs his usual ${s.kind === 'match' ? 'match' : s.md || ''} <small>${refTxt}</small></th><th colspan="3" class="sep">${cycTxt}</th><th colspan="2" class="sep">Today vs</th></tr>
@@ -443,6 +474,7 @@ function svOpen(s, id) {
   if (i < 0) return;
   svEnsureDrawer();
   const p = list[i], sheet = document.getElementById('sv-sheet');
+  SV.open = { s, id };
   const nav = `<div class="sv-nav"><button type="button" data-go="${i - 1}" ${i ? '' : 'disabled'} title="${i ? escapeHtml(playerName(list[i - 1].id)) : ''}">‹ ${i ? escapeHtml(playerName(list[i - 1].id)) : ''}</button><button type="button" data-go="${i + 1}" ${i < list.length - 1 ? '' : 'disabled'}>${i < list.length - 1 ? escapeHtml(playerName(list[i + 1].id)) : ''} ›</button><button type="button" class="sv-x" aria-label="Close">×</button></div>`;
   sheet.innerHTML = svSheetHtml(s, p, nav);
   const dr = document.getElementById('sv-drawer');

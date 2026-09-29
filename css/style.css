@@ -576,6 +576,30 @@ body.sv-noscroll { overflow: hidden; }
 .sv-nav button { border: 0; background: var(--surface-2); color: var(--ink-2); font: inherit; font-size: 12.5px; font-weight: 600; padding: 6px 12px; border-radius: 999px; cursor: pointer; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sv-nav button:disabled { opacity: .35; cursor: default; }
 .sv-nav .sv-x { width: 32px; height: 32px; padding: 0; font-size: 18px; margin-left: 4px; }
+.sv-head3 { display: grid; grid-template-columns: 132px minmax(0, 1fr) 236px; gap: 16px; align-items: start; margin-bottom: 8px; }
+@media (max-width: 900px) { .sv-head3 { grid-template-columns: 120px minmax(0, 1fr); } .sv-ac { grid-column: 1 / -1; } }
+.sv-mid { min-width: 0; }
+.sv-well { text-align: center; }
+.sv-well-h { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 4px; }
+.sv-well-h small { display: block; font-size: 10.5px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-muted); }
+.sv-ring { position: relative; width: 104px; height: 104px; margin: 0 auto; }
+.sv-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.sv-ring-photo { position: absolute; inset: 13px; border-radius: 50%; overflow: hidden; background: var(--surface-2); display: grid; place-items: center; font-weight: 700; color: var(--ink-muted); }
+.sv-ring-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sv-ring.off .sv-ring-photo { opacity: .45; }
+.sv-ring-score { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); background: var(--bg); border-radius: 999px; padding: 1px 8px; font-size: 13px; font-weight: 800; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.sv-wdiff { font-size: 11.5px; color: var(--ink-muted); margin-top: 9px; }
+.sv-wdiff.down { color: #d70015; font-weight: 600; }
+.sv-wdiff.up { color: #1f8a3a; font-weight: 600; }
+.sv-wworst { font-size: 11.5px; font-weight: 700; margin-top: 2px; }
+.sv-ac { background: var(--surface-2); border-radius: 12px; padding: 8px 10px; }
+.sv-ac table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sv-ac th { font-size: 11px; font-weight: 600; color: var(--ink-muted); text-align: center; padding: 0 2px 4px; }
+.sv-ac th:first-child { text-align: left; color: var(--ink); font-weight: 700; }
+.sv-ac th small { font-weight: 500; color: var(--ink-muted); }
+.sv-ac td { padding: 2px; text-align: center; }
+.sv-ac td:first-child { text-align: left; color: var(--ink-2); font-weight: 600; white-space: nowrap; }
+.sv-ac .chip-v { min-width: 40px; padding: 2px 6px; font-size: 12px; }
 .sv-kstrip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 10px 0 8px; }
 @media (max-width: 760px) { .sv-kstrip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .sv-k { background: var(--surface-2); border-radius: 12px; padding: 6px 12px 7px; min-width: 0; white-space: nowrap; overflow: hidden; }
