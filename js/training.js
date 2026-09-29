@@ -101,13 +101,12 @@ function drawSessions(opts) {
     <div id="sv-attention"></div>
     ${svIndividualHtml(s)}
     <section class="panel">
-      <div class="panel-head"><h2 class="panel-title small">vs his usual for this day</h2>${s.mdref ? segHtml('se-mdz-metric', MDZ_METRICS.map(([k, l]) => [k, l]).concat([['all', 'All metrics']]), TR.mdz) : ''}</div>
+      <div class="panel-head"><h2 class="panel-title small">vs his usual for this day</h2>${s.mdref ? `<span class="mz-leg">${MZ_LEVELS.map(([c, l]) => `<span><i class="mz ${c}"></i>${l}</span>`).join('')}</span>` : ''}</div>
       <p class="note" id="se-mdz-note"></p>
       <div id="se-mdz"></div>
     </section>
     ${s.drills.length ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Drills</h2><span class="panel-note">team average per drill · "vs match" = per-minute intensity as % of the players' match intensity · tap a drill for players</span></div><div class="drills-wrap" id="se-drills"></div></section>` : ''}`;
 
-  if (s.mdref) bindSeg('se-mdz-metric', (v) => { TR.mdz = v; drawMdz(s); });
   drawMdz(s);
   document.getElementById('se-mdz').onclick = (e) => { const r = e.target.closest('[data-id]'); if (r) svOpen(s, r.dataset.id); };
   svMount(s);
@@ -120,7 +119,11 @@ const Z_STATUS = Z_LABEL, zStatus = zLevel; // shared colour code (ui.js)
 const MDZ_METRICS = [['td', 'TD'], ['d15', '>15'], ['hit', '>20'], ['spr', '>25'], ['spr_n', 'Sprints'], ['acc_dec', 'Acc+Dec'], ['srpe', 'sRPE']];
 const MDZ_UNIT = { td: 'm', d15: 'm', hit: 'm', spr: 'm', spr_n: '', acc_dec: '', srpe: 'AU' };
 
-/** z-score of each player vs his own past sessions with the same MD tag in the same microcycle type. */
+/** Five-level colour of a z vs his usual: dark blue ≤ −2 · light blue −2…−1 · green |z| < 1 · orange 1…2 · red ≥ 2. */
+const MZ_LEVELS = [['vlow', 'well below (z ≤ −2)'], ['low', 'below'], ['ok', 'usual (|z| < 1)'], ['up', 'slightly above'], ['vup', 'well above (z ≥ 2)']];
+function mzClass(z) { return z == null ? 'na' : z <= -2 ? 'vlow' : z <= -1 ? 'low' : z < 1 ? 'ok' : z < 2 ? 'up' : 'vup'; }
+
+/** z-score of each player vs his own past sessions with the same MD tag in the same microcycle type — all metrics. */
 function drawMdz(s) {
   const note = document.getElementById('se-mdz-note'), mount = document.getElementById('se-mdz');
   const ref = s.mdref;
@@ -130,31 +133,20 @@ function drawMdz(s) {
     return;
   }
   const day = ref.tag === 'MD' ? `matches ending a ${TYPE_LABEL[ref.type].toLowerCase()} microcycle (per 90 min, players ≥ 45 min)` : `${ref.tag} sessions of ${TYPE_LABEL[ref.type].toLowerCase()} microcycles`;
-  note.innerHTML = `Each player is compared with <b>his own</b> previous ${day} since ${fmtDay(ref.since, { month: 'short', year: 'numeric' })} (${ref.sessions} sessions in the club history); with fewer than 5 of his own, the squad's is used. <span class="muted">z = (today − his usual) / his usual variation · orange = more than usual, blue = less.</span>`;
+  note.innerHTML = `Each player is compared with <b>his own</b> previous ${day} since ${fmtDay(ref.since, { month: 'short', year: 'numeric' })} (${ref.sessions} sessions in the club history); with fewer than 5 of his own, the squad's is used. <span class="muted">z = (today − his usual) / his usual variation · hover a cell for the values · click a column to sort · click a player for his full session.</span>`;
   const ps = s.players.filter((p) => p.mdref);
   if (!ps.length) { mount.innerHTML = emptyState('No player with a reference for this session.'); return; }
-  const srcTag = (m) => `<small class="muted">${m.src === 'own' ? `his ${m.n}` : 'squad'}</small>`;
-  if (TR.mdz === 'all') {
-    const cell = (z) => `<td class="c"><span class="cellv" style="${zTint(z)}">${z == null ? '—' : fmtSigned(z)}</span></td>`;
-    mount.innerHTML = `<div class="table-wrap"><table class="dtable compact"><thead><tr><th>Player</th>${MDZ_METRICS.map(([, l]) => `<th class="c">${l}</th>`).join('')}<th class="c">Reference</th></tr></thead><tbody>
-      ${ps.slice().sort((a, b) => (b.mdref.z.td ?? -9) - (a.mdref.z.td ?? -9)).map((p) => `<tr data-id="${p.id}" class="clickable"><td>${playerCell(p.id, playerName(p.id), p.type)}</td>${MDZ_METRICS.map(([k]) => cell(p.mdref.z[k])).join('')}<td class="c">${srcTag(p.mdref)}</td></tr>`).join('')}
-      </tbody></table></div>`;
-    return;
-  }
-  const k = TR.mdz;
-  const list = ps.filter((p) => p.mdref.z[k] != null).sort((a, b) => b.mdref.z[k] - a.mdref.z[k]);
-  const val = (p) => (p.mdref.per90 && p.min ? p[k] * 90 / p.min : p[k]);
-  mount.innerHTML = `<div class="dz-list">${list.map((p) => {
-    const z = p.mdref.z[k], c = Math.max(-3, Math.min(3, z));
-    const col = z >= 0 ? `rgba(200,88,26,${0.35 + Math.min(1, Math.abs(z) / 2) * 0.55})` : `rgba(42,120,214,${0.35 + Math.min(1, Math.abs(z) / 2) * 0.55})`;
-    return `<div class="dz-row" data-id="${p.id}">
-      <span class="lb-name">${escapeHtml(playerName(p.id))}</span>
-      <span class="dz-val">${fmtN(val(p))} <small>vs ${fmtN(p.mdref.mean[k])} ${MDZ_UNIT[k]}</small></span>
-      <span class="dz-track"><i class="mid"></i><b style="left:${c < 0 ? 50 + c / 3 * 50 : 50}%;width:${Math.abs(c) / 3 * 50}%;background:${col}"></b></span>
-      <span class="dz-z ${Math.abs(z) >= 2 ? 'strong' : ''}">${fmtSigned(z)}</span>
-      <span class="dz-src">${srcTag(p.mdref)}</span></div>`;
-  }).join('')}</div>
-  <div class="dz-axis"><span>less than usual</span><span>usual</span><span>more than usual</span></div>`;
+  const k0 = TR.mdzSort || 'td';
+  const val = (p, k) => (p.mdref.per90 && p.min ? p[k] * 90 / p.min : p[k]);
+  const cell = (p, k) => {
+    const z = p.mdref.z[k], u = p.mdref.mean[k];
+    return `<td class="c"><span class="mz ${mzClass(z)}" title="${fmtN(val(p, k))} vs his usual ${fmtN(u)}${MDZ_UNIT[k] ? ' ' + MDZ_UNIT[k] : ''}">${z == null ? '—' : fmtSigned(z)}</span></td>`;
+  };
+  const rows = ps.slice().sort((a, b) => (k0 === 'name' ? playerName(a.id).localeCompare(playerName(b.id)) : (b.mdref.z[k0] ?? -9) - (a.mdref.z[k0] ?? -9)));
+  mount.innerHTML = `<div class="table-wrap"><table class="dtable compact mz-tab"><thead><tr><th data-mz="name" class="${k0 === 'name' ? 'sorted' : ''}">Player</th>${MDZ_METRICS.map(([k, l]) => `<th class="c ${k0 === k ? 'sorted' : ''}" data-mz="${k}">${l}${k0 === k ? ' ↓' : ''}</th>`).join('')}<th class="c">Reference</th></tr></thead><tbody>
+    ${rows.map((p) => `<tr data-id="${p.id}" class="clickable"><td><span class="mz-p">${avatarHtml(p.id, playerName(p.id), 22)}<b>${escapeHtml(playerName(p.id))}</b>${p.cat === 't' || p.cat === 'm' ? '' : `<small>${escapeHtml(String(p.type).toLowerCase())}</small>`}</span></td>${MDZ_METRICS.map(([k]) => cell(p, k)).join('')}<td class="c"><small class="muted">${p.mdref.src === 'own' ? `his ${p.mdref.n}` : 'squad'}</small></td></tr>`).join('')}
+    </tbody></table></div>`;
+  mount.querySelectorAll('th[data-mz]').forEach((th) => th.addEventListener('click', (e) => { e.stopPropagation(); TR.mdzSort = th.dataset.mz; drawMdz(s); }));
 }
 
 function playerName(id) {

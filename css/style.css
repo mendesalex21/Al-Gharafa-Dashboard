@@ -519,6 +519,23 @@ body.rt-resizing { cursor: col-resize; user-select: none; }
 }
 :root[data-theme="dark"] .rt-chip.grey { background: var(--surface-2); color: var(--ink-2); }
 
+/* "vs his usual for this day" — five-level colour code */
+.mz { display: inline-block; min-width: 46px; padding: 3px 8px; border-radius: 7px; font-size: 12.5px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.mz.ok { background: #d9f5e1; color: #17753a; }
+.mz.low { background: #dbeafe; color: #1d5fae; }
+.mz.vlow { background: #1d5fae; color: #fff; }
+.mz.up { background: #ffe2b8; color: #9a4f00; }
+.mz.vup { background: #e5484d; color: #fff; }
+.mz.na { color: var(--ink-muted); font-weight: 500; }
+.mz-leg { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 12px; color: var(--ink-muted); }
+.mz-leg span { display: inline-flex; align-items: center; gap: 6px; }
+.mz-leg .mz { min-width: 22px; height: 12px; padding: 0; border-radius: 4px; }
+.mz-tab td { padding-top: 4px; padding-bottom: 4px; }
+.mz-tab th[data-mz] { cursor: pointer; }
+.mz-p { display: inline-flex; align-items: center; gap: 8px; }
+.mz-p b { font-weight: 600; }
+.mz-p small { color: var(--ink-muted); font-size: 11px; }
+
 /* four ranking panels */
 .sv-rk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 1100px) { .sv-rk-grid { grid-template-columns: 1fr; } }
