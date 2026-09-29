@@ -21,6 +21,7 @@ async function callApi(action, mockData) {
     return data;
   }
   if (AUTH.demo) return Promise.resolve(structuredClone(mockData));
+  if (tokenExpired()) { renewSignIn(); throw new Error('Signing you back in…'); }
   let json;
   const delays = [600, 1500, 3000]; // backoff between attempts (cold start can take a few seconds)
   for (let attempt = 0; attempt <= delays.length; attempt++) {

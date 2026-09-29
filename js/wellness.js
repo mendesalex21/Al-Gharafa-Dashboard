@@ -13,17 +13,42 @@ async function renderWellness() {
   loadWellnessHistory().catch(() => {}); // prefetch in parallel so the Longitudinal page opens instantly
 
   const cached = !AUTH.demo && cacheGet('wellness');
-  if (cached) renderAllWellness(cached); // instant repaint from the last known-good data while a fresh copy loads
+  if (cached) { renderAllWellness(cached); wStamp(cached, 'loading'); } // instant repaint while a fresh copy loads
   try {
     const data = await fetchWellness();
     renderAllWellness(data);
+    wStamp(data, 'ok');
+    W_LOADED_AT = Date.now();
   } catch (err) {
     if (!cached) root.innerHTML = `<div class="card" style="padding:24px"><strong>Couldn't load data.</strong><p class="hint">${escapeHtml(err.message)}</p></div>`;
+    else wStamp(cached, 'failed', err);
+  }
+}
+let W_LOADED_AT = 0;
+
+/** "Updated 17:42" line; if the refresh failed, say so clearly (older data on screen) with a Retry button. */
+function wStamp(data, state, err) {
+  const el = document.getElementById('w-updated');
+  if (!el) return;
+  const at = data && data.generated_at ? new Date(data.generated_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—';
+  if (state === 'failed') {
+    el.className = 'w-updated warn';
+    el.innerHTML = `Showing the check-ins saved at ${at} — couldn't refresh (${escapeHtml(err && err.message ? err.message : 'network')}). <button type="button" id="w-retry">Retry</button>`;
+    document.getElementById('w-retry').onclick = () => renderWellness();
+  } else {
+    el.className = 'w-updated';
+    el.textContent = state === 'loading' ? `Updating… (last update ${at})` : `Updated ${at} · includes every check-in received so far`;
   }
 }
 
+// Coming back to the site (phone unlocked, tab reopened): reload the check-ins if they are more than 2 minutes old
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && typeof CURRENT_VIEW !== 'undefined' && CURRENT_VIEW === 'wellness' && Date.now() - W_LOADED_AT > 120000) renderWellness();
+});
+
 function wellnessSkeleton() {
   return `
+    <div class="w-updated" id="w-updated"></div>
     <section class="w-team-card">
       <div class="w-team-card-top">
         <div class="w-ring" id="w-teamRing"><div class="w-inner"><span class="w-team-ring-label" id="w-teamRingLabel">—</span></div></div>
