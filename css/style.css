@@ -300,6 +300,37 @@ main { padding: 32px 0 96px; }
 #view-wellness table.w-detail td.w-score { text-align: center; font-weight: 700; border-radius: 6px; }
 #view-wellness table.w-detail td.w-total { font-weight: 800; text-align: center; }
 
+/* Wellness on a phone: two players per row, as the old dashboard */
+@media (max-width: 680px) {
+  #view-wellness .w-team-card { padding: 16px; gap: 16px; margin-bottom: 22px; flex-direction: column; }
+  #view-wellness .w-team-card-top { flex-direction: column; text-align: center; gap: 12px; }
+  #view-wellness .w-ring { width: 92px; height: 92px; padding: 6px; }
+  #view-wellness .w-ring .w-inner { padding: 3px; }
+  #view-wellness .w-team-ring-label { font-size: 18px; }
+  #view-wellness .w-team-title { font-size: 15px; }
+  #view-wellness .w-team-sub { font-size: 12px; }
+  #view-wellness .w-theme-rings { gap: 10px; padding-top: 14px; }
+  #view-wellness .w-theme-ring { width: 46px; height: 46px; padding: 4px; }
+  #view-wellness .w-theme-ring-value { font-size: 11px; }
+  #view-wellness .w-theme-ring-name { font-size: 9.5px; }
+  #view-wellness .w-group h2 { font-size: 14px; margin: 0 0 10px 2px; }
+  #view-wellness .w-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  #view-wellness .w-card { padding: 4px 2px; min-width: 0; }
+  #view-wellness .w-p-ring { width: 124px; height: 124px; margin-bottom: 12px; }
+  #view-wellness .w-p-ring-photo { width: 88px; height: 88px; }
+  #view-wellness .w-initials { font-size: 18px; }
+  #view-wellness .w-p-ring-score { font-size: 11px; padding: 2px 8px; bottom: -5px; }
+  #view-wellness .w-pname { font-size: 12px; }
+  #view-wellness .w-psub, #view-wellness .w-pdiff { font-size: 11px; }
+  #view-wellness .w-pworst { font-size: 10px; padding: 2px 7px; }
+  #view-wellness table.w-detail { min-width: 0; table-layout: fixed; font-size: 9.5px; }
+  #view-wellness table.w-detail th { padding: 4px 2px; font-size: 8px; word-break: break-word; line-height: 1.15; }
+  #view-wellness table.w-detail td { padding: 5px 2px; }
+  #view-wellness table.w-detail td.w-pcell { display: block; white-space: normal; word-break: break-word; line-height: 1.2; }
+  #view-wellness table.w-detail td.w-pcell img { display: none; }
+}
+@media (max-width: 340px) { #view-wellness .w-p-ring { width: 110px; height: 110px; } #view-wellness .w-p-ring-photo { width: 78px; height: 78px; } }
+
 /* ---------- Data pages (Longitudinal, Training, Workload, Testing, Calendar) ---------- */
 main.page { padding-top: 40px; }
 .muted { color: var(--ink-muted); }
