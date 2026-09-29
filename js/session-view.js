@@ -208,9 +208,9 @@ const RT_COLS = [
   { k: 'spr', l: '> 25 km/h', w: 110, t: 'bar', lo: '#f5c6ce', hi: '#cc3553' }, { k: 'vmax', l: 'Max speed', w: 52, t: 'vmax' },
   { k: 'vmax_pct', l: '% Vmax', w: 52, t: 'pct' }, { k: 'days_hsv', l: 'Days ≥90%', w: 50, t: 'days' }, { k: 'hit_n', l: 'Count >20', w: 54, t: 'count' },
   { k: 'spr_n', l: 'Sprints', w: 54, t: 'sprints' }, { k: 'acc', l: 'Acc', w: 38, t: 'plain' }, { k: 'dec', l: 'Dec', w: 38, t: 'plain' },
-  { k: 'acc_dec', l: 'Acc + Dec', w: 102, t: 'bar', lo: '#bce8c9', hi: '#1a9c48' },
+  { k: 'acc_dec', l: 'Acc + Dec', w: 116, t: 'bar', lo: '#bce8c9', hi: '#1a9c48' },
 ];
-const RT_KEY = 'sessionTableCols_v1';
+const RT_KEY = 'sessionTableCols_v2'; // v2: compact rows, wider Acc + Dec
 function rtWidths() {
   try { const w = JSON.parse(localStorage.getItem(RT_KEY)); if (Array.isArray(w) && w.length === RT_COLS.length) return w; } catch (e) { /* storage off */ }
   return RT_COLS.map((c) => c.w);
@@ -241,7 +241,7 @@ function rtTableHtml(s) {
   const chip = (txt, cls = '') => `<div class="rt-c"><span class="rt-chip ${cls}">${txt}</span></div>`;
   const cell = (c, p, isTeam) => {
     const v = p[c.k], st = stat[c.k];
-    if (c.t === 'player') return isTeam ? '<div class="rt-p"><span>Team avg</span></div>' : `<div class="rt-p">${avatarHtml(p.id, playerName(p.id), 26)}<span title="${escapeHtml(playerName(p.id))}${p.cat === 't' || p.cat === 'm' ? '' : ' · ' + escapeHtml(p.type)}">${escapeHtml(playerName(p.id))}</span></div>`;
+    if (c.t === 'player') return isTeam ? '<div class="rt-p"><span>Team avg</span></div>' : `<div class="rt-p">${avatarHtml(p.id, playerName(p.id), 20)}<span title="${escapeHtml(playerName(p.id))}${p.cat === 't' || p.cat === 'm' ? '' : ' · ' + escapeHtml(p.type)}">${escapeHtml(playerName(p.id))}</span></div>`;
     if (v == null) return chip('—', 'muted');
     if (c.t === 'bar') {
       const w = Math.max(0, Math.min(100, v / st.max * 100));

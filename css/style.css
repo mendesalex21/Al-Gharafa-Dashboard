@@ -472,7 +472,7 @@ main.page { padding-top: 40px; }
 .rt-wrap { overflow-x: auto; margin: 0 -10px; }
 .rt { min-width: var(--rt-min, 1314px); font-variant-numeric: tabular-nums; }
 .rt-row { display: grid; grid-template-columns: var(--rt-cols); column-gap: 4px; padding: 0 12px; align-items: center; }
-.rt-head { padding-bottom: 8px; align-items: end; }
+.rt-head { padding-bottom: 5px; align-items: end; }
 .rt-head > div { position: relative; font-size: 11px; font-weight: 600; color: #8e8e93; text-align: center; cursor: pointer; user-select: none; line-height: 1.2; }
 .rt-head > div.l { text-align: left; }
 .rt-head > div.bl { text-align: left; padding-left: 12px; }
@@ -481,16 +481,16 @@ main.page { padding-top: 40px; }
 .rz > i { width: 2px; height: 100%; border-radius: 1px; background: var(--hairline); }
 .rz:hover > i, .rz.on > i { background: #0b3d91; }
 body.rt-resizing { cursor: col-resize; user-select: none; }
-.rt-team { height: 50px; background: var(--surface-2); border-radius: 12px; }
+.rt-team { height: 30px; background: var(--surface-2); border-radius: 9px; }
 .rt-team .rt-p span { font-weight: 700; }
-.rt-pl { height: 48px; border-bottom: 1px solid color-mix(in srgb, var(--hairline) 70%, transparent); cursor: pointer; }
+.rt-pl { height: 26px; border-bottom: 1px solid color-mix(in srgb, var(--hairline) 70%, transparent); cursor: pointer; }
 .rt-pl:hover { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
-.rt-grp { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8e8e93; padding: 18px 12px 4px; }
+.rt-grp { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8e8e93; padding: 5px 12px 0; line-height: 16px; }
 .rt-grp span { color: #c7c7cc; }
-.rt-p { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.rt-p span:not(.pav) { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rt-p { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.rt-p span:not(.pav) { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rt-c { display: flex; justify-content: center; min-width: 0; }
-.rt-chip { min-width: 32px; text-align: center; padding: 4px 6px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--ink); white-space: nowrap; }
+.rt-chip { min-width: 30px; text-align: center; padding: 1px 6px; border-radius: 6px; font-size: 12.5px; font-weight: 500; color: var(--ink); white-space: nowrap; }
 .rt-chip.orange { background: #fff1dc; color: #a55200; font-weight: 700; }
 .rt-chip.red { background: #ffe3e1; color: #c4261d; font-weight: 700; }
 .rt-chip.grey { background: #f2f2f4; color: #6e6e73; font-weight: 600; }
@@ -500,13 +500,13 @@ body.rt-resizing { cursor: col-resize; user-select: none; }
 .rt-chip.pink { background: #fde7ea; color: #b8324a; font-weight: 700; }
 .rt-chip.muted { color: #aeaeb2; }
 .rt-chip.partial { color: #ff9f0a; font-weight: 700; }
-.rt-b { align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: 5px; padding: 0 12px; border-left: 1px solid color-mix(in srgb, var(--hairline) 70%, transparent); min-width: 0; }
-.rt-b > div { display: flex; align-items: center; }
-.rt-v { font-size: 13.5px; font-weight: 500; color: var(--ink-2); }
+.rt-b { align-self: stretch; display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 0 10px; border-left: 1px solid color-mix(in srgb, var(--hairline) 70%, transparent); min-width: 0; }
+.rt-b > div { display: flex; align-items: center; flex: none; min-width: 44px; }
+.rt-v { font-size: 13px; font-weight: 500; color: var(--ink-2); }
 .rt-v.top { font-weight: 700; color: var(--ink); }
-.rt-badge { font-size: 9.5px; font-weight: 700; color: #fff; border-radius: 4px; padding: 1px 4px; margin-left: 6px; }
-.rt-b > i { display: block; height: 8px; background: rgba(120, 120, 128, .1); border-radius: 4px; }
-.rt-b > i > b { display: block; height: 8px; border-radius: 4px; }
+.rt-badge { font-size: 9px; font-weight: 700; color: #fff; border-radius: 4px; padding: 0 4px; margin-left: 4px; line-height: 14px; }
+.rt-b > i { display: block; flex: 1; min-width: 12px; height: 7px; background: rgba(120, 120, 128, .1); border-radius: 4px; }
+.rt-b > i > b { display: block; height: 7px; border-radius: 4px; }
 .rt-leg { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; font-size: 11.5px; color: #8e8e93; margin: 12px 2px 0; }
 .rt-leg > span { display: inline-flex; align-items: center; gap: 6px; }
 .rt-leg .rt-badge { margin-left: 0; }
