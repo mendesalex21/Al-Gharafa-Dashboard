@@ -50,10 +50,10 @@ function renderSquad() {
     </section>
     <section class="panel">
       <div class="panel-head"><h2 class="panel-title small">ACWR ranking</h2>
-        <span class="legend-inline"><span><i style="background:#8e8e93"></i>bar = 7:28</span><span><i style="background:var(--ink)"></i>dash = 14:35</span></span>
+        <span class="legend-inline"><span><i style="background:#8e8e93"></i>bar = 7:28</span><span><i style="background:var(--ink)"></i>dash = 14:35 (previous week)</span></span>
         ${segHtml('sq-rank', RANK_METRICS.map(([k, l]) => [k, l]), WL.rank)}</div>
       <div class="chart" id="sq-rank-chart"></div>
-      <p class="panel-foot">Available players with ≥ 28 days of data. The slower 14:35 ratio confirms (or not) a spike seen on 7:28. Zones: 0.5 · 0.78 · 1.37 · 1.5.</p>
+      <p class="panel-foot">Available players with ≥ 28 days of data. Same ratios as the club Power BI: 7:28 = last 7 days ÷ the 28 days before them; 14:35 = the same ratio one week earlier — both above 1.37 = two weeks in a row of overload. Zones: 0.5 · 0.78 · 1.37 · 1.5.</p>
     </section>
     <div class="panel-head bare"><h2 class="panel-title">Load by metric</h2>${segHtml('sq-metric', METRIC_KEYS.map((k) => [k, METRIC_SHORT[k]]), WL.metric)}</div>
     <div class="grid2">
@@ -139,7 +139,7 @@ function drawSquad() {
   chScatter(document.getElementById('sq-scatter'), {
     points: pts, height: 300, rays: [{ r: 0.78, color: ACWR_COL.low, label: '0.78' }, { r: 1.37, color: ACWR_COL.amber, label: '1.37' }, { r: 1.5, color: ACWR_COL.red, label: '1.5' }],
     zone: { from: 0.78, to: 1.37, color: ACWR_COL.green },
-    xLabel: `Chronic · 28-day avg ${METRIC_UNIT[k]}`, yLabel: `Acute · 7-day avg ${METRIC_UNIT[k]}`,
+    xLabel: `Chronic · avg of the 28 days before the week ${METRIC_UNIT[k]}`, yLabel: `Acute · 7-day avg ${METRIC_UNIT[k]}`,
     tip: (p) => `<b>${escapeHtml(p.label)}</b><span>ACWR ${p.r.toFixed(2)} · acute ${fmtN(p.y)} · chronic ${fmtN(p.x)}</span>`,
     onClick: (p) => switchView('player', { player: p.id }),
   });

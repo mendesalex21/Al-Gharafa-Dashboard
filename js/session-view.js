@@ -161,6 +161,11 @@ function svAttention(s) {
     });
     if (p.days_hsv >= 10) r.push({ lv: 'high', sev: 3, t: `${p.days_hsv} days without ≥ 90 % of his Vmax`, d: `today ${fmtN(p.vmax, 1)} km/h${p.vmax_pct != null ? ' · ' + p.vmax_pct + '%' : ''}` });
     if (p.rpe >= 8) r.push({ lv: 'above', sev: 1, t: `RPE ${fmtN(p.rpe)}`, d: `sRPE ${fmtN(p.srpe)} AU` });
+    const ser = TR.workload && TR.workload.series ? TR.workload.series[p.id] : null;
+    const two = ser ? svAc2(ser, daysBetween(ser.start, s.date)) : [];
+    const ov = two.filter((x) => x.over), un = two.filter((x) => !x.over);
+    if (ov.length) r.push({ lv: 'high', sev: 3, t: `2 weeks in a row of overload (A:C > 1.37)`, d: ov.map((x) => `${x.l} ${x.b.toFixed(2)} → ${x.a.toFixed(2)}`).join(' · ') });
+    if (un.length) r.push({ lv: 'below', sev: 2, t: `2 weeks in a row of underload (A:C < 0.78)`, d: un.map((x) => `${x.l} ${x.b.toFixed(2)} → ${x.a.toFixed(2)}`).join(' · ') });
     if (r.length) out.push({ p, r: r.sort((a, b) => b.sev - a.sev), sev: Math.max(...r.map((x) => x.sev)) * 10 + r.length });
     else calm++;
   });
@@ -195,7 +200,7 @@ function svAttentionHtml(s) {
       <span class="sv-sum"><b>${at.calm}</b> of ${n} players within their usual range<span class="sep"></span><i style="background:${Z_COL.high}"></i>${cnt('high')} well above / speed exposure<i style="background:${Z_COL.below}"></i>${cnt('below')} below<i style="background:${Z_COL.above}"></i>${cnt('above')} slightly above</span></div>
     ${plans}
     ${at.list.length ? `<div class="sv-cards">${at.list.map(card).join('')}</div>${at.list.length > 10 ? `<button type="button" class="sv-more-btn" data-allcards>Show all ${at.list.length} players ›</button>` : ''}` : '<p class="note">Every player is within his usual range for this day ✓</p>'}
-    <p class="panel-foot">Automatic — vs each player's usual ${s.md || 'day'}${s.cycle.type ? ` of ${TYPE_LABEL[s.cycle.type].toLowerCase()} microcycles` : ''} (z-score) · speed exposure = no sprint ≥ 90 % of his max speed for 10 days or more · click a player for his full session.</p>
+    <p class="panel-foot">Automatic — vs each player's usual ${s.md || 'day'}${s.cycle.type ? ` of ${TYPE_LABEL[s.cycle.type].toLowerCase()} microcycles` : ''} (z-score) · speed exposure = no sprint ≥ 90 % of his max speed for 10 days or more · 2 weeks in a row = A:C 7:28 above 1.37 (or under 0.78) this week and last week on TD, HI Acc+Dec, HIT > 20 or sprints · click a player for his full session.</p>
   </section>`;
 }
 
@@ -401,14 +406,22 @@ function svWellHtml(p) {
     ${has ? diff + worst : `<div class="sv-wdiff">${w ? 'No check-in today' : 'Loading…'}</div>`}</div>`;
 }
 const SV_AC = [['td', 'Total distance'], ['acc_dec', 'HI Acc + Dec'], ['hit', 'HIT > 20'], ['spr_n', 'Nb sprints']];
-/** A:C 7:28 and 14:35 on the session day (club zones: 0.78 · 1.37 · 1.5). */
+/** A:C on the session day, as the club Power BI: 7:28 = last 7 days ÷ the 28 days before; 14:35 = the same one week
+ * earlier. Both above 1.37 (or both under 0.78) = two weeks in a row of overload (underload). */
+function svAc2(ser, i) {
+  if (!ser || !ser.a7 || i < 0) return [];
+  return SV_AC.map(([k, l]) => ({ k, l, a: ser.a7[k] ? ser.a7[k][i] : null, b: ser.a14[k] ? ser.a14[k][i] : null }))
+    .filter((x) => x.a != null && x.b != null && ((x.a > ACWR_TH.high && x.b > ACWR_TH.high) || (x.a < ACWR_TH.low && x.b < ACWR_TH.low)))
+    .map((x) => ({ ...x, over: x.a > ACWR_TH.high }));
+}
 function svAcHtml(s, p) {
   const wl = TR.workload, ser = wl && wl.series ? wl.series[p.id] : null;
   const i = ser && ser.a7 ? daysBetween(ser.start, s.date) : -1;
   const ok = ser && ser.a7 && i >= 0 && i < (ser.a7.td || []).length;
   const v = (set, k) => (ok && ser[set][k] ? ser[set][k][i] : null);
-  return `<div class="sv-ac"><table><thead><tr><th>A:C <small>${fmtDay(s.date, { day: 'numeric', month: 'short' })}</small></th><th>7:28</th><th>14:35</th></tr></thead><tbody>
-    ${SV_AC.map(([k, l]) => `<tr><td>${l}</td><td>${acwrChip(v('a7', k))}</td><td>${acwrChip(v('a14', k))}</td></tr>`).join('')}</tbody></table>
+  const two = ok ? svAc2(ser, i) : [];
+  return `<div class="sv-ac"><table><thead><tr><th>A:C <small>${fmtDay(s.date, { day: 'numeric', month: 'short' })}</small></th><th title="last 7 days ÷ the 28 days before">7:28</th><th title="the same ratio one week earlier">14:35</th></tr></thead><tbody>
+    ${SV_AC.map(([k, l]) => { const t = two.find((x) => x.k === k); return `<tr class="${t ? (t.over ? 'ov2' : 'un2') : ''}"><td>${l}${t ? ` <b class="sv-2w">${t.over ? '2 wks ↑' : '2 wks ↓'}</b>` : ''}</td><td>${acwrChip(v('a7', k))}</td><td>${acwrChip(v('a14', k))}</td></tr>`; }).join('')}</tbody></table>
     ${wl ? (ok ? '' : '<small class="muted">no load history for this day</small>') : '<small class="muted">Loading…</small>'}</div>`;
 }
 /** Re-draws an open sheet once the wellness / workload data has arrived. */

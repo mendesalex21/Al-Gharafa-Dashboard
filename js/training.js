@@ -57,7 +57,7 @@ function renderSessions(opts) {
     <div id="se-body"><div class="panel"><div class="empty">Loading…</div></div></div>`;
   withData('sessions', (d) => { TR.sessions = d; drawSessions(); }, (err) => { root.innerHTML = loadError(err); });
   withData('objectives', (d) => { TR.obj = d; drawSessions(); }, () => {});
-  withData('workload', (d) => { TR.workload = d; svRefresh(); }, () => {}); // A:C ratios of the player sheet
+  withData('workload', (d) => { TR.workload = d; drawSessions(); svRefresh(); }, () => {}); // A:C ratios (sheet + attention)
   withData('wellness', (d) => { TR.wellness = d; svRefresh(); }, () => {}); // today's wellness ring of the player sheet
 }
 
