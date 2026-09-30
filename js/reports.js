@@ -78,9 +78,9 @@ function rpHeader(kicker, title, meta) {
 /** Player photo in front of the name (club Drive photos, as elsewhere on the site); an empty circle if none. */
 function rpFace(D, name) {
   const pid = D.pids[name];
-  const photo = D.photoSrc ? D.photoSrc[pid] : typeof PHOTO_DATA !== 'undefined' && PHOTO_DATA[pid];
-  // background image (cover, top) rather than <img>: renders identically in the PDF (html2canvas ignores object-fit)
-  return `<span class="rp-face"${photo ? ` style="background-image:url('${photo}')"` : ''}></span>`;
+  const photo = D.noPhotos ? '' : typeof PHOTO_DATA !== 'undefined' && PHOTO_DATA[pid];
+  // background image (cover, top); in the PDF the photo is laid on top of this circle at full resolution (rpPrint)
+  return `<span class="rp-face" data-pid="${rpEsc(pid || '')}"${photo ? ` style="background-image:url('${photo}')"` : ''}></span>`;
 }
 
 function rpTable(D, rows, cols, fixed = {}) {
@@ -233,6 +233,16 @@ async function rpPhotos(D) {
   return out;
 }
 
+/** Natural size of each photo (to place it like CSS "cover, top"). */
+function rpImageSizes(photos) {
+  return Promise.all(Object.entries(photos).filter(([, src]) => src).map(([pid, src]) => new Promise((ok) => {
+    const im = new Image();
+    im.onload = () => ok([pid, { w: im.naturalWidth, h: im.naturalHeight }]);
+    im.onerror = () => ok([pid, null]);
+    im.src = src;
+  }))).then(Object.fromEntries);
+}
+
 /** Builds the PDF in the browser (one landscape page per report page) and downloads it: no print dialog. */
 async function rpPrint() {
   if (!RP.data || RP.busy) return;
@@ -243,7 +253,8 @@ async function rpPrint() {
   try {
     await Promise.all(RP_JS.map(rpScript));
     const D = rpDoc(RP.data, RP.idx);
-    D.photoSrc = await rpPhotos(D);
+    const photos = await rpPhotos(D), dims = await rpImageSizes(photos);
+    D.noPhotos = true; // the page picture is taken without them: a 21-px photo inside a picture gets blurred
     host = document.createElement('div');
     host.className = 'rp rp-render';
     host.innerHTML = rpPages(D);
@@ -257,6 +268,21 @@ async function rpPrint() {
       const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', logging: false });
       if (i) pdf.addPage([W, H], 'landscape');
       pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, W, H, undefined, 'FAST');
+      // photos: the original Drive image, clipped to its circle (cover, top) — sharp at any zoom, embedded once per player
+      const box = pages[i].getBoundingClientRect();
+      for (const el of pages[i].querySelectorAll('.rp-face[data-pid]')) {
+        const pid = el.dataset.pid, src = photos[pid], dim = dims[pid];
+        if (!src || !dim) continue;
+        const r = el.getBoundingClientRect();
+        const x = (r.left - box.left) * 0.75, y = (r.top - box.top) * 0.75, w = r.width * 0.75, h = r.height * 0.75;
+        const k = Math.max(w / dim.w, h / dim.h), dw = dim.w * k, dh = dim.h * k;
+        pdf.saveGraphicsState();
+        pdf.circle(x + w / 2, y + h / 2, w / 2, null);
+        pdf.clip();
+        pdf.discardPath();
+        pdf.addImage(src, /^data:image\/png/.test(src) ? 'PNG' : 'JPEG', x + (w - dw) / 2, y, dw, dh, 'ph_' + pid);
+        pdf.restoreGraphicsState();
+      }
     }
     pdf.save(`${D.session.id}_${D.session.date}_Training_report.pdf`);
   } catch (err) {
