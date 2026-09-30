@@ -11,7 +11,7 @@ function cacheSet(action, data) {
  * Retries once on a bad (non-JSON) response — Apps Script's Web App occasionally returns an HTML
  * "starting up" page on its very first request after being idle ("cold start").
  */
-async function callApi(action, mockData) {
+async function callApi(action, mockData, extra = null) {
   if (AUTH.demo && mockData == null && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
     // local development only: real data built by sync/build.py, read from disk (outside the published site/)
     const r = await fetch(`../sync/out/${action}.json`, { cache: 'no-store' });
@@ -28,7 +28,7 @@ async function callApi(action, mockData) {
     const resp = await fetch(window.APP_CONFIG.API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids a CORS pre-flight against Apps Script
-      body: JSON.stringify({ action, token: AUTH.token }),
+      body: JSON.stringify({ action, token: AUTH.token, ...(extra || {}) }),
     });
     try {
       json = await resp.json();
@@ -45,7 +45,7 @@ async function callApi(action, mockData) {
   }
   AUTH.user = json.user;
   if (json.edits) json.data.edits = json.edits; // staff calendar edits travel with the calendar payload
-  cacheSet(action, json.data);
+  if (!extra) cacheSet(action, json.data); // one-off requests (e.g. photos for a PDF) are not kept
   return json.data;
 }
 function fetchWellness() { return callApi('wellness', MOCK_WELLNESS); }

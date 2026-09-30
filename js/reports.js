@@ -17,10 +17,12 @@ const RP_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July
 const rpEsc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const rpFmt = (k, v) => v == null || Number.isNaN(v) ? '–' : k === 'vmax' ? v.toFixed(1) : k === 'pmax' ? v.toFixed(2) : Number(v).toLocaleString('en-US');
 const rpPct = (v, m) => (m > 0 ? Math.min(100, (v || 0) / m * 100) : 0).toFixed(1) + '%';
+const RP_JS = ['https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'];
 const rpLerp = (a, b, t) => a.map((x, i) => Math.round(x + (b[i] - x) * t));
 // Days since the last exposure ≥ 90 % of max speed (thresholds from the handoff — to confirm with the staff)
 const rpDaysColor = (d) => d == null ? ['#f0f1f5', '#6a6f80'] : d <= 5 ? ['#d5f2d5', '#1c6b1c'] : d <= 10 ? ['#fbd9c6', '#8a3b12'] : ['#f6c4c4', '#9b1c1c'];
-const rpSprintColor = (t) => [`rgb(${rpLerp([253, 236, 236], [214, 64, 64], t)})`, '#111']; // number always black (staff request)
+// light red: many sprints is not "bad", just highlighted (staff request); the number stays black
+const rpSprintColor = (t) => [`rgb(${rpLerp([254, 242, 242], [244, 172, 172], t)})`, '#111'];
 const rpGmColor = (v) => v >= 60 ? '#e8743b' : v >= 40 ? '#d6a90a' : '#8fdc88';
 
 function rpDateLabel(iso) { const [y, m, d] = iso.split('-').map(Number); return `${d} ${RP_MONTHS[m - 1]} ${y}`; }
@@ -75,8 +77,10 @@ function rpHeader(kicker, title, meta) {
 
 /** Player photo in front of the name (club Drive photos, as elsewhere on the site); an empty circle if none. */
 function rpFace(D, name) {
-  const photo = typeof PHOTO_DATA !== 'undefined' && PHOTO_DATA[D.pids[name]];
-  return `<span class="rp-face">${photo ? `<img src="${photo}" alt="" onerror="this.remove()">` : ''}</span>`;
+  const pid = D.pids[name];
+  const photo = D.photoSrc ? D.photoSrc[pid] : typeof PHOTO_DATA !== 'undefined' && PHOTO_DATA[pid];
+  // background image (cover, top) rather than <img>: renders identically in the PDF (html2canvas ignores object-fit)
+  return `<span class="rp-face"${photo ? ` style="background-image:url('${photo}')"` : ''}></span>`;
 }
 
 function rpTable(D, rows, cols, fixed = {}) {
@@ -84,6 +88,8 @@ function rpTable(D, rows, cols, fixed = {}) {
   // (e.g. extra running) must not shrink everyone else's bars — his own bar is then capped at 100 %
   const ref = rows.some((r) => r.pro) ? rows.filter((r) => r.pro) : rows;
   const teamMax = (k) => Math.max(0, ...ref.map((r) => r[k] || 0));
+  // scale = everyone (an individual session may go past the grey track); grey track = team max
+  const scaleMax = (k) => Math.max(teamMax(k), ...rows.map((r) => r[k] || 0));
   const lo = (k) => Math.min(...rows.map((r) => r[k] ?? 0)), hi = (k) => Math.max(...rows.map((r) => r[k] ?? 0));
   const t01 = (k, v) => hi(k) > lo(k) ? ((v ?? 0) - lo(k)) / (hi(k) - lo(k)) : 0;
   const tpl = '150px ' + cols.map((k) => RP_WIDTHS[k] || '44px').join(' ');
@@ -91,9 +97,9 @@ function rpTable(D, rows, cols, fixed = {}) {
   const cell = (r, k) => {
     const v = fixed[k] ?? r[k];
     if (RP_BARS.includes(k)) {
-      const m = teamMax(k);
-      if (k === 'vmax') return `<div class="rp-c"><div class="rp-bar rp-mid"><i class="rp-trk" style="width:100%"></i><i style="width:${rpPct(v, m)};background:${RP_COLORS[k]}"></i><em>${rpFmt(k, v)}</em></div></div>`;
-      return `<div class="rp-c"><span class="rp-v">${rpFmt(k, v)}</span><div class="rp-bar"><i class="rp-trk" style="width:100%"></i><i style="width:${rpPct(v, m)};background:${RP_COLORS[k]}"></i></div></div>`;
+      const m = scaleMax(k), trk = rpPct(teamMax(k), m);
+      if (k === 'vmax') return `<div class="rp-c"><div class="rp-bar rp-mid"><i class="rp-trk" style="width:${trk}"></i><i style="width:${rpPct(v, m)};background:${RP_COLORS[k]}"></i><em>${rpFmt(k, v)}</em></div></div>`;
+      return `<div class="rp-c"><span class="rp-v">${rpFmt(k, v)}</span><div class="rp-bar"><i class="rp-trk" style="width:${trk}"></i><i style="width:${rpPct(v, m)};background:${RP_COLORS[k]}"></i></div></div>`;
     }
     if (k === 'mpm') return `<div class="rp-c rp-chip"><span class="rp-v" style="background:rgb(${rpLerp([235, 244, 253], [110, 175, 240], t01(k, v))})">${rpFmt(k, v)}</span></div>`;
     if (k === 'sprints') { const [bg, fg] = rpSprintColor(t01(k, v)); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${rpFmt(k, v)}</span></div>`; }
@@ -191,6 +197,7 @@ function drawReports() {
   document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel} · ${n} pages · ${D.fullSession.length} players`;
   box.innerHTML = `<div class="rp rp-doc">${rpPages(D)}</div>`;
   rpFit();
+  rpPhotos(D); // warm up: fetch this session's photos for the PDF in the background, so "Download PDF" is quick
 }
 
 /** The pages keep their exact print size (1290 px); the preview is zoomed to the available width. */
@@ -199,19 +206,63 @@ function rpFit() {
   if (doc) doc.style.zoom = Math.min(1, box.clientWidth / RP_W);
 }
 
-/** Prints only the report pages: one PDF page per report page (choose "Save as PDF"; iPhone: Share → Print). */
-function rpPrint() {
-  if (!RP.data) return;
-  const D = rpDoc(RP.data, RP.idx);
-  let host = document.getElementById('rp-print');
-  if (!host) { host = document.createElement('div'); host.id = 'rp-print'; document.body.appendChild(host); }
-  host.innerHTML = `<div class="rp">${rpPages(D)}</div>`;
-  const title = document.title;
-  document.documentElement.classList.add('rp-printing');
-  document.title = `${D.session.id}_${D.session.date}_Training_report`; // default PDF file name
-  const done = () => { document.documentElement.classList.remove('rp-printing'); document.title = title; host.innerHTML = ''; window.removeEventListener('afterprint', done); };
-  window.addEventListener('afterprint', done);
-  // wait for the photos and logo (already cached by the preview), 3 s at most, then print
-  const imgs = [...host.querySelectorAll('img')].filter((im) => !im.complete).map((im) => new Promise((ok) => { im.onload = im.onerror = ok; }));
-  Promise.race([Promise.all(imgs), new Promise((ok) => setTimeout(ok, 3000))]).then(() => setTimeout(() => window.print(), 50));
+/** Loads a script once (the PDF libraries are only fetched when someone downloads a report). */
+function rpScript(src) {
+  return new Promise((ok, ko) => {
+    if (document.querySelector(`script[src="${src}"]`)) return ok();
+    const el = document.createElement('script');
+    el.src = src; el.onload = ok; el.onerror = () => ko(new Error('could not load the PDF tools'));
+    document.head.appendChild(el);
+  });
+}
+
+/** Photos as data URIs through the API (Drive images can't be drawn into a canvas straight from the browser). */
+async function rpPhotos(D) {
+  const byDrive = {}, out = {};
+  for (const r of D.fullSession) {
+    const pid = D.pids[r.name], url = typeof PHOTO_DATA !== 'undefined' && PHOTO_DATA[pid];
+    const id = url && (url.match(/[?&]id=([\w-]+)/) || url.match(/\/d\/([\w-]+)/) || [])[1];
+    if (id) byDrive[id] = pid;
+  }
+  RP.photoCache = RP.photoCache || {};
+  const need = Object.keys(byDrive).filter((id) => !(id in RP.photoCache));
+  if (need.length && !AUTH.demo) {
+    try { Object.assign(RP.photoCache, await callApi('photos', null, { ids: need })); } catch (err) { /* PDF without photos */ }
+  }
+  for (const [id, pid] of Object.entries(byDrive)) out[pid] = RP.photoCache[id] || '';
+  return out;
+}
+
+/** Builds the PDF in the browser (one landscape page per report page) and downloads it: no print dialog. */
+async function rpPrint() {
+  if (!RP.data || RP.busy) return;
+  const btn = document.getElementById('rp-pdf'), label = btn.textContent;
+  const W = RP_W * 0.75, H = 790 * 0.75; // pt
+  RP.busy = true; btn.disabled = true; btn.textContent = 'Preparing PDF…';
+  let host = null;
+  try {
+    await Promise.all(RP_JS.map(rpScript));
+    const D = rpDoc(RP.data, RP.idx);
+    D.photoSrc = await rpPhotos(D);
+    host = document.createElement('div');
+    host.className = 'rp rp-render';
+    host.innerHTML = rpPages(D);
+    document.body.appendChild(host);
+    await Promise.all([...host.querySelectorAll('img')].map((im) => im.complete ? 0 : new Promise((ok) => { im.onload = im.onerror = ok; })));
+    if (document.fonts) await document.fonts.ready;
+    const pages = [...host.querySelectorAll('.rp-page')];
+    const pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'pt', format: [W, H], compress: true });
+    for (let i = 0; i < pages.length; i++) {
+      btn.textContent = `Preparing PDF… ${i + 1}/${pages.length}`;
+      const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', logging: false });
+      if (i) pdf.addPage([W, H], 'landscape');
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, W, H, undefined, 'FAST');
+    }
+    pdf.save(`${D.session.id}_${D.session.date}_Training_report.pdf`);
+  } catch (err) {
+    alert('Could not create the PDF: ' + (err.message || err));
+  } finally {
+    if (host) host.remove();
+    RP.busy = false; btn.disabled = false; btn.textContent = label;
+  }
 }
