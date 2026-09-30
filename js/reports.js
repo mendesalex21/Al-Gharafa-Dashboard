@@ -156,16 +156,19 @@ function renderReports(opts) {
         <select class="select" id="rp-pick" aria-label="Session"></select><button type="button" id="rp-next" aria-label="Next session">›</button></div>
       <button type="button" class="btn-primary" id="rp-pdf" disabled>Download PDF</button>`)}
     <div class="rp-preview" id="rp-preview"><div class="panel"><div class="empty">Loading…</div></div></div>`;
-  document.getElementById('rp-prev').onclick = () => rpGo(RP.idx - 1);
-  document.getElementById('rp-next').onclick = () => rpGo(RP.idx + 1);
+  const step = (d) => { const k = (RP.shown || []).indexOf(RP.idx); if (k >= 0 && RP.shown[k + d] != null) rpGo(RP.shown[k + d]); };
+  document.getElementById('rp-prev').onclick = () => step(-1);
+  document.getElementById('rp-next').onclick = () => step(1);
   document.getElementById('rp-pick').onchange = (e) => rpGo(Number(e.target.value));
   document.getElementById('rp-pdf').onclick = rpPrint;
   withData('reports', (d) => {
     RP.data = d;
     const list = d.sessions || [];
     const want = RP.wanted ? list.findIndex((s) => s.date === RP.wanted) : -1;
-    RP.idx = want >= 0 ? want : RP.idx >= 0 && RP.idx < list.length ? RP.idx : list.length - 1;
-    document.getElementById('rp-pick').innerHTML = list.map((s, i) => `<option value="${i}">${rpEsc(rpOption(s))}</option>`).reverse().join('');
+    const shown = list.map((s, i) => i).filter((i) => !list[i].hidden);
+    RP.shown = shown;
+    RP.idx = want >= 0 ? want : RP.idx >= 0 && RP.idx < list.length ? RP.idx : shown[shown.length - 1] ?? -1;
+    document.getElementById('rp-pick').innerHTML = shown.map((i) => `<option value="${i}">${rpEsc(rpOption(list[i]))}</option>`).reverse().join('');
     drawReports();
   }, (err) => { document.getElementById('rp-preview').innerHTML = loadError(err); });
 }
@@ -173,7 +176,7 @@ function renderReports(opts) {
 function rpOption(s) {
   const d = new Date(s.date + 'T12:00:00Z');
   const day = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
-  return `${s.id} · ${day} · ${s.md || (s.type === 'match' ? 'Match' : 'Training')}${s.cycle ? ' · ' + s.cycle : ''}${s.ampm === 'AM' ? ' · AM' : ''}`;
+  return `${s.id} · ${day} · ${s.md && s.md !== '/' ? s.md : (s.type === 'match' ? 'Match' : 'Training')}${s.cycle ? ' · ' + s.cycle : ''}${s.ampm === 'AM' ? ' · AM' : ''}`;
 }
 
 function rpGo(i) {
@@ -190,8 +193,9 @@ function drawReports() {
   if (!list.length) { box.innerHTML = `<div class="panel">${emptyState('No sessions this season yet.')}</div>`; return; }
   const D = rpDoc(RP.data, RP.idx);
   document.getElementById('rp-pick').value = String(RP.idx);
-  document.getElementById('rp-prev').disabled = RP.idx <= 0;
-  document.getElementById('rp-next').disabled = RP.idx >= list.length - 1;
+  const k = (RP.shown || []).indexOf(RP.idx);
+  document.getElementById('rp-prev').disabled = k <= 0;
+  document.getElementById('rp-next').disabled = k < 0 || k >= RP.shown.length - 1;
   document.getElementById('rp-pdf').disabled = false;
   const n = 3 + (D.weekLoad.rows.length ? 1 : 0) + D.drills.filter((d) => d.rows.length).length;
   document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel} · ${n} pages · ${D.fullSession.length} players`;
