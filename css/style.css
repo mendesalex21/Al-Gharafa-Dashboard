@@ -1002,3 +1002,75 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
   .section-title { font-size: 19px; }
   .alert-count { font-size: 32px; }
 }
+
+/* ---------------------------------------------------------------- Reports (Claude Design handoff "2a", 1290 × 790 pages) */
+.rp-preview { overflow: hidden; }
+.rp-doc { display: flex; flex-direction: column; gap: 24px; }
+.rp { --rp-navy: #16269e; --rp-brick: #a52a2a; --rp-muted: #6a6f80; --rp-band: #f3f4f8; --rp-rule: #eef0f4; --rp-track: #e6e8ee;
+  font-family: 'Segoe UI', 'Open Sans', sans-serif; color: #111; font-variant-numeric: tabular-nums; line-height: normal; letter-spacing: normal; }
+.rp *, .rp *::before, .rp *::after { box-sizing: border-box; }
+.rp i, .rp em { font-style: normal; }
+.rp-page { flex: none; width: 1290px; height: 790px; overflow: hidden; background: #fff; padding: 26px 32px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 2px 12px rgba(0, 0, 0, .12); border-radius: 2px; }
+.rp-hd { display: flex; align-items: center; gap: 18px; padding-bottom: 12px; border-bottom: 2px solid var(--rp-navy); }
+.rp-logo { width: 44px; height: 44px; object-fit: contain; flex: none; }
+.rp-t { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.rp-k { font-size: 11px; font-weight: 700; letter-spacing: .12em; color: var(--rp-navy); }
+.rp-n { font-size: 22px; font-weight: 700; }
+.rp-meta { display: flex; gap: 28px; }
+.rp-m { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.rp-m span:first-child { font-size: 10px; font-weight: 700; color: var(--rp-brick); letter-spacing: .06em; }
+.rp-m span:last-child { font-size: 16px; font-weight: 700; color: var(--rp-navy); }
+.rp-tbl { display: flex; flex-direction: column; }
+.rp-tr { display: grid; gap: 0 10px; }
+.rp-th { align-items: end; font-size: 10.5px; font-weight: 700; color: var(--rp-brick); letter-spacing: .03em; padding-bottom: 6px; line-height: 1.25; text-align: center; }
+.rp-th span:first-child { text-align: left; }
+.rp-grp { height: 22px; display: flex; align-items: center; gap: 8px; margin-top: 4px; background: var(--rp-band); padding-left: 10px; font-size: 11px; font-weight: 800; color: var(--rp-navy); letter-spacing: .08em; }
+.rp-grp small { font-size: 11px; font-weight: 600; color: var(--rp-muted); letter-spacing: 0; }
+.rp-row { border-bottom: 1px solid var(--rp-rule); font-size: 12.5px; }
+.rp-nm { display: flex; align-items: center; padding-left: 10px; font-weight: 700; color: var(--rp-navy); white-space: nowrap; }
+.rp-c { display: flex; align-items: center; gap: 6px; height: 100%; }
+.rp-v { flex: 0 0 38px; text-align: right; font-weight: 700; }
+.rp-txt .rp-v, .rp-chip .rp-v { flex: 1; text-align: center; }
+.rp-chip .rp-v { border-radius: 3px; padding: 2px 0; }
+.rp-bar { flex: 1; position: relative; height: 11px; }
+.rp-bar i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 2px; }
+.rp-bar i.rp-trk { background: var(--rp-track); }
+.rp-bar.rp-mid { height: 18px; flex: 1; }
+.rp-bar.rp-mid em { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+.rp-legend { margin-top: auto; font-size: 10px; color: var(--rp-muted); display: flex; gap: 16px; }
+.rp-legend b { display: inline-block; width: 16px; height: 8px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+.rp-blk { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 36px; min-height: 0; }
+.rp-ch { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.rp-top { display: flex; justify-content: space-between; align-items: baseline; height: 24px; }
+.rp-ti { font-size: 14px; font-weight: 800; color: var(--rp-brick); }
+.rp-lg { display: flex; gap: 14px; font-size: 10.5px; font-weight: 600; color: #555; }
+.rp-lg span { display: flex; align-items: center; gap: 5px; }
+.rp-lg b { display: inline-block; }
+.rp-plot { flex: 1; position: relative; display: flex; align-items: flex-end; min-height: 0; border-bottom: 1px solid #c9ccd6; }
+.rp-col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 700; }
+.rp-col i { width: 58%; border-radius: 3px 3px 0 0; }
+.rp-avg { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--rp-navy); }
+.rp-empty { position: absolute; left: 50%; top: 40%; transform: translateX(-50%); font-size: 13px; color: #8a8f9e; }
+.rp-names { display: flex; height: 40px; }
+.rp-names div { flex: 1; position: relative; }
+.rp-names span { position: absolute; right: 45%; top: 5px; transform: rotate(-35deg); transform-origin: 100% 0; font-size: 9px; font-weight: 700; color: var(--rp-navy); white-space: nowrap; }
+.rp-gm { display: flex; flex-direction: column; gap: 2px; }
+.rp-gh { display: flex; justify-content: space-between; height: 24px; align-items: baseline; font-size: 10.5px; font-weight: 700; color: var(--rp-brick); letter-spacing: .03em; }
+.rp-gr { display: grid; grid-template-columns: 100px minmax(0, 1fr) 30px; gap: 10px; align-items: center; height: 19px; font-size: 11px; }
+.rp-gr span:first-child { font-weight: 700; color: var(--rp-navy); white-space: nowrap; }
+.rp-gr span:last-child { text-align: right; font-weight: 700; }
+.rp-tk { height: 8px; background: #f0f1f5; border-radius: 2px; }
+.rp-tk i { display: block; height: 100%; border-radius: 2px; }
+#view-reports .select { min-width: 0; max-width: 330px; }
+#rp-print { display: none; }
+@page { size: 1290px 790px; margin: 0; }
+@media print {
+  html.rp-printing body > *:not(#rp-print) { display: none !important; }
+  html.rp-printing, html.rp-printing body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+  html.rp-printing #rp-print { display: block; }
+  #rp-print .rp-page { box-shadow: none; border-radius: 0; break-after: page; page-break-after: always; }
+  #rp-print .rp-page:last-child { break-after: auto; page-break-after: auto; }
+  #rp-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+.rp-face { flex: none; width: 21px; height: 21px; border-radius: 50%; overflow: hidden; background: #eef0f4; margin-right: 8px; }
+.rp-face img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }

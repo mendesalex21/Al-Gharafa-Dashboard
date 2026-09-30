@@ -1,16 +1,17 @@
 const VIEWS = {}; // view -> already rendered?
 const VIEW_SECTION = {
   wellness: 'wellness', longitudinal: 'wellness', sessions: 'training', week: 'training', objectives: 'training',
-  squad: 'workload', player: 'workload', readiness: 'workload', testing: 'testing', calendar: 'calendar',
+  squad: 'workload', player: 'workload', readiness: 'workload', testing: 'testing', calendar: 'calendar', reports: 'reports',
 };
 const VIEW_RENDER = {
   wellness: () => renderWellness(), longitudinal: () => renderLongitudinal(),
   sessions: (o) => renderSessions(o), week: () => renderWeek(), objectives: (o) => renderObjectives(o), squad: () => renderSquad(),
   player: (o) => renderPlayerLoad(o), readiness: () => renderReadiness(), testing: (o) => renderTesting(o), calendar: (o) => renderCalendar(o),
+  reports: (o) => renderReports(o),
 };
 const VIEW_REDRAW = {
   longitudinal: () => drawLongitudinal(), sessions: (o) => drawSessions(o), week: () => drawWeek(), objectives: () => drawObjectives(),
-  squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: () => drawCalendar(),
+  squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: () => drawCalendar(), reports: () => rpFit(),
 };
 let CURRENT_VIEW = null;
 
@@ -95,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!AUTH.demo && confirm('Sign out?')) signOut();
   });
   const [start, arg, arg2] = decodeURIComponent(location.hash.slice(1)).split('/'); // e.g. #sessions/2026-09-04[/dame], #player/ounas
-  const opts = arg ? { sessions: { date: arg, player: arg2 }, player: { player: arg }, testing: { athlete: arg, tab: 'profile' }, objectives: { cycle: arg } }[start] : undefined;
+  const opts = arg ? { sessions: { date: arg, player: arg2 }, player: { player: arg }, testing: { athlete: arg, tab: 'profile' }, objectives: { cycle: arg }, reports: { date: arg } }[start] : undefined;
   initAuth(() => {
     switchView(VIEW_RENDER[start] ? start : 'wellness', opts);
     window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEW_RENDER[v] && v !== CURRENT_VIEW) switchView(v); });
