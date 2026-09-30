@@ -4,7 +4,7 @@
  * total week load · one page per drill. "Download PDF" prints only the report pages (one PDF page each).
  * Data: the `reports` payload (sync/build.py → build_reports); week load and % top-3 game avg are derived here.
  */
-const RP = { data: null, idx: -1, wanted: null };
+const RP = { data: null, idx: -1, part: 'all', wanted: null };
 const RP_W = 1290;
 const RP_LOGO = 'img/logo.png';
 
@@ -25,6 +25,7 @@ const rpDaysColor = (d) => d == null ? ['#f0f1f5', '#6a6f80'] : d <= 5 ? ['#d5f2
 const rpSprintColor = (t) => [`rgb(${rpLerp([254, 242, 242], [244, 172, 172], t)})`, '#111'];
 const rpGmColor = (v) => v >= 60 ? '#e8743b' : v >= 40 ? '#d6a90a' : '#8fdc88';
 
+function rpPartLabel(s, part) { return part === 'b' ? 'Game B' : part === 't' ? (s.type === 'match' ? 'Match' : 'Training') : 'All players'; }
 function rpDateLabel(iso) { const [y, m, d] = iso.split('-').map(Number); return `${d} ${RP_MONTHS[m - 1]} ${y}`; }
 function rpRangeLabel(a, b) {
   if (a === b) return rpDateLabel(a);
@@ -35,11 +36,14 @@ function rpRangeLabel(a, b) {
 function rpWeekStart(iso) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return d.toISOString().slice(0, 10); } // weeks start on Sunday
 
 /** Payload session → the handoff's report JSON (session, positions, players, fullSession, gameAvg, weekLoad, drills). */
-function rpDoc(data, i) {
+function rpDoc(data, i, part = 'all') {
   const s = data.sessions[i], order = data.positions.order;
   const known = (n) => order.includes(data.pos[n]);
-  const fullSession = s.full.filter((r) => known(r[0])).map(([name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro]) =>
-    ({ name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro }));
+  // part: 'all' players · 't' the team session only · 'b' the B-team game only (days when both happened)
+  const inPart = (r) => part === 'all' || (part === 'b') === (r[12] === 1);
+  const fullSession = s.full.filter((r) => known(r[0]) && inPart(r)).map(([name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro]) =>
+    ({ name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro: part === 'b' ? 1 : pro }));
+  const pm = (s.parts && s.parts[part]) || {};
   const gameAvg = {};
   for (const k of ['td', 'd20', 'accdec', 'sprints']) {
     gameAvg[k] = {};
@@ -60,10 +64,11 @@ function rpDoc(data, i) {
     }
   }
   return {
-    session: { id: s.id, date: s.date, dateLabel: rpDateLabel(s.date), week: s.week, md: s.md, ampm: s.ampm, time: s.time, exercise: s.ex },
+    session: { id: s.id, date: s.date, dateLabel: rpDateLabel(s.date), week: s.week, md: pm.md ?? s.md, ampm: s.ampm, time: pm.time ?? s.time, exercise: s.ex,
+      part: s.parts && part !== 'all' ? rpPartLabel(s, part) : '' },
     positions: data.positions, players: data.pos, pids: data.pid || {}, fullSession, gameAvg,
     weekLoad: { from, to: s.date, label: rpRangeLabel(from, s.date), rows: Object.values(acc) },
-    drills: s.drills.map((d) => ({ n: d.n, name: d.name, time: d.time,
+    drills: (part === 'b' ? [] : s.drills).map((d) => ({ n: d.n, name: d.name, time: d.time,
       rows: d.rows.filter((r) => known(r[0])).map(([name, mpm, td, d15, d20, vmax, sprints, accdec, pro]) => ({ name, mpm, td, d15, d20, vmax, sprints, accdec, pro })) })),
   };
 }
@@ -136,9 +141,10 @@ function rpPages(D) {
   const s = D.session, pages = [];
   const meta = [['WEEK', s.week], ['MD', s.md], ['TIME', s.time + "'"], ['N EXERCICE', s.exercise], ['AM/PM', s.ampm]];
   const title = `${s.id} · ${s.dateLabel}`;
-  pages.push(rpHeader('FULL SESSION', title, meta) + rpTable(D, D.fullSession, ['time', 'mpm', 'td', 'd15', 'd20', 'vmax', 'pmax', 'days', 'sprints', 'accdec']));
-  pages.push(rpHeader('FULL SESSION', title, meta) + rpChart(D, 'td', 'TOTAL DISTANCE', 'TOTAL DISTANCE', 'td') + rpChart(D, 'd20', 'DISTANCE >20kmh', 'DISTANCE >20kmh', 'd20'));
-  pages.push(rpHeader('FULL SESSION', title, meta) + rpChart(D, 'accdec', 'Acceleration + Deceleration', 'HI Acc+Dec', 'accdec') + rpChart(D, 'sprints', 'Number of Sprints >25kmh', 'SPRINTS', 'sprints'));
+  const kicker = 'FULL SESSION' + (s.part ? ' · ' + s.part.toUpperCase() : '');
+  pages.push(rpHeader(kicker, title, meta) + rpTable(D, D.fullSession, ['time', 'mpm', 'td', 'd15', 'd20', 'vmax', 'pmax', 'days', 'sprints', 'accdec']));
+  pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'td', 'TOTAL DISTANCE', 'TOTAL DISTANCE', 'td') + rpChart(D, 'd20', 'DISTANCE >20kmh', 'DISTANCE >20kmh', 'd20'));
+  pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'accdec', 'Acceleration + Deceleration', 'HI Acc+Dec', 'accdec') + rpChart(D, 'sprints', 'Number of Sprints >25kmh', 'SPRINTS', 'sprints'));
   if (D.weekLoad && D.weekLoad.rows.length) pages.push(rpHeader('TOTAL WEEK LOAD', D.weekLoad.label, [['WEEK', s.week], ['FROM', D.weekLoad.from], ['TO', D.weekLoad.to]]) + rpTable(D, D.weekLoad.rows, ['min', 'td', 'd15', 'd20', 'vmax', 'pmax', 'sprints', 'accdec']));
   for (const d of D.drills || []) {
     if (!d.rows.length) continue;
@@ -156,32 +162,39 @@ function renderReports(opts) {
         <select class="select" id="rp-pick" aria-label="Session"></select><button type="button" id="rp-next" aria-label="Next session">›</button></div>
       <button type="button" class="btn-primary" id="rp-pdf" disabled>Download PDF</button>`)}
     <div class="rp-preview" id="rp-preview"><div class="panel"><div class="empty">Loading…</div></div></div>`;
-  const step = (d) => { const k = (RP.shown || []).indexOf(RP.idx); if (k >= 0 && RP.shown[k + d] != null) rpGo(RP.shown[k + d]); };
+  const step = (d) => { const o = (RP.opts || [])[rpOptIndex() + d]; if (o) rpGo(o[0], o[1]); };
   document.getElementById('rp-prev').onclick = () => step(-1);
   document.getElementById('rp-next').onclick = () => step(1);
-  document.getElementById('rp-pick').onchange = (e) => rpGo(Number(e.target.value));
+  document.getElementById('rp-pick').onchange = (e) => { const [i, part] = e.target.value.split('|'); rpGo(Number(i), part); };
   document.getElementById('rp-pdf').onclick = rpPrint;
   withData('reports', (d) => {
     RP.data = d;
     const list = d.sessions || [];
     const want = RP.wanted ? list.findIndex((s) => s.date === RP.wanted) : -1;
     const shown = list.map((s, i) => i).filter((i) => !list[i].hidden);
-    RP.shown = shown;
+    // a day with a B-team game alongside the team session offers three reports: all players, the session, the game
+    RP.opts = shown.flatMap((i) => list[i].parts ? [[i, 'all'], [i, 't'], [i, 'b']] : [[i, 'all']]);
     RP.idx = want >= 0 ? want : RP.idx >= 0 && RP.idx < list.length ? RP.idx : shown[shown.length - 1] ?? -1;
-    document.getElementById('rp-pick').innerHTML = shown.map((i) => `<option value="${i}">${rpEsc(rpOption(list[i]))}</option>`).reverse().join('');
+    if (!list[RP.idx] || !list[RP.idx].parts) RP.part = 'all';
+    // newest session first; within a day: all players, the session, the B game
+    const byDay = shown.slice().reverse().flatMap((i) => RP.opts.filter((o) => o[0] === i));
+    document.getElementById('rp-pick').innerHTML = byDay.map(([i, part]) => `<option value="${i}|${part}">${rpEsc(rpOption(list[i], part))}</option>`).join('');
     drawReports();
   }, (err) => { document.getElementById('rp-preview').innerHTML = loadError(err); });
 }
 
-function rpOption(s) {
+function rpOptIndex() { return (RP.opts || []).findIndex(([i, part]) => i === RP.idx && part === RP.part); }
+
+function rpOption(s, part = 'all') {
   const d = new Date(s.date + 'T12:00:00Z');
   const day = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
-  return `${s.id} · ${day} · ${s.md && s.md !== '/' ? s.md : (s.type === 'match' ? 'Match' : 'Training')}${s.cycle ? ' · ' + s.cycle : ''}${s.ampm === 'AM' ? ' · AM' : ''}`;
+  const tag = s.md && s.md !== '/' ? s.md : s.parts ? '' : (s.type === 'match' ? 'Match' : 'Training');
+  return `${s.id} · ${day}${tag ? ' · ' + tag : ''}${s.cycle ? ' · ' + s.cycle : ''}${s.ampm === 'AM' ? ' · AM' : ''}${s.parts ? ' · ' + rpPartLabel(s, part) : ''}`;
 }
 
-function rpGo(i) {
+function rpGo(i, part = 'all') {
   if (!RP.data || i < 0 || i >= RP.data.sessions.length) return;
-  RP.idx = i; RP.wanted = null;
+  RP.idx = i; RP.part = RP.data.sessions[i].parts ? part : 'all'; RP.wanted = null;
   history.replaceState(null, '', '#reports/' + RP.data.sessions[i].date);
   drawReports();
 }
@@ -191,14 +204,14 @@ function drawReports() {
   if (!box || !RP.data) return;
   const list = RP.data.sessions;
   if (!list.length) { box.innerHTML = `<div class="panel">${emptyState('No sessions this season yet.')}</div>`; return; }
-  const D = rpDoc(RP.data, RP.idx);
-  document.getElementById('rp-pick').value = String(RP.idx);
-  const k = (RP.shown || []).indexOf(RP.idx);
+  const D = rpDoc(RP.data, RP.idx, RP.part);
+  document.getElementById('rp-pick').value = `${RP.idx}|${RP.part}`;
+  const k = rpOptIndex();
   document.getElementById('rp-prev').disabled = k <= 0;
-  document.getElementById('rp-next').disabled = k < 0 || k >= RP.shown.length - 1;
+  document.getElementById('rp-next').disabled = k < 0 || k >= RP.opts.length - 1;
   document.getElementById('rp-pdf').disabled = false;
   const n = 3 + (D.weekLoad.rows.length ? 1 : 0) + D.drills.filter((d) => d.rows.length).length;
-  document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel} · ${n} pages · ${D.fullSession.length} players`;
+  document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel}${D.session.part ? ' · ' + D.session.part : ''} · ${n} pages · ${D.fullSession.length} players`;
   box.innerHTML = `<div class="rp rp-doc">${rpPages(D)}</div>`;
   rpFit();
   rpPhotos(D); // warm up: fetch this session's photos for the PDF in the background, so "Download PDF" is quick
@@ -256,7 +269,7 @@ async function rpPrint() {
   let host = null;
   try {
     await Promise.all(RP_JS.map(rpScript));
-    const D = rpDoc(RP.data, RP.idx);
+    const D = rpDoc(RP.data, RP.idx, RP.part);
     const photos = await rpPhotos(D), dims = await rpImageSizes(photos);
     D.noPhotos = true; // the page picture is taken without them: a 21-px photo inside a picture gets blurred
     host = document.createElement('div');
@@ -288,7 +301,7 @@ async function rpPrint() {
         pdf.restoreGraphicsState();
       }
     }
-    pdf.save(`${D.session.id}_${D.session.date}_Training_report.pdf`);
+    pdf.save(`${D.session.id}_${D.session.date}${D.session.part ? '_' + D.session.part.replace(/\s+/g, '') : ''}_Training_report.pdf`);
   } catch (err) {
     alert('Could not create the PDF: ' + (err.message || err));
   } finally {
