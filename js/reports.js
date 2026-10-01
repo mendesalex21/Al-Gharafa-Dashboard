@@ -17,6 +17,7 @@ const RP_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July
 const rpEsc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const rpFmt = (k, v) => v == null || Number.isNaN(v) ? '–' : k === 'vmax' ? v.toFixed(1) : k === 'pmax' ? v.toFixed(2) : Number(v).toLocaleString('en-US');
 const rpPct = (v, m) => (m > 0 ? Math.min(100, (v || 0) / m * 100) : 0).toFixed(1) + '%';
+const RP_PHOTO_CACHE = 'rp-photos-v1'; // a replaced photo in Drive: bump the version to fetch everything again
 const RP_JS = ['https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'];
 const rpLerp = (a, b, t) => a.map((x, i) => Math.round(x + (b[i] - x) * t));
 // Days since the last exposure ≥ 90 % of max speed (thresholds from the handoff — to confirm with the staff)
@@ -234,7 +235,9 @@ function drawReports() {
   document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel}${D.session.part ? ' · ' + D.session.part : ''} · ${n} pages · ${D.fullSession.length} players`;
   box.innerHTML = `<div class="rp rp-doc">${rpPages(D)}</div>`;
   rpFit();
-  rpPhotos(D); // warm up: fetch this session's photos for the PDF in the background, so "Download PDF" is quick
+  // warm up in the background so "Download PDF" is quick: this session's photos and the PDF tools
+  rpPhotos(D);
+  Promise.all(RP_JS.map(rpScript)).catch(() => { /* retried on click */ });
 }
 
 /** The pages keep their exact print size (1290 px); the preview is zoomed to the available width. */
@@ -244,13 +247,14 @@ function rpFit() {
 }
 
 /** Loads a script once (the PDF libraries are only fetched when someone downloads a report). */
+const RP_SCRIPTS = {}; // one promise per script: a click during the warm-up waits until it has really loaded
 function rpScript(src) {
-  return new Promise((ok, ko) => {
-    if (document.querySelector(`script[src="${src}"]`)) return ok();
+  return RP_SCRIPTS[src] || (RP_SCRIPTS[src] = new Promise((ok, ko) => {
     const el = document.createElement('script');
-    el.src = src; el.onload = ok; el.onerror = () => ko(new Error('could not load the PDF tools'));
+    el.src = src; el.onload = ok;
+    el.onerror = () => { delete RP_SCRIPTS[src]; el.remove(); ko(new Error('could not load the PDF tools')); };
     document.head.appendChild(el);
-  });
+  }));
 }
 
 /** Photos as data URIs through the API (Drive images can't be drawn into a canvas straight from the browser). */
@@ -262,10 +266,24 @@ async function rpPhotos(D) {
     if (id) byDrive[id] = pid;
   }
   RP.photoCache = RP.photoCache || {};
-  const need = Object.keys(byDrive).filter((id) => !(id in RP.photoCache));
-  if (need.length && !AUTH.demo) {
-    try { Object.assign(RP.photoCache, await callApi('photos', null, { ids: need })); } catch (err) { /* PDF without photos */ }
+  RP.photoWait = RP.photoWait || {}; // requests in flight: a click during the warm-up waits for it instead of asking again
+  let need = Object.keys(byDrive).filter((id) => !(id in RP.photoCache) && !RP.photoWait[id]);
+  // photos kept in this browser (Cache Storage) from earlier reports
+  if (need.length && window.caches) {
+    try {
+      const box = await caches.open(RP_PHOTO_CACHE);
+      await Promise.all(need.map(async (id) => { const hit = await box.match('/rp-photo/' + id); if (hit) RP.photoCache[id] = await hit.text(); }));
+      need = need.filter((id) => !(id in RP.photoCache));
+    } catch (err) { /* storage unavailable: ask the server */ }
   }
+  if (need.length && !AUTH.demo) {
+    const ask = callApi('photos', null, { ids: need }).then(async (got) => {
+      Object.assign(RP.photoCache, got);
+      try { const box = await caches.open(RP_PHOTO_CACHE); await Promise.all(Object.entries(got).map(([id, uri]) => box.put('/rp-photo/' + id, new Response(uri)))); } catch (err) { /* not kept */ }
+    }).catch(() => { /* PDF without photos */ }).finally(() => need.forEach((id) => { delete RP.photoWait[id]; }));
+    need.forEach((id) => { RP.photoWait[id] = ask; });
+  }
+  await Promise.all(Object.keys(byDrive).map((id) => RP.photoWait[id]).filter(Boolean));
   for (const [id, pid] of Object.entries(byDrive)) out[pid] = RP.photoCache[id] || '';
   return out;
 }
@@ -290,6 +308,7 @@ async function rpPrint() {
   try {
     await Promise.all(RP_JS.map(rpScript));
     const D = rpDoc(RP.data, RP.idx, RP.part);
+    btn.textContent = 'Loading photos…';
     const photos = await rpPhotos(D), dims = await rpImageSizes(photos);
     D.noPhotos = true; // the page picture is taken without them: a 21-px photo inside a picture gets blurred
     host = document.createElement('div');
@@ -302,7 +321,8 @@ async function rpPrint() {
     const pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'pt', format: [W, H], compress: true });
     for (let i = 0; i < pages.length; i++) {
       btn.textContent = `Preparing PDF… ${i + 1}/${pages.length}`;
-      const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', logging: false });
+      // ignoreElements: only the report is copied, not every page of the site already open
+      const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', logging: false, ignoreElements: (el) => el.parentElement === document.body && el !== host });
       if (i) pdf.addPage([W, H], 'landscape');
       pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, W, H, undefined, 'FAST');
       // photos: the original Drive image, clipped to its circle (cover, top) — sharp at any zoom, embedded once per player
