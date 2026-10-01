@@ -1066,3 +1066,28 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .rp-render { position: fixed; left: -20000px; top: 0; width: 1290px; display: flex; flex-direction: column; }
 .rp-render .rp-page { box-shadow: none; border-radius: 0; }
 .rp-face { flex: none; width: 21px; height: 21px; border-radius: 50%; background: #eef0f4 center top / cover no-repeat; margin-right: 8px; }
+
+/* Reports: drills summary — one ranking per drill */
+.rp-lbs { flex: 1; display: grid; gap: 22px; min-height: 0; align-items: start; }
+.rp-lbc { display: flex; flex-direction: column; min-width: 0; }
+.rp-lbt { display: flex; align-items: baseline; gap: 8px; border-bottom: 2px solid var(--rp-band); padding-bottom: 6px; margin-bottom: 4px; min-height: 42px; } /* 2-line drill names keep the cards aligned */
+.rp-lbt b { font-size: 13px; font-weight: 800; color: var(--rp-navy); }
+.rp-lbt span { font-size: 11px; font-weight: 700; color: var(--rp-brick); white-space: nowrap; }
+.rp-lbt em { margin-left: auto; font-size: 10px; color: var(--rp-muted); font-weight: 600; white-space: nowrap; }
+.rp-lbh, .rp-lbr { display: grid; grid-template-columns: 20px minmax(0, 1fr) minmax(0, 1.1fr) 34px; gap: 6px; align-items: center; }
+.rp-lbh { font-size: 9.5px; font-weight: 700; color: var(--rp-brick); padding: 2px 0 4px; }
+.rp-lbh span:last-child { text-align: center; }
+.rp-lbr { border-bottom: 1px solid var(--rp-rule); font-size: 12px; }
+.rp-lbn { justify-self: center; width: 18px; height: 18px; line-height: 18px; border-radius: 50%; text-align: center; font-size: 10.5px; font-weight: 800; color: var(--rp-muted); }
+.rp-lbn.r1, .rp-lbn.r2, .rp-lbn.r3 { color: #fff; font-size: 10px; }
+.rp-lbn.r1 { background: #d4a20b; } .rp-lbn.r2 { background: #9aa3b5; } .rp-lbn.r3 { background: #c07a3e; }
+.rp-lbnm { display: flex; align-items: center; font-weight: 700; color: var(--rp-navy); white-space: nowrap; overflow: hidden; font-size: 11.5px; }
+.rp-lbnm .rp-face { width: 19px; height: 19px; margin-right: 6px; }
+.rp-lbbar { display: flex; align-items: center; gap: 5px; height: 100%; }
+.rp-lbbar b { flex: 0 0 24px; text-align: right; font-weight: 700; }
+.rp-lbbar .rp-bar { height: 10px; }
+.rp-bar i.rp-avgl { top: -8px; bottom: -8px; width: 0; border-radius: 0; border-left: 1.5px dashed var(--rp-navy); }
+.rp-ad { text-align: center; font-weight: 700; font-size: 11.5px; color: #1f6b10; background: #e7f8dc; border-radius: 3px; padding: 2px 0; }
+.rp-ad.z { color: #9aa0ad; background: #f3f4f8; }
+.rp-lbavg { margin-top: 7px; font-size: 10px; color: var(--rp-muted); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.rp-lbavg b { display: inline-block; width: 16px; border-top: 1.5px dashed var(--rp-navy); }
