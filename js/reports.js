@@ -265,6 +265,12 @@ async function rpPhotos(D) {
     const id = url && (url.match(/[?&]id=([\w-]+)/) || url.match(/\/d\/([\w-]+)/) || [])[1];
     if (id) byDrive[id] = pid;
   }
+  // usual case: the photos are already in this browser (loadPlayerPhotos), as data URIs
+  await loadPlayerPhotos();
+  for (const r of D.fullSession) { const pid = D.pids[r.name], u = typeof PHOTO_DATA !== 'undefined' && PHOTO_DATA[pid]; if (u && u.startsWith('data:')) out[pid] = u; }
+  for (const [id, pid] of Object.entries(byDrive)) if (out[pid]) delete byDrive[id];
+  if (!Object.keys(byDrive).length) return out;
+  // fallback (photo not in the payload yet): through the API, one by one
   RP.photoCache = RP.photoCache || {};
   RP.photoWait = RP.photoWait || {}; // requests in flight: a click during the warm-up waits for it instead of asking again
   let need = Object.keys(byDrive).filter((id) => !(id in RP.photoCache) && !RP.photoWait[id]);

@@ -50,6 +50,54 @@ async function callApi(action, mockData, extra = null) {
 }
 function fetchWellness() { return callApi('wellness', MOCK_WELLNESS); }
 
+/**
+ * Player photos: downloaded once per device from the private `player_photos` payload and kept in Cache Storage, then
+ * used by every page (wellness, sessions, reports, PDF) instead of the Drive links. Keyed on photo-data.js, so a new or
+ * replaced photo there makes each device fetch them again. Until they are in, the Drive links keep working.
+ */
+const PHOTOS_STORE = 'player-photos';
+let PHOTOS_READY = null;
+const PHOTO_DATA_SRC = typeof PHOTO_DATA !== 'undefined' ? { ...PHOTO_DATA } : {}; // the Drive links, before photos are swapped in
+function photosKey() {
+  const txt = JSON.stringify(PHOTO_DATA_SRC);
+  let h = 0;
+  for (let i = 0; i < txt.length; i++) h = (h * 31 + txt.charCodeAt(i)) | 0;
+  return '/photos/' + (h >>> 0).toString(36);
+}
+function applyPhotos(map) {
+  if (typeof PHOTO_DATA === 'undefined' || !map) return;
+  const swap = {};
+  for (const [pid, uri] of Object.entries(map)) if (uri && PHOTO_DATA[pid]) { swap[PHOTO_DATA_SRC[pid]] = uri; PHOTO_DATA[pid] = uri; }
+  // photos already on screen (page drawn before they arrived): switch them too
+  document.querySelectorAll('img').forEach((im) => { const u = swap[im.getAttribute('src')]; if (u) im.src = u; });
+  document.querySelectorAll('.rp-face[style]').forEach((el) => {
+    const m = el.style.backgroundImage.match(/url\(["']?(.*?)["']?\)/), u = m && swap[m[1]];
+    if (u) el.style.backgroundImage = `url('${u}')`;
+  });
+}
+function loadPlayerPhotos() {
+  if (PHOTOS_READY) return PHOTOS_READY;
+  PHOTOS_READY = (async () => {
+    const key = photosKey();
+    let box = null;
+    try { box = window.caches ? await caches.open(PHOTOS_STORE) : null; } catch (err) { /* private mode */ }
+    if (box) {
+      const hit = await box.match(key).catch(() => null);
+      if (hit) { applyPhotos(await hit.json()); return true; }
+    }
+    const data = await callApi('player_photos', null, {}); // {} = not copied into localStorage (too big for it)
+    applyPhotos(data.photos);
+    if (box) {
+      try {
+        for (const old of await box.keys()) await box.delete(old);
+        await box.put(key, new Response(JSON.stringify(data.photos), { headers: { 'Content-Type': 'application/json' } }));
+      } catch (err) { /* not kept: downloaded again next visit */ }
+    }
+    return true;
+  })().catch((err) => { PHOTOS_READY = null; return false; });
+  return PHOTOS_READY;
+}
+
 /** One network fetch per payload per page load, shared by every page that needs it. */
 const DATA_PROMISES = {};
 const DATA_MOCKS = { wellness: () => MOCK_WELLNESS, wellness_history: () => MOCK_WELLNESS_HISTORY };
