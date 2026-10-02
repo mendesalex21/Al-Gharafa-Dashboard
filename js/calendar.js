@@ -2,11 +2,12 @@
  * Calendar: season fixtures (sync/calendar.csv, transcribed from the club PDF) + staff edits made here
  * (match date confirmed, opponent, kick-off, venue, home / away, score, added / removed fixtures — saved in the
  * CalendarEdits sheet) merged with what actually happened (GPS: matches, sessions with MD tags and load, days off).
- * Page: next matches (cards) · month (crests on match days, team bars, MD tags) · season fixtures (scrolling list)
- * with the players unavailable today. Weeks run Sunday → Saturday; upcoming days show the MD tag planned from
+ * Page (one screen, no scrolling): next matches (compact cards) · Calendar / Games switch — Calendar = the month
+ * (crests on match days, team bars, MD tags; rows sized to the window), Games = the season fixtures with the players
+ * unavailable today and the microcycles. Weeks run Sunday → Saturday; upcoming days show the MD tag planned from
  * the next match.
  */
-const CAL = { data: null, month: null, showB: false, sheet: null, form: null, fx: 'all' };
+const CAL = { data: null, month: null, showB: false, sheet: null, form: null, fx: 'all', mode: 'month' };
 const FX_FILTERS = [['all', 'All'], ['QSL', 'QSL'], ['ACL Elite', 'ACL Elite'], ['cups', 'Cups'], ['Friendly', 'Friendlies']];
 const COMP_COLOR = {
   QSL: '#8e1b4f', 'Qatar Cup': '#ff9500', 'Amir Cup': '#e63322', 'ACL Elite': '#1d3fd8', 'QSL Cup': '#5b9bd5',
@@ -65,20 +66,24 @@ function cycleType(len) { return len == null ? null : len <= 4 ? 'short' : len <
 
 // ------------------------------------------------------------------ page
 function renderCalendar(opts) {
+  if (opts && opts.mode) CAL.mode = opts.mode === 'games' ? 'games' : 'month';
   const root = document.getElementById('view-calendar');
   root.innerHTML = `
-    ${pageHead('Season 2026/27', 'Calendar', 'ca-sub', `<button type="button" class="btn-light" id="ca-add">+ Add match</button>
+    ${pageHead('Season 2026/27', 'Calendar', 'ca-sub', `${segHtml('ca-mode', [['month', 'Calendar'], ['games', 'Games']], CAL.mode)}
+      <div class="stepper ca-step" id="ca-step"><button type="button" id="ca-prev" aria-label="Previous month">‹</button><span class="month-label" id="ca-month"></span><button type="button" id="ca-next-m" aria-label="Next month">›</button>
+        <button type="button" class="btn-light" id="ca-today">Today</button></div>
+      <button type="button" class="btn-light" id="ca-add">+ Add match</button>
       <label class="toggle"><input type="checkbox" id="ca-b"> B-team (QSL 2)</label>`)}
-    <div class="ca-sec" id="ca-next-h">Next matches</div><div class="ca-up" id="ca-next"></div>
-    <div class="ca-sec ca-month-h"><div class="stepper"><button type="button" id="ca-prev" aria-label="Previous month">‹</button><span class="month-label" id="ca-month"></span><button type="button" id="ca-next-m" aria-label="Next month">›</button></div>
-      <button type="button" class="btn-light" id="ca-today">Today</button></div>
-    <section class="panel cal-panel"><div class="cal2" id="ca-grid"></div></section>
-    <div class="legend-row" id="ca-legend"></div>
-    <div class="ca-sec">Season fixtures</div>
-    <div class="ca-below"><div class="fxb" id="ca-fx"></div><div id="ca-unav"></div></div>
-    <details class="panel ca-cycles"><summary class="panel-title small">Microcycles this season <span class="panel-note">days between consecutive matches</span></summary><div id="ca-cycles"></div></details>
+    <div class="ca-up" id="ca-next"></div>
+    <div id="ca-month-v">
+      <section class="panel cal-panel"><div class="cal2" id="ca-grid"></div></section>
+      <div class="legend-row ca-legend" id="ca-legend"></div>
+    </div>
+    <div id="ca-games-v" class="ca-below" hidden><div class="fxb" id="ca-fx"></div>
+      <div class="ca-side"><div id="ca-unav"></div><div class="news ca-cyc"><h4>Microcycles<small>days between matches</small></h4><div class="ca-cyc-l" id="ca-cycles"></div></div></div></div>
     <div class="sheet-backdrop" id="ca-sheet-bg" hidden></div>
     <aside class="sheet" id="ca-sheet" hidden aria-modal="true" role="dialog"></aside>`;
+  bindSeg('ca-mode', (v) => { CAL.mode = v; history.replaceState(null, '', '#calendar' + (v === 'games' ? '/games' : '')); drawCalendar(); });
   document.getElementById('ca-prev').onclick = () => { CAL.month = shiftMonth(CAL.month, -1); drawCalendar(); };
   document.getElementById('ca-next-m').onclick = () => { CAL.month = shiftMonth(CAL.month, 1); drawCalendar(); };
   document.getElementById('ca-today').onclick = () => { CAL.month = todayIso().slice(0, 7); drawCalendar(); };
@@ -146,31 +151,68 @@ function drawCalendar() {
   if (!d || document.getElementById('view-calendar').hidden) return;
   if (!CAL.month) CAL.month = todayIso().slice(0, 7);
   const nEdits = (d.edits || []).length;
-  document.getElementById('ca-sub').textContent = `Fixtures from the club calendar${nEdits ? ` + ${nEdits} staff edit${nEdits > 1 ? 's' : ''}` : ''} · sessions and matches from GPS up to ${fmtDay(d.as_of, { day: 'numeric', month: 'short' })} · tap a day or a match to edit it`;
+  document.getElementById('ca-sub').textContent = `GPS up to ${fmtDay(d.as_of, { day: 'numeric', month: 'short' })}${nEdits ? ` · ${nEdits} staff edit${nEdits > 1 ? 's' : ''}` : ''} · tap a day or a match to edit it`;
   const [y, m] = CAL.month.split('-').map(Number);
   document.getElementById('ca-month').textContent = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
   const events = applyCalendarEdits(d);
-  const today = todayIso();
+  const today = todayIso(), games = CAL.mode === 'games';
+  document.getElementById('ca-month-v').hidden = document.getElementById('ca-step').hidden = games;
+  document.getElementById('ca-games-v').hidden = !games;
   drawNextMatches(events, today);
-  drawMonth(events, today);
-  drawFixtures(events, today);
-  drawUnavailable();
-  document.getElementById('ca-cycles').innerHTML = d.cycles.length ? `<div class="list">${d.cycles.slice().reverse().map((c) => `<div class="li"><span class="tag">${c.type ? TYPE_LABEL[c.type] : 'Break'}</span><div><b>${c.length} days</b><small>${fmtDay(c.from, { day: 'numeric', month: 'short' })} → ${fmtDay(c.to, { day: 'numeric', month: 'short' })}</small></div></div>`).join('')}</div>` : emptyState('No completed microcycle yet.');
+  if (games) {
+    drawFixtures(events, today);
+    drawUnavailable();
+    document.getElementById('ca-cycles').innerHTML = d.cycles.length ? `<div class="list">${d.cycles.slice().reverse().map((c) => `<div class="li"><span class="tag">${c.type ? TYPE_LABEL[c.type] : 'Break'}</span><div><b>${c.length} days</b><small>${fmtDay(c.from, { day: 'numeric', month: 'short' })} → ${fmtDay(c.to, { day: 'numeric', month: 'short' })}</small></div></div>`).join('')}</div>` : emptyState('No completed microcycle yet.');
+    calFitGames();
+  } else drawMonth(events, today);
   if (CAL.sheet) drawDay();
 }
 
-/** The next four Al Gharafa matches, as cards. */
+/** The page fits the window: the weeks share what is left down to the bottom of the window (rows of 56–170 px) and
+ * the cells drop details as they get smaller (sz-m, sz-s). Measured again once the web font has loaded. */
+const CAL_BOTTOM = 18; // page padding under the last block
+function calFitMonth(weeks, again) {
+  const grid = document.getElementById('ca-grid'), legend = document.getElementById('ca-legend');
+  if (!grid || !grid.offsetParent) return;
+  const min = 56, max = 170;
+  const set = (x) => {
+    const h = Math.max(min, Math.min(max, Math.floor(x)));
+    grid.style.gridTemplateRows = `auto repeat(${weeks}, ${h}px)`;
+    grid.classList.toggle('sz-m', h < 124);
+    grid.classList.toggle('sz-s', h < 90);
+    return h;
+  };
+  let h = set(100);
+  for (let i = 0; i < 2; i++) {
+    const spare = window.innerHeight - CAL_BOTTOM - legend.getBoundingClientRect().bottom;
+    if (Math.abs(spare) < weeks) break;
+    h = set(h + spare / weeks);
+  }
+  if (!again && document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => calFitMonth(weeks, true));
+}
+/** Games: the fixtures list and the microcycles scroll inside the window instead of the page. */
+function calFitGames(again) {
+  const box = document.getElementById('ca-fxs'), side = document.getElementById('ca-cycles');
+  if (!box || !box.offsetParent) return;
+  box.style.maxHeight = side.style.maxHeight = '';
+  if (window.innerWidth <= 980) return; // stacked layout (iPad portrait, phone): the page scrolls
+  const room = (el, below) => Math.floor(window.innerHeight - CAL_BOTTOM - below - el.getBoundingClientRect().top);
+  box.style.maxHeight = Math.max(220, room(box, 10)) + 'px';
+  side.style.maxHeight = Math.max(120, room(side, 18)) + 'px';
+  if (!again && document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => calFitGames(true));
+}
+
+/** The next four Al Gharafa matches, as compact cards (crest, opponent, date, competition, venue). */
 function drawNextMatches(events, today) {
   const up = events.filter((e) => e.kind === 'match' && e.gharafa === 'yes' && !e.played_date && matchDate(e) >= today).slice(0, 4);
   const box = document.getElementById('ca-next');
-  document.getElementById('ca-next-h').hidden = box.hidden = !up.length;
+  box.hidden = !up.length;
   box.innerHTML = up.map((e, i) => {
     const dd = daysBetween(today, matchDate(e)), ha = matchHA(e), tbc = e.start !== (e.end || e.start) && !e.confirmed_date;
-    return `<button type="button" class="upc${i ? '' : ' first'}" data-ev="${e.id}" data-date="${matchDate(e)}">
-      <div class="t"><span>${fmtDay(matchDate(e), { weekday: 'short', day: '2-digit', month: '2-digit' })}${tbc ? ' · TBC' : ''} · <b>${dd === 0 ? 'today' : dd === 1 ? 'tomorrow' : `in ${dd} days`}</b></span>${compChip(e)}</div>
-      <div class="m">${crestHtml('Al Gharafa', 46)}<span>${escapeHtml(e.time || 'vs')}</span>${crestHtml(e.opponent, 46)}</div>
-      <h4>${escapeHtml(e.opponent || 'Opponent tbc')}</h4>
-      <div class="w">${ha ? `<span class="ha ha-${ha}">${ha}</span>` : ''}<span>${escapeHtml([e.round, venueShort(e.venue) || 'venue tbc'].filter(Boolean).join(' · '))}</span></div></button>`;
+    return `<button type="button" class="upc${i ? '' : ' first'}" data-ev="${e.id}" data-date="${matchDate(e)}">${crestHtml(e.opponent, 40)}
+      <div class="b"><div class="t"><h4>${escapeHtml(e.opponent || 'Opponent tbc')}</h4>${compChip(e)}</div>
+        <div class="s">${fmtDay(matchDate(e), { weekday: 'short', day: '2-digit', month: '2-digit' })}${tbc ? ' · TBC' : ''} · <b>${dd === 0 ? 'today' : dd === 1 ? 'tomorrow' : `in ${dd} days`}</b>${e.time ? ' · ' + escapeHtml(e.time) : ''}</div>
+        <div class="w">${ha ? `<span class="ha ha-${ha}">${ha}</span>` : ''}<span>${escapeHtml([e.round, venueShort(e.venue) || 'venue tbc'].filter(Boolean).join(' · '))}</span></div></div></button>`;
   }).join('');
   box.onclick = (ev) => { const c = ev.target.closest('[data-ev]'); if (c) openDay(c.dataset.date, { edit: c.dataset.ev }); };
 }
@@ -220,10 +262,13 @@ function drawMonth(events, today) {
     const ev = e.target.closest('[data-ev]'), c = e.target.closest('[data-date]');
     if (c) openDay(c.dataset.date, ev ? { edit: ev.dataset.ev } : {});
   };
-  const used = new Set(events.filter((e) => e.competition || e.kind === 'camp' || e.kind === 'international').map((e) => (e.kind === 'camp' ? 'Camp' : e.kind === 'international' ? 'International' : e.competition)));
-  document.getElementById('ca-legend').innerHTML = `<span class="lg-k"><b class="ctag match">MD</b>match</span><span class="lg-k"><b class="ctag train">MD-2</b>training</span><span class="lg-k"><b class="ctag plan">MD-3</b>planned</span><span class="lg-k"><b class="coff sm">Off</b>day off</span>`
-    + `<span class="lg-sep"></span>${Object.entries(Z_LABEL).map(([k, l]) => `<span><i style="background:${Z_COL[k]}"></i>${l}</span>`).join('')}<span class="muted">bars: team TD · HIT · Acc/Dec · sRPE — length = % of a match, colour = z vs the usual for that MD</span>`
-    + `<span class="lg-sep"></span>${Object.entries(COMP_COLOR).filter(([k]) => used.has(k)).map(([k, c]) => `<span><i style="background:${c}"></i>${k}</span>`).join('')}<span><i class="dashed"></i>window · date TBC</span>`;
+  const first = `${CAL.month}-01`, last = `${CAL.month}-${String(nDays).padStart(2, '0')}`;
+  const used = new Set(events.filter((e) => (e.competition || e.kind === 'camp' || e.kind === 'international') && e.start <= last && (e.end || e.start) >= first)
+    .map((e) => (e.kind === 'camp' ? 'Camp' : e.kind === 'international' ? 'International' : e.competition)));
+  document.getElementById('ca-legend').innerHTML = `<span class="lg-k"><b class="ctag match">MD</b>match</span><span class="lg-k"><b class="ctag train">MD-2</b>training</span><span class="lg-k"><b class="ctag plan">MD-3</b>planned</span>`
+    + `<span class="lg-sep"></span><span class="muted" title="Length = % of a match · colour = team z vs the usual for that MD">Bars TD · HIT · A/D · RPE:</span>${Object.entries(Z_LABEL).map(([k, l]) => `<span><i style="background:${Z_COL[k]}"></i>${l}</span>`).join('')}`
+    + `<span class="lg-sep"></span>${Object.entries(COMP_COLOR).filter(([k]) => used.has(k)).map(([k, c]) => `<span><i style="background:${c}"></i>${k}</span>`).join('')}`;
+  calFitMonth(Math.ceil((lead + nDays) / 7));
 }
 
 /** Season fixtures in a scrolling box, opened on the last results and the next match. */
@@ -247,7 +292,7 @@ function drawFixtures(events, today) {
   const box = document.getElementById('ca-fx');
   box.innerHTML = `<div class="fxb-h"><h3>Matches</h3><div class="chips">${FX_FILTERS.map(([k, l]) => `<button type="button" data-fx="${k}" class="${CAL.fx === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
     <div class="fxs" id="ca-fxs">${rows ? `<table class="fx-tbl"><tbody>${rows}</tbody></table>` : emptyState('No match for this filter.')}</div>`;
-  box.querySelectorAll('[data-fx]').forEach((b) => { b.onclick = () => { CAL.fx = b.dataset.fx; drawFixtures(applyCalendarEdits(CAL.data), todayIso()); }; });
+  box.querySelectorAll('[data-fx]').forEach((b) => { b.onclick = () => { CAL.fx = b.dataset.fx; drawFixtures(applyCalendarEdits(CAL.data), todayIso()); calFitGames(); }; });
   box.querySelector('#ca-fxs').onclick = (ev) => { const r = ev.target.closest('[data-ev]'); if (r) openDay(r.dataset.date, { edit: r.dataset.ev }); };
   const sc = box.querySelector('#ca-fxs'), nx = sc.querySelector('tr.nx');
   if (nx) sc.scrollTop = Math.max(0, nx.offsetTop - 44 - 2 * nx.offsetHeight); // the last results stay visible above the next match
@@ -266,6 +311,7 @@ function drawUnavailable() {
   el.innerHTML = `<div class="news"><h4>Unavailable<b>${active.length - out.length}/${active.length} available</b></h4>
     ${out.length ? out.map((p) => `<div><i style="background:${col[st[p.player_id].status]}"></i><b>${escapeHtml(p.display_name || p.player_id)}</b><span>${lab[st[p.player_id].status]}</span></div>`).join('') : '<p class="note">Everybody is available.</p>'}
     <p class="note">On ${fmtDay(sq.stats.as_of, { day: 'numeric', month: 'short' })} (last GPS data) · <a href="#roster" class="linkbtn">Squad ›</a></p></div>`;
+  if (CAL.mode === 'games') calFitGames();
 }
 
 // ------------------------------------------------------------------ day sheet (details + edit)

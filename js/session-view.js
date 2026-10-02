@@ -204,104 +204,61 @@ function svAttentionHtml(s) {
   </section>`;
 }
 
-// ------------------------------------------------------------------ session table (design: session_table_reference.html)
-/** Columns: key, label, default width (px), kind. Bars: colour from light to dark = low to high within the column. */
-const RT_COLS = [
-  { k: 'name', l: 'Player', w: 108, t: 'player' }, { k: 'min', l: 'Time', w: 40, t: 'time' }, { k: 'rpe', l: 'RPE', w: 44, t: 'rpe' },
-  { k: 'td', l: 'Total distance', w: 160, t: 'bar', lo: '#bfd8f9', hi: '#1a6fd8' }, { k: 'mpm', l: 'm/min', w: 48, t: 'mpm' },
-  { k: 'd15', l: '> 15 km/h', w: 140, t: 'bar', lo: '#f4e2aa', hi: '#c99700' }, { k: 'hit', l: '> 20 km/h', w: 140, t: 'bar', lo: '#f8cdbc', hi: '#d9582c' },
-  { k: 'spr', l: '> 25 km/h', w: 110, t: 'bar', lo: '#f5c6ce', hi: '#cc3553' }, { k: 'vmax', l: 'Max speed', w: 52, t: 'vmax' },
-  { k: 'vmax_pct', l: '% Vmax', w: 52, t: 'pct' }, { k: 'days_hsv', l: 'Days ≥90%', w: 50, t: 'days' }, { k: 'hit_n', l: 'Count >20', w: 54, t: 'count' },
-  { k: 'spr_n', l: 'Sprints', w: 54, t: 'sprints' }, { k: 'acc', l: 'Acc', w: 38, t: 'plain' }, { k: 'dec', l: 'Dec', w: 38, t: 'plain' },
-  { k: 'acc_dec', l: 'Acc + Dec', w: 116, t: 'bar', lo: '#bce8c9', hi: '#1a9c48' },
-];
-const RT_KEY = 'sessionTableCols_v2'; // v2: compact rows, wider Acc + Dec
-function rtWidths() {
-  try { const w = JSON.parse(localStorage.getItem(RT_KEY)); if (Array.isArray(w) && w.length === RT_COLS.length) return w; } catch (e) { /* storage off */ }
-  return RT_COLS.map((c) => c.w);
-}
-function rtApply(el, w) { el.style.setProperty('--rt-cols', w.map((v) => v + 'px').join(' ')); el.style.setProperty('--rt-min', `${w.reduce((a, b) => a + b, 0) + 4 * (w.length - 1) + 24}px`); }
-function rtMix(a, b, t) {
-  const h = (c, i) => parseInt(c.slice(1 + 2 * i, 3 + 2 * i), 16);
-  return '#' + [0, 1, 2].map((i) => Math.round(h(a, i) + (h(b, i) - h(a, i)) * t).toString(16).padStart(2, '0')).join('');
-}
+// ------------------------------------------------------------------ session table: the report's page design (Reports → PDF page 1) + distance > 25 km/h
+const SV_COLS = ['time', 'rpe', 'mpm', 'td', 'd15', 'd20', 'd25', 'vmax', 'pmax', 'days', 'sprints', 'accdec'];
 /** Players the team average is made of: full session only (matches: ≥ 60 min) — same rule as the build. */
 function rtCore(s) {
   const core = s.players.filter((p) => (s.kind === 'match' ? p.cat === 'm' && p.min >= 60 : p.cat === 't'));
   return core.length >= 3 ? core : s.players.filter((p) => p.min > 0);
 }
-function rtTableHtml(s) {
-  const players = svFlat(s), core = rtCore(s), full = s.minutes || Math.max(...players.map((p) => p.min || 0));
-  const avg = (k) => { const xs = core.map((p) => p[k]).filter((v) => v != null); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
-  const team = { min: s.minutes, rpe: avg('rpe'), mpm: s.team.mpm, vmax: s.team.vmax, vmax_pct: avg('vmax_pct'), days_hsv: avg('days_hsv'), hit_n: s.team.hit_n, spr_n: s.team.spr_n, acc: s.team.acc, dec: s.team.dec };
-  ['td', 'd15', 'hit', 'spr', 'acc_dec'].forEach((k) => { team[k] = s.team[k] != null ? s.team[k] : avg(k); });
-  const stat = {};
-  RT_COLS.filter((c) => c.t !== 'player').forEach((c) => {
-    const vals = players.map((p) => p[c.k]).filter((v) => v != null);
-    const cv = core.map((p) => p[c.k]).filter((v) => v != null);
-    const rank = players.filter((p) => p[c.k] > 0).sort((a, b) => b[c.k] - a[c.k]).slice(0, 3).map((p) => p.id);
-    const top3 = vals.slice().sort((a, b) => b - a).slice(0, 3);
-    stat[c.k] = { max: Math.max(1, ...vals), lo: cv.length ? Math.min(...cv) : 0, rank, top3min: top3.length ? top3[top3.length - 1] : Infinity };
-  });
-  const chip = (txt, cls = '') => `<div class="rt-c"><span class="rt-chip ${cls}">${txt}</span></div>`;
-  const cell = (c, p, isTeam) => {
-    const v = p[c.k], st = stat[c.k];
-    if (c.t === 'player') return isTeam ? '<div class="rt-p"><span>Team avg</span></div>' : `<div class="rt-p">${avatarHtml(p.id, playerName(p.id), 20)}<span title="${escapeHtml(playerName(p.id))}${p.cat === 't' || p.cat === 'm' ? '' : ' · ' + escapeHtml(p.type)}">${escapeHtml(playerName(p.id))}</span></div>`;
-    if (v == null) return chip('—', 'muted');
-    if (c.t === 'bar') {
-      const w = Math.max(0, Math.min(100, v / st.max * 100));
-      if (isTeam) return `<div class="rt-b"><div><span class="rt-v top">${fmtN(v)}</span></div><i><b style="width:${w.toFixed(1)}%;background:#b8b8be"></b></i></div>`;
-      const r = st.rank.indexOf(p.id), t = st.max > st.lo ? Math.max(0, Math.min(1, (v - st.lo) / (st.max - st.lo))) : 1;
-      return `<div class="rt-b"><div><span class="rt-v ${r >= 0 ? 'top' : ''}">${fmtN(v)}</span>${r >= 0 ? `<span class="rt-badge" style="background:${c.hi}">${r + 1}</span>` : ''}</div><i><b style="width:${w.toFixed(1)}%;background:${r === 0 ? c.hi : rtMix(c.lo, c.hi, t)}"></b></i></div>`;
+function svTableHtml(s) {
+  const full = s.minutes || Math.max(0, ...s.players.map((p) => p.min || 0));
+  const rows = s.players.filter((p) => p.min > 0).map((p) => ({ id: p.id, name: playerName(p.id), pos: posOf(p.id, TR.sessions.roster), type: p.type,
+    pro: s.kind === 'match' ? p.cat === 'm' : p.cat === 't', // did the team session: sets the grey "team max" track, as in the report
+    time: p.min, rpe: p.rpe, mpm: p.mpm, td: p.td, d15: p.d15, d20: p.hit, d25: p.spr, vmax: p.vmax, pmax: p.vmax_pct != null ? p.vmax_pct / 100 : null,
+    days: p.days_hsv, sprints: p.spr_n, accdec: p.acc_dec }));
+  const core = new Set(rtCore(s).map((p) => p.id));
+  const avg = (k) => { const xs = rows.filter((r) => core.has(r.id) && r[k] != null).map((r) => r[k]); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
+  const team = Object.fromEntries(SV_COLS.map((k) => [k, avg(k)]));
+  team.time = s.minutes;
+  const ref = rows.some((r) => r.pro) ? rows.filter((r) => r.pro) : rows;
+  const teamMax = (k) => Math.max(0, ...ref.map((r) => r[k] || 0));
+  const scaleMax = (k) => Math.max(teamMax(k), ...rows.map((r) => r[k] || 0));
+  const lo = (k) => Math.min(...rows.map((r) => r[k] ?? 0)), hi = (k) => Math.max(...rows.map((r) => r[k] ?? 0));
+  const t01 = (k, v) => (hi(k) > lo(k) ? ((v ?? 0) - lo(k)) / (hi(k) - lo(k)) : 0);
+  const tpl = '170px ' + SV_COLS.map((k) => RP_WIDTHS[k] || '44px').join(' ');
+  const fmt = (k, v) => (k === 'rpe' && v != null && !Number.isInteger(v) ? v.toFixed(1) : rpFmt(k, v));
+  const cell = (r, k, isTeam) => {
+    const v = r[k];
+    if (v == null) return '<div class="rp-c rp-txt"><span class="rp-v sv-na">–</span></div>';
+    if (RP_BARS.includes(k)) {
+      const m = scaleMax(k), trk = rpPct(teamMax(k), m), col = isTeam ? '#b8bcc8' : RP_COLORS[k];
+      if (k === 'vmax') return `<div class="rp-c"><div class="rp-bar rp-mid"><i class="rp-trk" style="width:${trk}"></i><i style="width:${rpPct(v, m)};background:${col}"></i><em>${fmt(k, v)}</em></div></div>`;
+      return `<div class="rp-c"><span class="rp-v">${fmt(k, isTeam ? Math.round(v) : v)}</span><div class="rp-bar"><i class="rp-trk" style="width:${trk}"></i><i style="width:${rpPct(v, m)};background:${col}"></i></div></div>`;
     }
-    switch (c.t) {
-      case 'time': return chip(fmtN(v), !isTeam && v < full * 0.9 ? 'partial' : '');
-      case 'rpe': return chip(fmtN(v, isTeam ? 1 : 0), v >= 9 ? 'red' : v >= 7 ? 'orange' : 'grey');
-      case 'mpm': return chip(fmtN(v), !isTeam && v >= st.top3min ? 'blue' : '');
-      case 'vmax': return chip(fmtN(v, 1));
-      case 'pct': return chip(`${fmtN(v)}%`, v >= 90 ? 'green' : '');
-      case 'days': return chip(fmtN(v), v >= 10 ? 'red' : 'muted');
-      case 'count': return chip(fmtN(v), !isTeam && v >= st.max * 0.9 ? 'yellow' : '');
-      case 'sprints': return chip(fmtN(v), !isTeam && v > 0 && v >= st.max * 0.75 ? 'pink' : '');
-      default: return chip(fmtN(v));
-    }
+    if (isTeam) return `<div class="rp-c rp-txt"><span class="rp-v">${k === 'pmax' ? fmt(k, v) : k === 'rpe' ? v.toFixed(1) : fmt(k, Math.round(v))}</span></div>`;
+    if (k === 'mpm') return `<div class="rp-c rp-chip"><span class="rp-v" style="background:rgb(${rpLerp([235, 244, 253], [110, 175, 240], t01(k, v))})">${fmt(k, v)}</span></div>`;
+    if (k === 'sprints') { const [bg, fg] = rpSprintColor(t01(k, v)); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${fmt(k, v)}</span></div>`; }
+    if (k === 'days') { const [bg, fg] = rpDaysColor(v); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${fmt(k, v)}</span></div>`; }
+    if (k === 'time' && r.pro && v < full * 0.9) return `<div class="rp-c rp-txt"><span class="rp-v sv-partial">${fmt(k, v)}</span></div>`;
+    return `<div class="rp-c rp-txt"><span class="rp-v">${fmt(k, v)}</span></div>`;
   };
-  const row = (p, isTeam) => `<div class="rt-row ${isTeam ? 'rt-team' : 'rt-pl'}" ${isTeam ? '' : `data-id="${p.id}"`}>${RT_COLS.map((c) => cell(c, p, isTeam)).join('')}</div>`;
-  const head = `<div class="rt-row rt-head">${RT_COLS.map((c, i) => `<div class="${c.t === 'player' ? 'l' : c.t === 'bar' ? 'bl' : ''} ${SV.sort === c.k || (!SV.sort && c.k === 'name') ? 'sorted' : ''}" data-k="${c.k}">${c.l}${SV.sort === c.k ? ' ↓' : ''}<span class="rz" data-i="${i}" title="Drag to resize · double-click to reset"><i></i></span></div>`).join('')}</div>`;
-  const body = SV.sort ? players.slice().sort((a, b) => (b[SV.sort] ?? -1) - (a[SV.sort] ?? -1)).map((p) => row(p)).join('')
-    : svGroups(s).map((g) => `<div class="rt-grp">${g.label} <span>${g.list.length}</span></div>${g.list.map((p) => row(p)).join('')}`).join('');
-  const leg = RT_COLS.filter((c) => c.t === 'bar').map((c) => `<span class="rt-grad" style="background:linear-gradient(90deg,${c.lo},${c.hi})"></span>`).join('');
-  return `<div class="rt-wrap"><div class="rt" id="rt">${head}${row(team, true)}${body}</div></div>
-    <div class="rt-leg"><span class="rt-leg-g">${leg}<span>Lighter → darker = lower → higher (within each column)</span></span><span><span class="rt-badge" style="background:var(--ink)">1</span> Top 3 of the column</span><span><b class="rt-or">Orange minutes</b> = partial session</span><span>% Vmax green ≥ 90%</span><span>Team avg = full-session players only</span><span><i class="rt-lg-rz"></i>Drag column edges to resize</span></div>`;
+  const face = (id) => { const ph = typeof PHOTO_DATA !== 'undefined' && PHOTO_DATA[id]; return `<span class="rp-face"${ph ? ` style="background-image:url('${ph}')"` : ''}></span>`; };
+  const row = (r) => `<div class="rp-tr rp-row sv-r" data-id="${escapeHtml(r.id)}" style="grid-template-columns:${tpl}"${r.pro ? '' : ` title="${escapeHtml(r.type || '')}"`}><span class="rp-nm">${face(r.id)}<b>${escapeHtml(r.name)}</b>${r.pro ? '' : '<small class="sv-ind">indiv.</small>'}</span>${SV_COLS.map((k) => cell(r, k)).join('')}</div>`;
+  const head = `<div class="rp-tr rp-th sv-th" style="grid-template-columns:${tpl}"><span data-k="name" class="${SV.sort ? '' : 'on'}">Players</span>${SV_COLS.map((k) => `<span data-k="${k}" class="${SV.sort === k ? 'on' : ''}">${RP_LABELS[k]}${SV.sort === k ? ' ↓' : ''}</span>`).join('')}</div>`;
+  const teamRow = `<div class="rp-tr rp-row sv-team" style="grid-template-columns:${tpl}"><span class="rp-nm"><b>Team avg</b></span>${SV_COLS.map((k) => cell(team, k, true)).join('')}</div>`;
+  let body;
+  if (SV.sort && SV_COLS.includes(SV.sort)) body = rows.slice().sort((a, b) => (b[SV.sort] ?? -1) - (a[SV.sort] ?? -1) || a.name.localeCompare(b.name)).map(row).join('');
+  else {
+    const grp = (r) => (POS_ORDER.includes(r.pos) ? r.pos : '—');
+    body = [...POS_ORDER, '—'].filter((g) => rows.some((r) => grp(r) === g)).map((g) => `<div class="rp-grp">${g === '—' ? '' : g}<small>${POS_LABEL[g] || 'Other'}</small></div>`
+      + rows.filter((r) => grp(r) === g).sort((a, b) => a.name.localeCompare(b.name)).map(row).join('')).join('');
+  }
+  return `<div class="sv-rp-wrap"><div class="rp sv-rp" id="sv-tbl"><div class="rp-tbl">${head}${teamRow}${body}</div></div></div>
+    <div class="rt-leg"><span><i class="sv-lg-b" style="background:#6fb0ee"></i>player value</span><span><i class="sv-lg-b sv-lg-t"></i>team max (players of the team session)</span><span><b class="rt-or">Orange time</b> = partial session</span><span>Days = since his last run ≥ 90 % of his max speed</span><span>Team avg = full-session players only</span></div>`;
 }
-/** Column resizing (mouse, pen or finger), widths kept in this browser; header click sorts. */
-function rtBind(s, root) {
-  const el = root.querySelector('#rt');
-  if (!el) return;
-  let w = rtWidths();
-  rtApply(el, w);
-  let dragged = false;
-  el.querySelectorAll('.rz').forEach((h) => {
-    const i = Number(h.dataset.i);
-    h.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); e.stopPropagation();
-      const x0 = e.clientX, w0 = w[i];
-      dragged = false;
-      h.classList.add('on'); document.body.classList.add('rt-resizing');
-      const mv = (ev) => { dragged = true; w[i] = Math.max(34, Math.round(w0 + ev.clientX - x0)); rtApply(el, w); };
-      const up = () => {
-        document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up);
-        h.classList.remove('on'); document.body.classList.remove('rt-resizing');
-        try { localStorage.setItem(RT_KEY, JSON.stringify(w)); } catch (err) { /* storage off */ }
-        setTimeout(() => { dragged = false; }, 0);
-      };
-      document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
-    });
-    h.addEventListener('click', (e) => e.stopPropagation());
-    h.addEventListener('dblclick', (e) => { e.stopPropagation(); w[i] = RT_COLS[i].w; rtApply(el, w); try { localStorage.setItem(RT_KEY, JSON.stringify(w)); } catch (err) { /* storage off */ } });
-  });
-  el.querySelectorAll('.rt-head > [data-k]').forEach((hd) => hd.addEventListener('click', () => {
-    if (dragged) return;
+function svBindTable(s, root) {
+  root.querySelectorAll('.sv-th [data-k]').forEach((hd) => hd.addEventListener('click', () => {
     SV.sort = hd.dataset.k === 'name' ? null : hd.dataset.k;
     svDrawIndividual(s);
   }));
@@ -345,7 +302,7 @@ function svRankHtml(s) {
 function svIndividualHtml(s) {
   return `<section class="panel sv-bleed" id="sv-ind">
     <div class="panel-head"><h2 class="panel-title small">Individual ${s.kind === 'match' ? 'match' : 'training'} · full session</h2>${segHtml('sv-view', [['table', 'Table'], ['rank', 'Rankings']], SV.view)}</div>
-    ${SV.view === 'table' ? rtTableHtml(s) : svRankHtml(s)}
+    ${SV.view === 'table' ? svTableHtml(s) : svRankHtml(s)}
     ${s.absent.length ? `<p class="panel-foot"><b>Not in the session:</b> ${s.absent.map((a) => `${escapeHtml(playerName(a.id))} <span class="muted">(${escapeHtml(a.type)})</span>`).join(', ')}</p>` : ''}
     <p class="panel-foot">${SV.view === 'table' ? 'Click a column header to sort (Player = back to positions) · click a player for his full session.' : 'Each panel ranks every player · colour = z vs his usual for this day · tick = his usual · dashed = team average · click a player for his full session.'}</p>
   </section>`;
@@ -359,7 +316,7 @@ function svDrawIndividual(s) {
 function svBindIndividual(s) {
   const el = document.getElementById('sv-ind');
   bindSeg('sv-view', (v) => { SV.view = v; svDrawIndividual(s); });
-  if (SV.view === 'table') rtBind(s, el);
+  if (SV.view === 'table') svBindTable(s, el);
   else {
     bindSeg('sv-td', (v) => { SV.td = v; svDrawIndividual(s); });
     bindSeg('sv-hi', (v) => { SV.hi = v; svDrawIndividual(s); });

@@ -170,7 +170,8 @@ function roPositionsHtml(ps) {
   const avail = ps.filter((p) => !roOut(p)).length;
   const tops = RO_COLS.map(([pos, lab]) => {
     const g = ps.filter((p) => p.position === pos), av = g.filter((p) => !roOut(p)).length;
-    return `<div class="ro-pc"><div class="l">${lab}<b>${av}<small>/${g.length}</small></b></div><div class="ro-dots">${g.map((p) => `<i class="${roOut(p) ? 'o' : ''}"></i>`).join('')}</div></div>`;
+    // available first, unavailable (grey) at the end — as in the columns below
+    return `<div class="ro-pc"><div class="l">${lab}<b>${av}<small>/${g.length}</small></b></div><div class="ro-dots">${'<i></i>'.repeat(av)}${'<i class="o"></i>'.repeat(g.length - av)}</div></div>`;
   }).join('');
   const chip = (p) => `<div class="ro-chip${roOut(p) ? ' out' : ''}" data-pid="${escapeHtml(p.id)}" style="--ring:${roOut(p) ? RO_STATUS[p.avail][1] : 'transparent'}">${roPhoto(p.id, 30)}<span><b>${escapeHtml(p.name)}</b><small>${roOut(p) ? RO_STATUS[p.avail][0] : `${p.shirt_no ? '#' + p.shirt_no + ' · ' : ''}${p.s.min || 0} min`}</small></span></div>`;
   const cols = RO_COLS.map(([pos]) => {

@@ -216,7 +216,7 @@ function drawPlayerLoad(opts) {
       <div class="tile"><div class="tile-label">Monotony · strain</div><div class="tile-value">${p.monotony == null ? '—' : p.monotony.toFixed(2)}<small> · ${fmtN(p.strain)}</small></div>
         <div class="tile-sub">sRPE, last 7 days (Foster) · flag ≥ 2.0</div></div>
       <div class="tile"><div class="tile-label">High-speed exposure</div><div class="tile-value">${p.days_hsv == null ? '—' : p.days_hsv}<small> days</small></div>
-        <div class="tile-sub">since ≥90% of Vmax · Vmax ${fmtN(p.vmax_ref, 1)} km/h (180 d)</div></div>
+        <div class="tile-sub">since ≥90% of his max speed · max ${fmtN(p.vmax_ref, 1)} km/h (since Jul 2023)</div></div>
       <div class="tile"><div class="tile-label">Last 28 days</div><div class="tile-value">${p.sessions_28}<small> sessions · </small>${p.matches_28}<small> matches</small></div>
         <div class="tile-sub">${fmtN(p.minutes_28)} match min · ${p.injury_days_season} injury/rehab days this season</div></div>
       <div class="tile"><div class="tile-label">Wellness today</div><div class="tile-value">${w && w.score != null ? `<span class="chip-v ${w.status}">${w.score}%</span>` : '—'}</div>
