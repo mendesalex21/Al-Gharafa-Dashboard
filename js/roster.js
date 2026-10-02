@@ -20,7 +20,7 @@ const RO_COUNTRIES = {
   Netherlands: 'NL', Belgium: 'BE', England: 'ENG', Scotland: 'SCO', Wales: 'WAL', Ireland: 'IE', Croatia: 'HR', Serbia: 'RS',
   Romania: 'RO', Poland: 'PL', Turkey: 'TR', Greece: 'GR', Iceland: 'IS', Norway: 'NO', Sweden: 'SE', Denmark: 'DK',
   Switzerland: 'CH', Austria: 'AT', Ukraine: 'UA', Brazil: 'BR', Argentina: 'AR', Uruguay: 'UY', Colombia: 'CO', Chile: 'CL',
-  Paraguay: 'PY', Venezuela: 'VE', Mexico: 'MX', 'United States': 'US', Canada: 'CA', Japan: 'JP', 'South Korea': 'KR',
+  Paraguay: 'PY', Venezuela: 'VE', Mexico: 'MX', 'United States': 'US', Canada: 'CA', Jamaica: 'JM', Japan: 'JP', 'South Korea': 'KR',
   China: 'CN', Australia: 'AU', Indonesia: 'ID', Uzbekistan: 'UZ',
 };
 function roStar(cx, cy, r, fill) {
@@ -54,6 +54,7 @@ const RO_FLAGS = {
   AR: () => roH3('#74acdf', '#fff', '#74acdf') + '<circle cx="15" cy="10" r="1.8" fill="#f6b40e"/>',
   BR: () => '<rect width="30" height="20" fill="#009c3b"/><path d="M15 3L27 10L15 17L3 10Z" fill="#ffdf00"/><circle cx="15" cy="10" r="3.6" fill="#002776"/>',
   JP: () => '<rect width="30" height="20" fill="#fff"/><circle cx="15" cy="10" r="5" fill="#bc002d"/>',
+  JM: () => '<rect width="30" height="20" fill="#009b3a"/><path d="M0 0L15 10L0 20ZM30 0L15 10L30 20Z" fill="#000"/><path d="M0 0L30 20M30 0L0 20" stroke="#fed100" stroke-width="3"/>',
 };
 function flagHtml(country) {
   if (!country) return '';

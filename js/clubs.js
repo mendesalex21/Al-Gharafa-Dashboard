@@ -3,9 +3,11 @@
  * initials badge for clubs without one yet. A new logo: add the PNG there and its slug below.
  */
 const CLUB_LOGOS = new Set(['al-ahli', 'al-ahli-saudi', 'al-arabi', 'al-duhail', 'al-gharafa', 'al-hilal', 'al-ittihad', 'al-nassr',
-  'al-rayyan', 'al-sadd', 'al-sailiya', 'al-shahania', 'al-shamal', 'al-wakrah', 'lusail', 'qatar-sc', 'umm-salal']);
+  'al-qadsiah', 'al-rayyan', 'al-sadd', 'al-sailiya', 'al-shahania', 'al-shamal', 'al-wakrah', 'esteghlal', 'lusail', 'mesaimer',
+  'qatar-sc', 'sharjah', 'tractor', 'umm-salal']);
 const CLUB_ALIAS = { 'al-wakra': 'al-wakrah', 'al-shahaniya': 'al-shahania', 'qatar': 'qatar-sc', 'qatar-sports-club': 'qatar-sc',
-  'al-gharafa-sc': 'al-gharafa', 'al-sadd-sc': 'al-sadd', 'al-ahli-sc': 'al-ahli', 'al-ahli-jeddah': 'al-ahli-saudi', 'ittihad': 'al-ittihad', 'al-ettifaq': 'al-ettifaq' };
+  'al-gharafa-sc': 'al-gharafa', 'al-sadd-sc': 'al-sadd', 'al-ahli-sc': 'al-ahli', 'al-ahli-jeddah': 'al-ahli-saudi', 'ittihad': 'al-ittihad', 'mesaimeer': 'mesaimer', 'al-qadisiyah': 'al-qadsiah',
+  'al-qadsia': 'al-qadsiah', 'esteghlal-fc': 'esteghlal', 'tractor-sc': 'tractor', 'sharjah-fc': 'sharjah', 'al-sharjah': 'sharjah' };
 
 function clubSlug(name) {
   const s = String(name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
