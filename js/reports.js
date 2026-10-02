@@ -2,15 +2,17 @@
  * Reports — the daily training report (Claude Design handoff "2a", same look as the PDF sent to the group).
  * Pages (1290 × 790, landscape): full-session table · TD & >20 km/h charts · Acc+Dec & sprints charts ·
  * total week load · drills summary (rankings by m/min, 4 drills a page). "Download PDF" builds the PDF in the browser.
- * Data: the `reports` payload (sync/build.py → build_reports); week load and % top-3 game avg are derived here.
+ * Players / Staff: the staff version (reports-staff.js) adds RPE, z vs the usual MD, A:C and the microcycle pages.
+ * Data: the `reports` payload (sync/build.py → build_reports); week load and % top-3 game avg are derived here;
+ * the staff pages also read the `staff_report` payload (loaded the first time "Staff" is chosen).
  */
-const RP = { data: null, idx: -1, part: 'all', wanted: null };
+const RP = { data: null, idx: -1, part: 'all', wanted: null, version: 'players', staff: null };
 const RP_W = 1290;
 const RP_LOGO = 'img/logo.png';
 
 const RP_COLORS = { td: '#6fb0ee', d15: '#e3c85e', d20: '#ea8a63', vmax: '#c4c7cf', sprints: '#e98b96', accdec: '#6cd13c' };
-const RP_LABELS = { time: 'Time', min: 'Min', mpm: 'm/min', td: 'TOTAL DISTANCE', d15: 'DIST > 15km/h', d20: 'DIST > 20km/h', vmax: 'MAX SPEED', pmax: '% Max Speed', days: 'Days', sprints: 'Sprints', accdec: 'High Acc+Dec' };
-const RP_WIDTHS = { td: 'minmax(0,2.3fr)', d15: 'minmax(0,1.7fr)', d20: 'minmax(0,1.15fr)', vmax: 'minmax(0,1.3fr)', accdec: 'minmax(0,1fr)', pmax: '54px', mpm: '48px', sprints: '52px', time: '36px', min: '40px', days: '44px' };
+const RP_LABELS = { time: 'Time', min: 'Min', rpe: 'RPE', mpm: 'm/min', td: 'TOTAL DISTANCE', d15: 'DIST > 15km/h', d20: 'DIST > 20km/h', vmax: 'MAX SPEED', pmax: '% Max Speed', days: 'Days', sprints: 'Sprints', accdec: 'High Acc+Dec' };
+const RP_WIDTHS = { td: 'minmax(0,2.3fr)', d15: 'minmax(0,1.7fr)', d20: 'minmax(0,1.15fr)', vmax: 'minmax(0,1.3fr)', accdec: 'minmax(0,1fr)', pmax: '54px', mpm: '48px', sprints: '52px', time: '36px', min: '40px', days: '44px', rpe: '36px' };
 const RP_BARS = ['td', 'd15', 'd20', 'vmax', 'accdec'];
 const RP_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -89,7 +91,10 @@ function rpFace(D, name) {
   return `<span class="rp-face" data-pid="${rpEsc(pid || '')}"${photo ? ` style="background-image:url('${photo}')"` : ''}></span>`;
 }
 
-function rpTable(D, rows, cols, fixed = {}) {
+const RP_TABLE_H = 634; // page height left for a table under the header (790 − padding − header − legend)
+
+/** `budget`: px available for the table — a big squad (22–25 players) gets lower rows so the page still holds everyone. */
+function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H) {
   // grey track = max of the players who did the typical team session (ProTraining / game): an individual session
   // (e.g. extra running) must not shrink everyone else's bars — his own bar is then capped at 100 %
   const ref = rows.some((r) => r.pro) ? rows.filter((r) => r.pro) : rows;
@@ -99,7 +104,7 @@ function rpTable(D, rows, cols, fixed = {}) {
   const lo = (k) => Math.min(...rows.map((r) => r[k] ?? 0)), hi = (k) => Math.max(...rows.map((r) => r[k] ?? 0));
   const t01 = (k, v) => hi(k) > lo(k) ? ((v ?? 0) - lo(k)) / (hi(k) - lo(k)) : 0;
   const tpl = '150px ' + cols.map((k) => RP_WIDTHS[k] || '44px').join(' ');
-  const rowH = rows.length > 17 ? 23 : 25;
+  const rowH = rpRowH(D, rows, budget - 32, rows.length > 17 ? 23 : 25);
   const cell = (r, k) => {
     const v = fixed[k] ?? r[k];
     if (RP_BARS.includes(k)) {
@@ -112,7 +117,7 @@ function rpTable(D, rows, cols, fixed = {}) {
     if (k === 'days') { const [bg, fg] = rpDaysColor(v); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${rpFmt(k, v)}</span></div>`; }
     return `<div class="rp-c rp-txt"><span class="rp-v">${rpFmt(k, v)}</span></div>`;
   };
-  let html = `<div class="rp-tbl"><div class="rp-tr rp-th" style="grid-template-columns:${tpl}"><span>Players</span>${cols.map((k) => `<span>${RP_LABELS[k]}</span>`).join('')}</div>`;
+  let html = `<div class="rp-tbl${rowH < 21 ? ' rp-tight' : ''}"><div class="rp-tr rp-th" style="grid-template-columns:${tpl}"><span>Players</span>${cols.map((k) => `<span>${RP_LABELS[k]}</span>`).join('')}</div>`;
   for (const p of D.positions.order) {
     const g = rows.filter((r) => D.players[r.name] === p).sort((a, b) => a.name.localeCompare(b.name));
     if (!g.length) continue;
@@ -121,6 +126,12 @@ function rpTable(D, rows, cols, fixed = {}) {
   }
   return html + `</div>
   <div class="rp-legend"><span><b style="background:#6fb0ee"></b>player value</span><span><b style="background:#e6e8ee"></b>team max</span></div>`;
+}
+
+/** Row height for a player table grouped by position: `space` px for the rows and group bands, at most `max`. */
+function rpRowH(D, rows, space, max) {
+  const groups = D.positions.order.filter((p) => rows.some((r) => D.players[r.name] === p)).length;
+  return Math.max(17, Math.min(max, Math.floor((space - groups * 26) / Math.max(1, rows.length))));
 }
 
 function rpChart(D, key, title, legend, gmKey) {
@@ -188,9 +199,10 @@ function rpDrillBoards(D, cols) {
 // ---------------------------------------------------------------- page
 function renderReports(opts) {
   if (opts && opts.date) RP.wanted = opts.date;
+  if (opts && opts.version) RP.version = opts.version === 'staff' ? 'staff' : 'players';
   const root = document.getElementById('view-reports');
   root.innerHTML = `
-    ${pageHead('Daily report', 'Reports', 'rp-sub', `<div class="stepper"><button type="button" id="rp-prev" aria-label="Previous session">‹</button>
+    ${pageHead('Daily report', 'Reports', 'rp-sub', `${segHtml('rp-ver', [['players', 'Players'], ['staff', 'Staff']], RP.version)}<div class="stepper"><button type="button" id="rp-prev" aria-label="Previous session">‹</button>
         <select class="select" id="rp-pick" aria-label="Session"></select><button type="button" id="rp-next" aria-label="Next session">›</button></div>
       <button type="button" class="btn-primary" id="rp-pdf" disabled>Download PDF</button>`)}
     <div class="rp-preview" id="rp-preview"><div class="panel"><div class="empty">Loading…</div></div></div>`;
@@ -199,6 +211,7 @@ function renderReports(opts) {
   document.getElementById('rp-next').onclick = () => step(1);
   document.getElementById('rp-pick').onchange = (e) => { const [i, part] = e.target.value.split('|'); rpGo(Number(i), part); };
   document.getElementById('rp-pdf').onclick = rpPrint;
+  bindSeg('rp-ver', (v) => { RP.version = v; rpHash(); drawReports(); });
   withData('reports', (d) => {
     RP.data = d;
     const list = d.sessions || [];
@@ -227,9 +240,27 @@ function rpOption(s, part = 'all') {
 function rpGo(i, part = 'all') {
   if (!RP.data || i < 0 || i >= RP.data.sessions.length) return;
   RP.idx = i; RP.part = RP.data.sessions[i].parts ? part : 'all'; RP.wanted = null;
-  history.replaceState(null, '', '#reports/' + RP.data.sessions[i].date);
+  rpHash();
   drawReports();
 }
+
+function rpHash() {
+  const s = RP.data && RP.data.sessions[RP.idx];
+  if (s) history.replaceState(null, '', '#reports/' + s.date + (RP.version === 'staff' ? '/staff' : ''));
+}
+
+/** Staff version of this report: its pages, or why there is none (match days and B-team games: later). */
+function rpStaffState(D) {
+  if (!RP.staff) return { wait: true };
+  if (RP.part === 'b' || !RP.staff.days[D.session.date]) {
+    const s = RP.data.sessions[RP.idx];
+    return { msg: s.type === 'match' || RP.part === 'b' ? 'The staff version of match reports is coming later — the Players version is ready.'
+      : 'No staff version for this session (no usual reference for this day yet).' };
+  }
+  return { html: rpStaffPages(D, RP.staff) };
+}
+
+function rpBuild(D) { return RP.version === 'staff' ? rpStaffState(D).html || '' : rpPages(D); }
 
 function drawReports() {
   const box = document.getElementById('rp-preview');
@@ -241,10 +272,30 @@ function drawReports() {
   const k = rpOptIndex();
   document.getElementById('rp-prev').disabled = k <= 0;
   document.getElementById('rp-next').disabled = k < 0 || k >= RP.opts.length - 1;
+  const drillPages = Math.ceil(rpDrillColumns(D.drills.filter((d) => d.rows.length)).length / 4);
+  let html, n;
+  if (RP.version === 'staff') {
+    const st = rpStaffState(D);
+    if (st.wait) {
+      box.innerHTML = '<div class="panel"><div class="empty">Loading the staff data…</div></div>';
+      document.getElementById('rp-pdf').disabled = true;
+      withData('staff_report', (d) => { RP.staff = d; if (RP.version === 'staff') drawReports(); },
+        (err) => { if (RP.version === 'staff') box.innerHTML = loadError(err); });
+      return;
+    }
+    if (st.msg) {
+      box.innerHTML = `<div class="panel rp-msg">${emptyState(st.msg)}</div>`;
+      document.getElementById('rp-pdf').disabled = true;
+      document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel}${D.session.part ? ' · ' + D.session.part : ''} · Staff`;
+      return;
+    }
+    html = st.html; n = 6 + drillPages;
+  } else {
+    html = rpPages(D); n = 3 + (D.weekLoad.rows.length ? 1 : 0) + drillPages;
+  }
   document.getElementById('rp-pdf').disabled = false;
-  const n = 3 + (D.weekLoad.rows.length ? 1 : 0) + Math.ceil(rpDrillColumns(D.drills.filter((d) => d.rows.length)).length / 4);
-  document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel}${D.session.part ? ' · ' + D.session.part : ''} · ${n} pages · ${D.fullSession.length} players`;
-  box.innerHTML = `<div class="rp rp-doc">${rpPages(D)}</div>`;
+  document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel}${D.session.part ? ' · ' + D.session.part : ''}${RP.version === 'staff' ? ' · Staff' : ''} · ${n} pages · ${D.fullSession.length} players`;
+  box.innerHTML = `<div class="rp rp-doc">${html}</div>`;
   rpFit();
   // warm up in the background so "Download PDF" is quick: this session's photos and the PDF tools
   rpPhotos(D);
@@ -330,7 +381,7 @@ async function rpPrint() {
     D.noPhotos = true; // the page picture is taken without them: a 21-px photo inside a picture gets blurred
     host = document.createElement('div');
     host.className = 'rp rp-render';
-    host.innerHTML = rpPages(D);
+    host.innerHTML = rpBuild(D);
     document.body.appendChild(host);
     await Promise.all([...host.querySelectorAll('img')].map((im) => im.complete ? 0 : new Promise((ok) => { im.onload = im.onerror = ok; })));
     if (document.fonts) await document.fonts.ready;
@@ -358,7 +409,7 @@ async function rpPrint() {
         pdf.restoreGraphicsState();
       }
     }
-    pdf.save(`${D.session.id}_${D.session.date}${D.session.part ? '_' + D.session.part.replace(/\s+/g, '') : ''}_Training_report.pdf`);
+    pdf.save(`${D.session.id}_${D.session.date}${D.session.part ? '_' + D.session.part.replace(/\s+/g, '') : ''}_${RP.version === 'staff' ? 'Staff' : 'Training'}_report.pdf`);
   } catch (err) {
     alert('Could not create the PDF: ' + (err.message || err));
   } finally {

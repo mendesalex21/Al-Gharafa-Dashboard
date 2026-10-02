@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!AUTH.demo && confirm('Sign out?')) signOut();
   });
   const [start, arg, arg2] = decodeURIComponent(location.hash.slice(1)).split('/'); // e.g. #sessions/2026-09-04[/dame], #player/ounas
-  const opts = arg ? { sessions: { date: arg, player: arg2 }, player: { player: arg }, testing: { athlete: arg, tab: 'profile' }, objectives: { cycle: arg }, reports: { date: arg } }[start] : undefined;
+  const opts = arg ? { sessions: { date: arg, player: arg2 }, player: { player: arg }, testing: { athlete: arg, tab: 'profile' }, objectives: { cycle: arg }, reports: { date: arg, version: arg2 } }[start] : undefined;
   initAuth(async () => {
     // photos: once per device, then from the browser's storage (a few ms) — wait that long so pages draw with them
     await Promise.race([loadPlayerPhotos(), new Promise((ok) => setTimeout(ok, 400))]);

@@ -1062,6 +1062,7 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .rp-tk { height: 8px; background: #f0f1f5; border-radius: 2px; }
 .rp-tk i { display: block; height: 100%; border-radius: 2px; }
 #view-reports .select { min-width: 0; max-width: 330px; }
+@media (max-width: 600px) { #view-reports .pg-tools, #view-reports .stepper { width: 100%; } #view-reports .stepper .select { flex: 1; width: auto; max-width: none; } }
 /* off-screen copy of the pages at their real size, drawn into the PDF */
 .rp-render { position: fixed; left: -20000px; top: 0; width: 1290px; display: flex; flex-direction: column; }
 .rp-render .rp-page { box-shadow: none; border-radius: 0; }
@@ -1092,6 +1093,66 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .rp-ad.z { color: #9aa0ad; background: #f3f4f8; }
 .rp-lbavg { margin-top: 7px; font-size: 10px; color: var(--rp-muted); font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .rp-lbavg b { display: inline-block; width: 16px; border-top: 1px dashed #c4c7cf; }
+
+/* Reports: staff version (reports-staff.js) */
+.rp-staff .rp-names { height: 34px; }
+.rp-staff .rp-blk { gap: 30px; }
+.rp-staff > .rp-legend { margin-top: 2px; }
+.rp-staff .mz { min-width: 44px; padding: 3px 6px; font-size: 12px; border-radius: 6px; }
+.rp-staff .mz.na { color: #8a8f9e; }
+.rs-leg { display: inline-flex; gap: 12px; align-items: center; } .rs-leg span { display: inline-flex; gap: 5px; align-items: center; }
+.rp-staff .rs-leg .mz { min-width: 18px; height: 9px; padding: 0; }
+.rs-strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-top: -4px; }
+.rs-kpi { background: var(--rp-band); border-radius: 8px; padding: 6px 10px; display: flex; flex-direction: column; gap: 1px; }
+.rs-kpi span { font-size: 9.5px; font-weight: 700; color: var(--rp-brick); letter-spacing: .04em; text-transform: uppercase; }
+.rs-kpi b { font-size: 16px; font-weight: 750; color: var(--rp-navy); } .rs-kpi b small { font-size: 10px; color: var(--rp-muted); font-weight: 600; }
+.rs-kpi em { font-size: 10.5px; font-weight: 700; } .rs-kpi.rs-note em { color: var(--rp-muted); }
+.rs-z { font-size: 9.5px; font-weight: 800; line-height: 1; margin: -1px 0 2px; }
+/* A:C panels (2 × 2) */
+.rs-g4 { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 14px 26px; min-height: 0; }
+.rs-panel { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.rs-pt { font-size: 13px; font-weight: 800; color: var(--rp-brick); height: 20px; }
+.rs-col { flex: 1; height: 100%; position: relative; display: flex; justify-content: center; align-items: flex-end; }
+.rs-names { display: flex; height: 38px; } .rs-names div { flex: 1; position: relative; }
+.rs-names span { position: absolute; right: 45%; top: 4px; transform: rotate(-35deg); transform-origin: 100% 0; font-size: 8.5px; font-weight: 700; color: var(--rp-navy); white-space: nowrap; }
+.rs-acleg { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 10px; color: var(--rp-muted); margin-top: -4px; }
+.rs-acleg span { display: inline-flex; align-items: center; gap: 5px; }
+.rs-lz { color: var(--rp-muted); font-weight: 600; }
+.rs-sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.rs-dash { position: absolute; left: 22%; width: 56%; height: 0; border-top: 2px solid var(--rp-navy); box-shadow: 0 0 0 1px rgba(255, 255, 255, .9); z-index: 2; }
+.rs-acleg .rs-dash { position: static; display: inline-block; width: 16px; box-shadow: none; }
+.rs-2w { font-size: 8px; font-weight: 800; border-radius: 3px; padding: 1px 3px; margin-right: 3px; color: #fff; } .rs-2w.over { background: #e5484d; } .rs-2w.under { background: #1d5fae; }
+.rs-acplot { flex: 1; position: relative; display: flex; align-items: flex-end; min-height: 0; border-bottom: 1px solid #c9ccd6; margin: 16px 0 0 30px; }
+.rs-acbar { width: 46%; border-radius: 3px 3px 0 0; position: relative; opacity: .92; }
+.rs-acbar em { position: absolute; left: 50%; transform: translateX(-50%); top: -14px; font-size: 9px; font-weight: 700; white-space: nowrap; color: #111; }
+.rs-hl { position: absolute; left: 0; right: 0; border-top: 1px dashed #d5d8e0; z-index: 0; }
+.rs-hl.hi { border-top-color: #e3c85e; } .rs-hl.red { border-top: 1px solid rgba(229, 72, 77, .55); }
+.rs-hl b { position: absolute; left: -30px; top: -6px; font-size: 8.5px; font-weight: 700; color: #9aa0ad; }
+/* team microcycle so far */
+.rs-intro { display: flex; justify-content: space-between; align-items: center; gap: 16px; font-size: 11px; color: var(--rp-muted); }
+.rs-next { display: inline-flex; align-items: center; gap: 6px; color: #111; white-space: nowrap; } .rs-next b { color: var(--rp-navy); }
+.rs-profs { flex: 1; position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 34px; min-height: 0; }
+.rs-prof { border-top: 1px solid var(--rp-rule); padding-top: 6px; }
+.rs-proft { font-size: 11px; font-weight: 800; color: var(--rp-navy); display: flex; justify-content: space-between; } .rs-proft span { color: var(--rp-muted); font-weight: 600; font-size: 10px; }
+.rs-acrow { display: flex; gap: 12px; align-items: center; margin-top: 4px; }
+.rs-acl { font-size: 10.5px; font-weight: 700; color: var(--rp-brick); letter-spacing: .04em; text-transform: uppercase; }
+.rs-act { display: flex; align-items: center; gap: 8px; background: var(--rp-band); border-radius: 8px; padding: 5px 10px; font-size: 11.5px; font-weight: 600; color: var(--rp-muted); }
+.rs-act i { width: 10px; height: 10px; border-radius: 3px; } .rs-act b { font-size: 14px; color: #111; }
+/* players: microcycle & week so far (chips) */
+.rs-tbl { display: flex; flex-direction: column; }
+.rs-tr { display: grid; gap: 0 8px; align-items: center; }
+.rs-th { font-size: 10.5px; font-weight: 700; color: var(--rp-brick); padding-bottom: 6px; text-align: center; } .rs-th span:first-child { text-align: left; }
+.rs-gh { font-size: 9.5px; font-weight: 800; color: var(--rp-navy); letter-spacing: .05em; text-align: center; padding-bottom: 4px; }
+.rs-gh span[style] { border-bottom: 2px solid var(--rp-navy); padding-bottom: 3px; }
+.rs-row { height: 25px; border-bottom: 1px solid var(--rp-rule); font-size: 12px; text-align: center; }
+.rs-row .rp-nm { text-align: left; }
+.rs-v { font-size: 11.5px; font-weight: 700; }
+#view-reports .rp-msg { max-width: 640px; }
+/* big squads: lower rows, smaller photos (the page must hold everyone) */
+.rp-tight .rp-row, .rp-tight .rs-row { font-size: 11.5px; }
+.rp-tight .rp-face { width: 16px; height: 16px; margin-right: 6px; }
+.rp-tight .rp-chip .rp-v { padding: 1px 0; }
+.rp-staff .rp-tight .mz { padding: 1px 6px; }
 
 /* ---------------------------------------------------------------- club crests, flags */
 .crest { object-fit: contain; flex: none; display: inline-block; vertical-align: middle; }
