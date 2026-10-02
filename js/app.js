@@ -1,17 +1,17 @@
 const VIEWS = {}; // view -> already rendered?
 const VIEW_SECTION = {
   wellness: 'wellness', longitudinal: 'wellness', sessions: 'training', week: 'training', objectives: 'training',
-  squad: 'workload', player: 'workload', readiness: 'workload', testing: 'testing', calendar: 'calendar', reports: 'reports',
+  squad: 'workload', player: 'workload', readiness: 'workload', testing: 'testing', calendar: 'calendar', reports: 'reports', roster: 'roster',
 };
 const VIEW_RENDER = {
   wellness: () => renderWellness(), longitudinal: () => renderLongitudinal(),
   sessions: (o) => renderSessions(o), week: () => renderWeek(), objectives: (o) => renderObjectives(o), squad: () => renderSquad(),
   player: (o) => renderPlayerLoad(o), readiness: () => renderReadiness(), testing: (o) => renderTesting(o), calendar: (o) => renderCalendar(o),
-  reports: (o) => renderReports(o),
+  reports: (o) => renderReports(o), roster: () => renderRoster(),
 };
 const VIEW_REDRAW = {
   longitudinal: () => drawLongitudinal(), sessions: (o) => drawSessions(o), week: () => drawWeek(), objectives: () => drawObjectives(),
-  squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: () => drawCalendar(), reports: () => rpFit(),
+  squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: () => drawCalendar(), reports: () => rpFit(), roster: () => drawRoster(),
 };
 let CURRENT_VIEW = null;
 

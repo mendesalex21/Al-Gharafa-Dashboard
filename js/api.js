@@ -18,6 +18,7 @@ async function callApi(action, mockData, extra = null) {
     if (!r.ok) throw new Error(`No local ${action}.json — run sync/build.py --no-upload`);
     const data = await r.json();
     if (action === 'calendar') data.edits = demoEdits();
+    if (action === 'squad') data.profiles = applyDemoSquad(data.profiles || []);
     return data;
   }
   if (AUTH.demo) return Promise.resolve(structuredClone(mockData));
@@ -51,26 +52,27 @@ async function callApi(action, mockData, extra = null) {
 function fetchWellness() { return callApi('wellness', MOCK_WELLNESS); }
 
 /**
- * Player photos: downloaded once per device from the private `player_photos` payload and kept in Cache Storage, then
- * used by every page (wellness, sessions, reports, PDF) instead of the Drive links. Keyed on photo-data.js, so a new or
- * replaced photo there makes each device fetch them again. Until they are in, the Drive links keep working.
+ * Player photos: downloaded once per device (private `player_photos` payload: the Drive photos copied by build.py +
+ * photos uploaded in the Squad tab) and kept in Cache Storage, then used by every page (wellness, sessions, reports,
+ * PDF) instead of the Drive links. On each visit a tiny version check (`photos_v`) tells whether they changed (new
+ * build, photo replaced on the site); only then are they downloaded again. Until they are in, the Drive links work.
  */
 const PHOTOS_STORE = 'player-photos';
+const PHOTOS_KEY = '/photos/current';
 let PHOTOS_READY = null;
 const PHOTO_DATA_SRC = typeof PHOTO_DATA !== 'undefined' ? { ...PHOTO_DATA } : {}; // the Drive links, before photos are swapped in
-function photosKey() {
-  const txt = JSON.stringify(PHOTO_DATA_SRC);
-  let h = 0;
-  for (let i = 0; i < txt.length; i++) h = (h * 31 + txt.charCodeAt(i)) | 0;
-  return '/photos/' + (h >>> 0).toString(36);
-}
 function applyPhotos(map) {
   if (typeof PHOTO_DATA === 'undefined' || !map) return;
   const swap = {};
-  for (const [pid, uri] of Object.entries(map)) if (uri && PHOTO_DATA[pid]) { swap[PHOTO_DATA_SRC[pid]] = uri; PHOTO_DATA[pid] = uri; }
+  for (const [pid, uri] of Object.entries(map)) {
+    if (!uri) continue;
+    if (PHOTO_DATA[pid]) swap[PHOTO_DATA[pid]] = uri;
+    if (PHOTO_DATA_SRC[pid]) swap[PHOTO_DATA_SRC[pid]] = uri;
+    PHOTO_DATA[pid] = uri; // also players added on the site (no Drive link)
+  }
   // photos already on screen (page drawn before they arrived): switch them too
   document.querySelectorAll('img').forEach((im) => { const u = swap[im.getAttribute('src')]; if (u) im.src = u; });
-  document.querySelectorAll('.rp-face[style]').forEach((el) => {
+  document.querySelectorAll('.rp-face[style], .ro-ph[style]').forEach((el) => {
     const m = el.style.backgroundImage.match(/url\(["']?(.*?)["']?\)/), u = m && swap[m[1]];
     if (u) el.style.backgroundImage = `url('${u}')`;
   });
@@ -78,24 +80,47 @@ function applyPhotos(map) {
 function loadPlayerPhotos() {
   if (PHOTOS_READY) return PHOTOS_READY;
   PHOTOS_READY = (async () => {
-    const key = photosKey();
-    let box = null;
+    let box = null, cached = null;
     try { box = window.caches ? await caches.open(PHOTOS_STORE) : null; } catch (err) { /* private mode */ }
-    if (box) {
-      const hit = await box.match(key).catch(() => null);
-      if (hit) { applyPhotos(await hit.json()); return true; }
-    }
-    const data = await callApi('player_photos', null, {}); // {} = not copied into localStorage (too big for it)
-    applyPhotos(data.photos);
-    if (box) {
-      try {
-        for (const old of await box.keys()) await box.delete(old);
-        await box.put(key, new Response(JSON.stringify(data.photos), { headers: { 'Content-Type': 'application/json' } }));
-      } catch (err) { /* not kept: downloaded again next visit */ }
-    }
+    if (box) { const hit = await box.match(PHOTOS_KEY).catch(() => null); if (hit) cached = await hit.json().catch(() => null); }
+    const fetchAll = async () => {
+      const data = await callApi('player_photos', null, {}); // {} = not copied into localStorage (too big for it)
+      applyPhotos(data.photos);
+      if (box) {
+        try {
+          for (const old of await box.keys()) await box.delete(old);
+          await box.put(PHOTOS_KEY, new Response(JSON.stringify({ v: data.v || '', photos: data.photos }), { headers: { 'Content-Type': 'application/json' } }));
+        } catch (err) { /* not kept: downloaded again next visit */ }
+      }
+    };
+    if (!cached || !cached.photos) { await fetchAll(); return true; }
+    applyPhotos(cached.photos);
+    if (!AUTH.demo) callApi('photos_v', null, {}).then((r) => (r && r.v && r.v !== cached.v ? fetchAll() : null)).catch(() => { /* next visit */ });
     return true;
   })().catch((err) => { PHOTOS_READY = null; return false; });
   return PHOTOS_READY;
+}
+
+/** Squad tab: save a player profile ({saved, profiles}) and upload his photo. Local demo: kept in this browser. */
+function demoSquad() { try { return JSON.parse(localStorage.getItem('demo_squad') || '{}'); } catch (err) { return {}; } }
+function applyDemoSquad(profiles) {
+  const o = demoSquad(), out = profiles.map((p) => (o[p.player_id] ? { ...p, ...o[p.player_id] } : p));
+  Object.values(o).forEach((p) => { if (!out.some((x) => x.player_id === p.player_id)) out.push(p); });
+  return out;
+}
+async function saveSquadProfile(data) {
+  if (AUTH.demo) {
+    const o = demoSquad(), pid = data.player_id || String(data.display_name).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    o[pid] = { ...(o[pid] || {}), ...data, player_id: pid, shirt_no: data.shirt_no === '' ? null : Number(data.shirt_no) || null,
+      height: Number(data.height) || null, weight: Number(data.weight) || null, status: data.status || (o[pid] && o[pid].status) || 'active', by: 'demo', at: new Date().toISOString() };
+    try { localStorage.setItem('demo_squad', JSON.stringify(o)); } catch (err) { /* private mode */ }
+    return { saved: pid, profiles: applyDemoSquad((RO.data && RO.data.profiles) || []) };
+  }
+  return callApi('squad_save', null, { data });
+}
+async function uploadPlayerPhoto(pid, dataUri) {
+  if (AUTH.demo) return { player_id: pid };
+  return callApi('squad_photo', null, { player_id: pid, data: dataUri });
 }
 
 /** One network fetch per payload per page load, shared by every page that needs it. */
