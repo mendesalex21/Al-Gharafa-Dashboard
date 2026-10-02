@@ -148,19 +148,30 @@ function rpPages(D) {
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'accdec', 'Acceleration + Deceleration', 'HI Acc+Dec', 'accdec') + rpChart(D, 'sprints', 'Number of Sprints >25kmh', 'SPRINTS', 'sprints'));
   if (D.weekLoad && D.weekLoad.rows.length) pages.push(rpHeader('TOTAL WEEK LOAD', D.weekLoad.label, [['WEEK', s.week], ['FROM', D.weekLoad.from], ['TO', D.weekLoad.to]]) + rpTable(D, D.weekLoad.rows, ['min', 'td', 'd15', 'd20', 'vmax', 'pmax', 'sprints', 'accdec']));
   // drills: rankings by m/min (+ High Acc+Dec), up to 4 drills per page — high-speed running is rare in drills
-  const drills = (D.drills || []).filter((d) => d.rows.length);
-  for (let k = 0; k < drills.length; k += 4) {
-    const group = drills.slice(k, k + 4);
-    pages.push(rpHeader('DRILLS SUMMARY', title, [['WEEK', s.week], ['MD', s.md], ['DRILLS', drills.length], ['N SESSION', s.id]]) + rpDrillBoards(D, group));
+  const drills = (D.drills || []).filter((d) => d.rows.length), cols = rpDrillColumns(drills);
+  for (let k = 0; k < cols.length; k += 4) {
+    pages.push(rpHeader('DRILLS SUMMARY', title, [['WEEK', s.week], ['MD', s.md], ['DRILLS', drills.length], ['N SESSION', s.id]]) + rpDrillBoards(D, cols.slice(k, k + 4)));
   }
   return pages.map((p) => `<div class="rp-page">${p}</div>`).join('');
 }
 
+/** Columns of the drills pages (4 a page): a small drill (1–3 players, e.g. individual or rehab work) goes under the
+ * last ranking when the page is already full, instead of opening a nearly empty page. */
+function rpDrillColumns(drills) {
+  const cols = [];
+  for (const d of drills) {
+    const last = cols[cols.length - 1], onPage = cols.length ? cols.length % 4 || 4 : 0;
+    if (d.rows.length <= 3 && last && onPage === 4 && last.units + d.rows.length + 4 <= 30) { last.items.push(d); last.units += d.rows.length + 4; }
+    else cols.push({ items: [d], units: d.rows.length });
+  }
+  return cols;
+}
+
 /** One ranking per drill: players by m/min (bar, dashed team average), High Acc+Dec count alongside. */
-function rpDrillBoards(D, group) {
-  const most = Math.max(...group.map((d) => d.rows.length));
+function rpDrillBoards(D, cols) {
+  const most = Math.max(...cols.map((c) => c.units));
   const rowH = Math.max(17, Math.min(24, Math.floor(600 / Math.max(1, most)))); // a big squad still fits the page
-  const cards = group.map((d) => {
+  const card = (d) => {
     const rows = [...d.rows].sort((x, y) => (y.mpm || 0) - (x.mpm || 0) || x.name.localeCompare(y.name));
     const max = Math.max(1, ...rows.map((r) => r.mpm || 0));
     const avg = rows.reduce((t, r) => t + (r.mpm || 0), 0) / rows.length, at = rpPct(avg, max);
@@ -170,8 +181,8 @@ function rpDrillBoards(D, group) {
         <span class="rp-lbbar"><b>${rpFmt('mpm', r.mpm)}</b><span class="rp-bar"><i class="rp-trk" style="width:100%"></i><i style="width:${rpPct(r.mpm, max)};background:#6fb0ee"></i><i class="rp-avgl" style="left:${at}"></i></span></span>
         <span class="rp-ad${r.accdec ? '' : ' z'}">${rpFmt('accdec', r.accdec)}</span></div>`).join('')}
       <div class="rp-lbavg"><b></b>Team average ${Math.round(avg)} m/min</div></div>`;
-  });
-  return `<div class="rp-lbs" style="grid-template-columns:repeat(${Math.max(group.length, 3)}, minmax(0,1fr))">${cards.join('')}</div>`;
+  };
+  return `<div class="rp-lbs" style="grid-template-columns:repeat(${Math.max(cols.length, 3)}, minmax(0,1fr))">${cols.map((c) => `<div class="rp-lbcol">${c.items.map(card).join('')}</div>`).join('')}</div>`;
 }
 
 // ---------------------------------------------------------------- page
@@ -231,7 +242,7 @@ function drawReports() {
   document.getElementById('rp-prev').disabled = k <= 0;
   document.getElementById('rp-next').disabled = k < 0 || k >= RP.opts.length - 1;
   document.getElementById('rp-pdf').disabled = false;
-  const n = 3 + (D.weekLoad.rows.length ? 1 : 0) + Math.ceil(D.drills.filter((d) => d.rows.length).length / 4);
+  const n = 3 + (D.weekLoad.rows.length ? 1 : 0) + Math.ceil(rpDrillColumns(D.drills.filter((d) => d.rows.length)).length / 4);
   document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel}${D.session.part ? ' · ' + D.session.part : ''} · ${n} pages · ${D.fullSession.length} players`;
   box.innerHTML = `<div class="rp rp-doc">${rpPages(D)}</div>`;
   rpFit();

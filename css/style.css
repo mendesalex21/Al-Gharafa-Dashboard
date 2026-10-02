@@ -1069,6 +1069,7 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 
 /* Reports: drills summary — one ranking per drill */
 .rp-lbs { flex: 1; display: grid; gap: 22px; min-height: 0; align-items: start; }
+.rp-lbcol { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .rp-lbc { display: flex; flex-direction: column; min-width: 0; }
 .rp-lbt { display: flex; align-items: baseline; gap: 8px; border-bottom: 2px solid var(--rp-band); padding-bottom: 6px; margin-bottom: 4px; min-height: 42px; } /* 2-line drill names keep the cards aligned */
 .rp-lbt b { font-size: 13px; font-weight: 800; color: var(--rp-navy); }
