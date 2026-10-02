@@ -66,7 +66,8 @@ function cycleType(len) { return len == null ? null : len <= 4 ? 'short' : len <
 
 // ------------------------------------------------------------------ page
 function renderCalendar(opts) {
-  if (opts && opts.mode) CAL.mode = opts.mode === 'games' ? 'games' : 'month';
+  // #calendar/games · #calendar/2026-09 (that month)
+  if (opts && opts.mode) { CAL.mode = opts.mode === 'games' ? 'games' : 'month'; if (/^\d{4}-\d{2}$/.test(opts.mode)) CAL.month = opts.mode; }
   const root = document.getElementById('view-calendar');
   root.innerHTML = `
     ${pageHead('Season 2026/27', 'Calendar', 'ca-sub', `${segHtml('ca-mode', [['month', 'Calendar'], ['games', 'Games']], CAL.mode)}
