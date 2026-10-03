@@ -1403,6 +1403,10 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .sp-note.warn { color: #8a5a00; } .sp-time { display: flex; align-items: center; gap: 6px; font-size: 12.5px; margin-top: 10px; flex-wrap: wrap; } .sp-time input { width: 52px; font: inherit; border: 1px solid var(--hairline); border-radius: 8px; padding: 3px 6px; background: var(--surface); color: inherit; } .sp-time small { color: var(--ink-muted); }
 .sp-rpe label { display: flex; justify-content: space-between; align-items: center; gap: 4px; font-size: 12px; background: var(--surface-2); border-radius: 8px; padding: 3px 4px 3px 8px; min-width: 0; } .sp-rpe label.miss { background: #fff4e5; color: #a55200; }
 .sp-rpe input { width: 40px; font: inherit; font-weight: 700; text-align: center; border: 0; border-radius: 6px; background: var(--surface); color: inherit; padding: 2px 0; }
+.sp-rpe label.k { background: #eaf6ee; color: #1f6f3a; } .sp-rpe-ref { margin-left: auto; font-size: 12px; }
+.sp-key { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin: 0 4px -1px 0; } .sp-key.k { background: #bfe3cb; } .sp-key.miss { background: #f8d9b0; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) .sp-rpe label.k { background: rgba(52, 199, 89, .14); color: #7ee2a0; } :root:where(:not([data-theme="light"])) .sp-rpe label.miss { background: rgba(255, 159, 10, .14); color: #ffb340; } }
+:root[data-theme="dark"] .sp-rpe label.k { background: rgba(52, 199, 89, .14); color: #7ee2a0; } :root[data-theme="dark"] .sp-rpe label.miss { background: rgba(255, 159, 10, .14); color: #ffb340; }
 .sp-show { margin-left: 4px; } .sp-show button { font-size: 12px; padding: 3px 10px; }
 @media (max-width: 1000px) { .sp-two, .sp-three { grid-template-columns: 1fr; } .sp-week { grid-template-columns: repeat(4, minmax(0, 1fr)); } .sp-files { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 600px) { .sp-week { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sp-pl { grid-template-columns: 1fr; } .sp-files { grid-template-columns: 1fr; } .sp-head .sp-auto { margin-left: 0; } }

@@ -209,6 +209,22 @@ async function splReadFiles(list) {
   if (SPL.files.full) { SPL.view = 'import'; SPL.state = ''; }
   splDraw();
 }
+/** The kiosk's RPE of a session, by player id: his latest answer of the day (AM session: before 15:00, PM: from 15:00). */
+function splKioskRpe(date, ampm) {
+  const day = ((SPL.saved && SPL.saved.rpe) || {})[date] || {}, out = {};
+  Object.entries(day).forEach(([pid, answers]) => {
+    const win = answers.filter(([, t]) => !t || (ampm === 'AM' ? t < '15:00' : t >= '15:00'));
+    const last = (win.length ? win : answers)[(win.length ? win : answers).length - 1];
+    if (last && last[0] != null) out[pid] = last[0];
+  });
+  return out;
+}
+async function splRefreshRpe() {
+  if (AUTH.demo) return;
+  SPL.state = 'Reading the kiosk…'; splStateLine();
+  try { const r = await callApi('plans', null, {}); SPL.saved.rpe = r.rpe || {}; SPL.state = 'Kiosk RPE up to date ✓'; splDraw(); }
+  catch (err) { SPL.state = 'Kiosk not read — ' + (err.message || err); splStateLine(); }
+}
 function splBuild() {
   const date = SPL.date, p = splEnsure(date), lib = SPL.lib;
   const fullRows = spParseCsv(SPL.files.full.text), drillRows = SPL.files.drills ? spParseCsv(SPL.files.drills.text) : [];
@@ -230,19 +246,25 @@ function splBuild() {
     mapping.push({ title: t, d, n: drillRows.filter((r) => String(r['Drill Title'] || '').trim() === t).length, min: Math.max(...drillRows.filter((r) => String(r['Drill Title'] || '').trim() === t).map((r) => spNum(r['Total Time']))) });
   });
   const sessionTime = Number(p.time) || spSessionTime(fullRows);
+  // RPE: the players' kiosk answers, unless one was typed here
+  const kiosk = splKioskRpe(date, p.ampm || 'PM'), rpe = {}, fromKiosk = new Set();
+  lib.players.forEach((q) => { if (kiosk[q.id] != null) { rpe[q.gps] = kiosk[q.id]; fromKiosk.add(q.gps); } });
+  Object.entries(p.rpe || {}).forEach(([g, v]) => { if (v != null && v !== '') { rpe[g] = v; fromKiosk.delete(g); } });
   const out = spBuildRows(SPL.files.full.text, SPL.files.drills ? SPL.files.drills.text : '', {
-    date, sid: p.sid || splSid(date), week: splWeekNo(date), label: p.label || splLabel(date), md: splTag(date) || '/', ampm: p.ampm || 'PM', sessionTime, players, extra, rpe: p.rpe || {}, drills,
+    date, sid: p.sid || splSid(date), week: splWeekNo(date), label: p.label || splLabel(date), md: splTag(date) || '/', ampm: p.ampm || 'PM', sessionTime, players, extra, rpe, drills,
     drillName: (pn, d) => (SPL_NOT_TEAM.test(d.name) && players[pn] && players[pn].type === 'Rehab' ? 'Rehab' : d.name),
   });
-  return { ...out, fileDate, missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan };
+  return { ...out, fileDate, missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk };
 }
 function splImportHtml() {
   const date = SPL.date, p = splEnsure(date), b = splBuild();
   const gpsRows = b.full.filter((r) => r.Time > 0 || r.DT != null), unmapped = b.mapping.filter((m) => !m.d);
   const drillOpts = (t, cur) => `<select data-map="${escapeHtml(t)}"><option value="">Which drill of the plan?</option>${b.plan.map((d) => `<option value="${escapeHtml(d.name)}" ${cur && cur.name === d.name ? 'selected' : ''}>${d.no} · ${escapeHtml(d.name)}</option>`).join('')}</select>`;
   const mapRows = b.mapping.map((m) => `<div class="sp-mr${m.d ? '' : ' warn'}"><code title="${escapeHtml(m.title)}">${escapeHtml(m.title)}</code><span class="arr">→</span><span class="tg">${m.d ? `<b style="--c:${splColor(m.d.name)}">${m.d.no} · ${escapeHtml(m.d.name)}</b><small>${m.d.min}' planned (GPS ${m.min.toFixed(1)}') · ${m.n} player${m.n > 1 ? 's' : ''}</small>` : drillOpts(m.title, null)}</span><span class="ok">${m.d ? '✓' : '!'}</span></div>`).join('');
-  const rpeGrid = gpsRows.map((r) => { const g = spName(r.Players); return `<label class="${p.rpe && p.rpe[g] != null && p.rpe[g] !== '' ? '' : 'miss'}">${escapeHtml(r.Players)}<input type="number" min="0" max="10" step="0.5" value="${p.rpe && p.rpe[g] != null ? p.rpe[g] : ''}" data-rpe="${escapeHtml(g)}"></label>`; }).join('');
-  const nRpe = gpsRows.filter((r) => p.rpe && p.rpe[spName(r.Players)] != null && p.rpe[spName(r.Players)] !== '').length;
+  // green = the player's own answer on the kiosk, white = typed here, orange = no RPE yet
+  const rpeGrid = gpsRows.map((r) => { const g = spName(r.Players), k = b.fromKiosk.has(g);
+    return `<label class="${r.RPE == null ? 'miss' : k ? 'k' : ''}"${k ? ' title="From the kiosk"' : ''}>${escapeHtml(r.Players)}<input type="number" min="0" max="10" step="0.5" value="${r.RPE ?? ''}" data-rpe="${escapeHtml(g)}"></label>`; }).join('');
+  const nRpe = gpsRows.filter((r) => r.RPE != null).length, nKiosk = gpsRows.filter((r) => b.fromKiosk.has(spName(r.Players))).length;
   const rows = SPL.show === 'drills' ? b.drills : b.full, cols = SPL.show === 'drills' ? SP_DRILL_COLS : SP_FULL_COLS;
   const auto = new Set(['Date', 'N° Session', 'Week', 'WeeK MD Session', 'MD Session', 'Position', 'Type', 'N°Exercice', 'AMPM', 'Carga RPE', 'RPE', 'Time']);
   const fmtv = (v) => (v == null ? '' : typeof v === 'number' ? (Number.isInteger(v) ? v : +v.toFixed(2)) : escapeHtml(v));
@@ -260,7 +282,8 @@ function splImportHtml() {
         ${b.missing.length ? `<p class="sp-note warn">In the session in the plan but not in the GPS file: ${b.missing.map((q) => escapeHtml(q.name)).join(', ')} — change their status if they did not train.</p>` : ''}
         <p class="sp-note">Added from the plan, without GPS:</p><div class="sp-ngs">${b.full.filter((r) => !r.Time && r.DT == null).map((r) => `<span class="sp-ng">${escapeHtml(r.Players)}<small>${escapeHtml(r.Type)}</small></span>`).join('') || '<span class="sp-note">nobody</span>'}</div>
         <label class="sp-time">Session time <input type="number" min="1" max="200" value="${b.sessionTime}" data-f="time"> min <small>for the team-session players (the GPS's usual time)</small></label></div>
-      <div class="sp-chk"><div class="sp-h3"><i class="n">3</i>RPE <small>${nRpe} / ${gpsRows.length} · Carga RPE = RPE × time</small></div><div class="sp-rpe">${rpeGrid}</div><p class="sp-note">Later: read from the wellness kiosk.</p></div>
+      <div class="sp-chk"><div class="sp-h3"><i class="n">3</i>RPE <small>${nRpe} / ${gpsRows.length} · Carga RPE = RPE × time</small><button type="button" class="linkbtn sp-rpe-ref" data-rpe-refresh>↻ Kiosk</button></div><div class="sp-rpe">${rpeGrid}</div>
+        <p class="sp-note">${nKiosk ? `<span class="sp-key k"></span>${nKiosk} from the players' kiosk answers` : 'No kiosk answer yet for this session'}${nRpe < gpsRows.length ? ` · <span class="sp-key miss"></span>${gpsRows.length - nRpe} missing: type them, or ↻ when the players have answered` : ''} · type a value to correct it.</p></div>
     </div>
     <div class="sp-h3">Preview <span class="seg sp-show"><button type="button" data-show="full" class="${SPL.show === 'full' ? 'active' : ''}">Data_Full · ${b.full.length}</button><button type="button" data-show="drills" class="${SPL.show === 'drills' ? 'active' : ''}">Data_Drills · ${b.drills.length}</button></span><small>same columns and order as your Excel · blue = from the plan</small></div>
     <div class="sp-tw"><table class="sp-tbl"><thead><tr>${cols.map((c) => `<th class="${auto.has(c) ? 'a' : ''}">${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${cols.map((c) => `<td class="${auto.has(c) ? 'a' : ''}">${fmtv(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
@@ -302,6 +325,7 @@ function splClick(e) {
   if (t.dataset.copy) { const r = SPL.lib.recent[t.dataset.copy]; const used = {}; p().drills = r.drills.filter((d) => { const k = d.no; if (used[k] && SPL_NOT_TEAM.test(d.name)) return false; used[k] = 1; return d.name !== 'Rehab'; }).map((d) => ({ name: d.name, min: d.min })); splTouch(date); splDraw(); return; }
   if (t.dataset.sugg) { const l = SPL.lib.library.find((x) => splName(x.name) === t.dataset.sugg); p().drills.push({ name: t.dataset.sugg, min: l ? l.min : 10 }); splTouch(date); splDraw(); return; }
   if (t.dataset.show) { SPL.show = t.dataset.show; splDraw(); return; }
+  if (t.dataset.rpeRefresh != null) { splRefreshRpe(); return; }
   if (t.dataset.back != null) { SPL.view = 'plan'; splDraw(); return; }
   if (t.dataset.goto) { SPL.week = addDays(t.dataset.goto, -new Date(t.dataset.goto + 'T12:00:00Z').getUTCDay()); SPL.date = t.dataset.goto; splDraw(); return; }
   if (t.dataset.publish != null) { splPublish(); return; }
@@ -335,7 +359,11 @@ function splChange(e) {
 function splInput(e) {
   const t = e.target, date = SPL.date;
   if (t.dataset.mins != null) { splEnsure(date).drills[Number(t.dataset.mins)].min = Number(t.value) || ''; splTouch(date); }
-  if (t.dataset.rpe != null) { const p = splEnsure(date); p.rpe = { ...(p.rpe || {}), [t.dataset.rpe]: t.value === '' ? null : Number(t.value) }; t.closest('label').classList.toggle('miss', t.value === ''); splTouch(date); }
+  if (t.dataset.rpe != null) {
+    const p = splEnsure(date), l = t.closest('label');
+    p.rpe = { ...(p.rpe || {}), [t.dataset.rpe]: t.value === '' ? null : Number(t.value) };
+    l.classList.remove('k'); l.removeAttribute('title'); l.classList.toggle('miss', t.value === ''); splTouch(date);
+  }
 }
 document.addEventListener('dragover', (e) => { if (CURRENT_VIEW === 'plan' && e.target.closest && e.target.closest('#spl-main')) { e.preventDefault(); const z = e.target.closest('.sp-drop'); if (z) z.classList.add('over'); } });
 document.addEventListener('dragleave', (e) => { const z = e.target.closest && e.target.closest('.sp-drop'); if (z) z.classList.remove('over'); });
