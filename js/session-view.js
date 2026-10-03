@@ -8,7 +8,7 @@
  *    still to do until the match, re-planned after every session.
  * Data: sessions payload — players[].mdref (his usual for this day: mean, sd, z) and `usual` (per type × tag).
  */
-const SV = { view: 'table', sort: null, td: 'td', hi: 'hit', mc: 'hit', sorted: null };
+const SV = { view: 'table', sort: null, dsort: 'mpm', drill: null, mc: 'hit', sorted: null };
 const SV_M = [['td', 'Total distance', 'm'], ['d15', '> 15 km/h', 'm'], ['hit', '> 20 km/h', 'm'], ['spr', '> 25 km/h', 'm'], ['spr_n', 'Sprints', ''], ['acc_dec', 'Acc + Dec', ''], ['srpe', 'sRPE', 'AU']];
 const SV_LBL = Object.fromEntries(SV_M.map(([k, l]) => [k, l]));
 const SV_UNIT = Object.fromEntries(SV_M.map(([k, , u]) => [k, u]));
@@ -29,9 +29,6 @@ function svGroups(s) {
   return Object.keys(out).sort((a, b) => rank(a) - rank(b)).map((g) => ({ g, label: POS_LABEL[g] || 'Other', list: out[g].sort((a, b) => (b.td || 0) - (a.td || 0)) }));
 }
 function svFlat(s) { return svGroups(s).flatMap((g) => g.list); }
-function svLegend() {
-  return `<span class="sv-lg">${['below', 'on', 'above', 'high'].map((k) => `<span><i style="background:${Z_COL[k]}"></i>${{ below: 'below his usual', on: 'usual', above: 'slightly above', high: 'well above' }[k]}</span>`).join('')}<span><i class="tick"></i>his usual</span></span>`;
-}
 
 // ------------------------------------------------------------------ his microcycle (done so far vs still to do)
 function svTagNum(tag) { const m = /^MD([+-])(\d+)$/.exec(tag || ''); return m ? (m[1] === '-' ? -Number(m[2]) : Number(m[2])) : null; }
@@ -180,7 +177,7 @@ function svAttention(s) {
   const out = [];
   let calm = 0;
   svFlat(s).forEach((p) => {
-    const r = [], partial = s.kind === 'match' && (p.min || 0) < 45; // a substitute's per-90 values: in his sheet, not flagged
+    const r = [], partial = s.kind === 'match' && (p.min || 0) < 75; // under 75 min his match values are scaled: in his sheet, not flagged
     Object.keys(SV_A).forEach((k) => {
       const z = partial ? null : svZ(p, k);
       if (z == null) return;
@@ -234,30 +231,29 @@ function svAttentionHtml(s) {
   </section>`;
 }
 
-// ------------------------------------------------------------------ session table: the report's page design (Reports → PDF page 1) + distance > 25 km/h
-const SV_COLS = ['time', 'rpe', 'mpm', 'td', 'd15', 'd20', 'd25', 'vmax', 'pmax', 'days', 'sprints', 'accdec'];
+// ------------------------------------------------------------------ session table: the report's page design (Reports → PDF page 1)
+// Full session: + distance > 25 km/h and HIT Acc / HIT Dec. Drills: the same table for one drill (chips), ranked by m/min.
+const SV_COLS = ['time', 'rpe', 'mpm', 'td', 'd15', 'd20', 'd25', 'vmax', 'pmax', 'days', 'sprints', 'hacc', 'hdec', 'accdec'];
+const SV_DCOLS = ['time', 'mpm', 'td', 'd15', 'd20', 'd25', 'vmax', 'sprints', 'hacc', 'hdec', 'accdec'];
+const SV_W = { td: 'minmax(0,1.55fr)', d15: 'minmax(0,1.35fr)', d20: 'minmax(0,0.95fr)', d25: 'minmax(0,0.8fr)', vmax: 'minmax(0,0.9fr)', accdec: 'minmax(0,1fr)',
+  hacc: '50px', hdec: '50px', time: '40px', rpe: '38px', mpm: '50px', pmax: '56px', days: '46px', sprints: '54px' }; // site only: the PDF keeps RP_WIDTHS
+const svLabel = (k) => ({ hacc: 'HIT Acc', hdec: 'HIT Dec' })[k] || RP_LABELS[k]; // reports.js loads after this file
 /** Players the team average is made of: full session only (matches: ≥ 60 min) — same rule as the build. */
 function rtCore(s) {
   const core = s.players.filter((p) => (s.kind === 'match' ? p.cat === 'm' && p.min >= 60 : p.cat === 't'));
   return core.length >= 3 ? core : s.players.filter((p) => p.min > 0);
 }
-function svTableHtml(s) {
-  const full = s.minutes || Math.max(0, ...s.players.map((p) => p.min || 0));
-  const rows = s.players.filter((p) => p.min > 0).map((p) => ({ id: p.id, name: playerName(p.id), pos: posOf(p.id, TR.sessions.roster), type: p.type,
-    pro: s.kind === 'match' ? p.cat === 'm' : p.cat === 't', // did the team session: sets the grey "team max" track, as in the report
-    time: p.min, rpe: p.rpe, mpm: p.mpm, td: p.td, d15: p.d15, d20: p.hit, d25: p.spr, vmax: p.vmax, pmax: p.vmax_pct != null ? p.vmax_pct / 100 : null,
-    days: p.days_hsv, sprints: p.spr_n, accdec: p.acc_dec }));
-  const core = new Set(rtCore(s).map((p) => p.id));
-  const avg = (k) => { const xs = rows.filter((r) => core.has(r.id) && r[k] != null).map((r) => r[k]); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
-  const team = Object.fromEntries(SV_COLS.map((k) => [k, avg(k)]));
-  team.time = s.minutes;
+const svPro = (s, cat) => (s.kind === 'match' ? cat === 'm' : cat === 't'); // did the team session: the grey "team max" track
+
+/** The table: rows = {id, pro, type, metrics…}; sort = a column (ranked list) or null (position groups). */
+function svTable(rows, cols, o = {}) {
   const ref = rows.some((r) => r.pro) ? rows.filter((r) => r.pro) : rows;
-  const teamMax = (k) => Math.max(0, ...ref.map((r) => r[k] || 0));
-  const scaleMax = (k) => Math.max(teamMax(k), ...rows.map((r) => r[k] || 0));
+  const teamMax = (k) => Math.max(0, ...ref.map((r) => r[k] || 0)), scaleMax = (k) => Math.max(teamMax(k), ...rows.map((r) => r[k] || 0));
   const lo = (k) => Math.min(...rows.map((r) => r[k] ?? 0)), hi = (k) => Math.max(...rows.map((r) => r[k] ?? 0));
   const t01 = (k, v) => (hi(k) > lo(k) ? ((v ?? 0) - lo(k)) / (hi(k) - lo(k)) : 0);
-  const tpl = '170px ' + SV_COLS.map((k) => RP_WIDTHS[k] || '44px').join(' ');
+  const tpl = '170px ' + cols.map((k) => SV_W[k] || '44px').join(' ');
   const fmt = (k, v) => (k === 'rpe' && v != null && !Number.isInteger(v) ? v.toFixed(1) : rpFmt(k, v));
+  const chip = (bg, v, fg = '') => `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg}${fg ? `;color:${fg}` : ''}">${v}</span></div>`;
   const cell = (r, k, isTeam) => {
     const v = r[k];
     if (v == null) return '<div class="rp-c rp-txt"><span class="rp-v sv-na">–</span></div>';
@@ -267,74 +263,67 @@ function svTableHtml(s) {
       return `<div class="rp-c"><span class="rp-v">${fmt(k, isTeam ? Math.round(v) : v)}</span><div class="rp-bar"><i class="rp-trk" style="width:${trk}"></i><i style="width:${rpPct(v, m)};background:${col}"></i></div></div>`;
     }
     if (isTeam) return `<div class="rp-c rp-txt"><span class="rp-v">${k === 'pmax' ? fmt(k, v) : k === 'rpe' ? v.toFixed(1) : fmt(k, Math.round(v))}</span></div>`;
-    if (k === 'mpm') return `<div class="rp-c rp-chip"><span class="rp-v" style="background:rgb(${rpLerp([235, 244, 253], [110, 175, 240], t01(k, v))})">${fmt(k, v)}</span></div>`;
-    if (k === 'sprints') { const [bg, fg] = rpSprintColor(t01(k, v)); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${fmt(k, v)}</span></div>`; }
-    if (k === 'days') { const [bg, fg] = rpDaysColor(v); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${fmt(k, v)}</span></div>`; }
-    if (k === 'time' && r.pro && v < full * 0.9) return `<div class="rp-c rp-txt"><span class="rp-v sv-partial">${fmt(k, v)}</span></div>`;
+    if (k === 'mpm') return chip(`rgb(${rpLerp([235, 244, 253], [110, 175, 240], t01(k, v))})`, fmt(k, v));
+    if (k === 'hacc' || k === 'hdec') return chip(`rgb(${rpLerp([238, 249, 232], [140, 214, 104], t01(k, v))})`, fmt(k, v));
+    if (k === 'sprints') { const [bg, fg] = rpSprintColor(t01(k, v)); return chip(bg, fmt(k, v), fg); }
+    if (k === 'days') { const [bg, fg] = rpDaysColor(v); return chip(bg, fmt(k, v), fg); }
+    if (k === 'time' && o.full && r.pro && v < o.full * 0.9) return `<div class="rp-c rp-txt"><span class="rp-v sv-partial">${fmt(k, v)}</span></div>`;
     return `<div class="rp-c rp-txt"><span class="rp-v">${fmt(k, v)}</span></div>`;
   };
   const face = (id) => { const ph = typeof PHOTO_DATA !== 'undefined' && PHOTO_DATA[id]; return `<span class="rp-face"${ph ? ` style="background-image:url('${ph}')"` : ''}></span>`; };
-  const row = (r) => `<div class="rp-tr rp-row sv-r" data-id="${escapeHtml(r.id)}" style="grid-template-columns:${tpl}"${r.pro ? '' : ` title="${escapeHtml(r.type || '')}"`}><span class="rp-nm">${face(r.id)}<b>${escapeHtml(r.name)}</b>${r.pro ? '' : '<small class="sv-ind">indiv.</small>'}</span>${SV_COLS.map((k) => cell(r, k)).join('')}</div>`;
-  const head = `<div class="rp-tr rp-th sv-th" style="grid-template-columns:${tpl}"><span data-k="name" class="${SV.sort ? '' : 'on'}">Players</span>${SV_COLS.map((k) => `<span data-k="${k}" class="${SV.sort === k ? 'on' : ''}">${RP_LABELS[k]}${SV.sort === k ? ' ↓' : ''}</span>`).join('')}</div>`;
-  const teamRow = `<div class="rp-tr rp-row sv-team" style="grid-template-columns:${tpl}"><span class="rp-nm"><b>Team avg</b></span>${SV_COLS.map((k) => cell(team, k, true)).join('')}</div>`;
+  const row = (r, i) => `<div class="rp-tr rp-row sv-r" data-id="${escapeHtml(r.id)}" style="grid-template-columns:${tpl}"${r.pro ? '' : ` title="${escapeHtml(r.type || '')}"`}><span class="rp-nm">${i != null ? `<i class="sv-rank${i < 3 ? ' r' + (i + 1) : ''}">${i + 1}</i>` : ''}${face(r.id)}<b>${escapeHtml(playerName(r.id))}</b>${r.pro ? '' : '<small class="sv-ind">indiv.</small>'}</span>${cols.map((k) => cell(r, k)).join('')}</div>`;
+  const head = `<div class="rp-tr rp-th sv-th" style="grid-template-columns:${tpl}"><span data-k="name" class="${o.sort ? '' : 'on'}">Players</span>${cols.map((k) => `<span data-k="${k}" class="${o.sort === k ? 'on' : ''}">${svLabel(k)}${o.sort === k ? ' ↓' : ''}</span>`).join('')}</div>`;
+  const teamRow = o.team ? `<div class="rp-tr rp-row sv-team" style="grid-template-columns:${tpl}"><span class="rp-nm"><b>Team avg</b></span>${cols.map((k) => cell(o.team, k, true)).join('')}</div>` : '';
   let body;
-  if (SV.sort && SV_COLS.includes(SV.sort)) body = rows.slice().sort((a, b) => (b[SV.sort] ?? -1) - (a[SV.sort] ?? -1) || a.name.localeCompare(b.name)).map(row).join('');
+  if (o.sort && cols.includes(o.sort)) body = rows.slice().sort((a, b) => (b[o.sort] ?? -1) - (a[o.sort] ?? -1) || playerName(a.id).localeCompare(playerName(b.id))).map((r, i) => row(r, i)).join('');
   else {
-    const grp = (r) => (POS_ORDER.includes(r.pos) ? r.pos : '—');
+    const grp = (r) => { const p = posOf(r.id, TR.sessions.roster); return POS_ORDER.includes(p) ? p : '—'; };
     body = [...POS_ORDER, '—'].filter((g) => rows.some((r) => grp(r) === g)).map((g) => `<div class="rp-grp">${g === '—' ? '' : g}<small>${POS_LABEL[g] || 'Other'}</small></div>`
-      + rows.filter((r) => grp(r) === g).sort((a, b) => a.name.localeCompare(b.name)).map(row).join('')).join('');
+      + rows.filter((r) => grp(r) === g).sort((a, b) => playerName(a.id).localeCompare(playerName(b.id))).map((r) => row(r)).join('')).join('');
   }
-  return `<div class="sv-rp-wrap"><div class="rp sv-rp" id="sv-tbl"><div class="rp-tbl">${head}${teamRow}${body}</div></div></div>
-    <div class="rt-leg"><span><i class="sv-lg-b" style="background:#6fb0ee"></i>player value</span><span><i class="sv-lg-b sv-lg-t"></i>team max (players of the team session)</span><span><b class="rt-or">Orange time</b> = partial session</span><span>Days = since his last run ≥ 90 % of his max speed</span><span>Team avg = full-session players only</span></div>`;
+  return `<div class="sv-rp-wrap"><div class="rp sv-rp" id="sv-tbl"><div class="rp-tbl">${head}${teamRow}${body}</div></div></div>`;
 }
-function svBindTable(s, root) {
-  root.querySelectorAll('.sv-th [data-k]').forEach((hd) => hd.addEventListener('click', () => {
-    SV.sort = hd.dataset.k === 'name' ? null : hd.dataset.k;
-    svDrawIndividual(s);
-  }));
+function svAvgRow(rows, cols, core) {
+  const t = {};
+  cols.forEach((k) => { const xs = rows.filter((r) => core(r) && r[k] != null).map((r) => r[k]); t[k] = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; });
+  return t;
 }
-
-// ------------------------------------------------------------------ four ranking panels
-function svRankHead(title, k, s, seg) {
-  const r = s.kind !== 'match' && s.team_ref && s.team_ref[k], lv = r ? zLevel(r.z) : null;
-  const unit = { td: 'm', mpm: 'm/min', hit: 'm', d15: 'm', acc_dec: '', spr: 'm' }[k] || '';
-  return `<div class="sv-rk-head"><div><h3>${title}</h3><small>Team <b>${fmtN(r ? r.v : s.team[k])}</b> ${unit}${r ? ` · usual ${fmtN(r.mean)}` : ''}${lv ? ` <span class="zs ${lv}">${Z_LABEL[lv]} · z ${fmtSigned(r.z)}</span>` : ''}</small></div>${seg || ''}</div>`;
+function svTableHtml(s) {
+  const full = s.minutes || Math.max(0, ...s.players.map((p) => p.min || 0));
+  const rows = s.players.filter((p) => p.min > 0).map((p) => ({ id: p.id, type: p.type, pro: svPro(s, p.cat), time: p.min, rpe: p.rpe, mpm: p.mpm, td: p.td, d15: p.d15, d20: p.hit, d25: p.spr,
+    vmax: p.vmax, pmax: p.vmax_pct != null ? p.vmax_pct / 100 : null, days: p.days_hsv, sprints: p.spr_n, hacc: p.acc, hdec: p.dec, accdec: p.acc_dec }));
+  const core = new Set(rtCore(s).map((p) => p.id));
+  const team = svAvgRow(rows, SV_COLS, (r) => core.has(r.id));
+  team.time = s.minutes;
+  return svTable(rows, SV_COLS, { sort: SV.sort, team, full })
+    + `<div class="rt-leg"><span><i class="sv-lg-b" style="background:#6fb0ee"></i>player value</span><span><i class="sv-lg-b sv-lg-t"></i>team max (players of the team session)</span><span><b class="rt-or">Orange time</b> = partial session</span><span>HIT Acc / Dec: lighter → darker = fewer → more</span><span>Days = since his last run ≥ 90 % of his max speed</span><span>Team avg = full-session players only</span></div>`;
 }
-function svRankRows(s, k, o = {}) {
-  const list = svFlat(s).filter((p) => p[k] != null).sort((a, b) => (b[k] || 0) - (a[k] || 0));
-  const max = Math.max(1, ...list.map((p) => Math.max(p[k] || 0, o.noRef ? 0 : svUsual(p, k) || 0)));
-  const avg = s.team[k];
-  return list.map((p) => {
-    const z = o.noRef ? null : svZ(p, k), lv = zLevel(z), u = o.noRef ? null : svUsual(p, k);
-    const col = o.noRef ? 'rgba(92,164,240,.8)' : lv ? Z_COL[lv] : '#aeaeb2';
-    let bar;
-    if (o.split) { const a = (p.acc || 0) / max * 100, d = (p.dec || 0) / max * 100; bar = `<i class="acc" style="left:0;width:${a}%;background:${col}"></i><i class="dec" style="left:${a}%;width:${d}%;background:${col};opacity:.45"></i>`; }
-    else bar = `<i style="left:0;width:${Math.max(1.5, (p[k] || 0) / max * 100)}%;background:${col}"></i>`;
-    const zs = zLevel(svZ(p, 'spr_n'));
-    const val = o.split ? `${fmtN(p[k])} <small>${fmtN(p.acc)} + ${fmtN(p.dec)}</small>`
-      : o.pips ? `${fmtN(p[k])} <small>m</small> <span class="sv-pips" title="${fmtN(p.spr_n)} sprints">${Array.from({ length: Math.min(p.spr_n || 0, 14) }, () => `<i style="background:${zs ? Z_COL[zs] : '#aeaeb2'}"></i>`).join('')}</span>`
-        : `${fmtN(p[k])}${o.other ? ` <small>${o.other(p)}</small>` : ''}`;
-    return `<button type="button" class="sv-rk-row ${o.pips ? 'spr' : ''}" data-id="${p.id}" title="${escapeHtml(playerName(p.id))}${u != null ? ` · his usual ${fmtN(u)} · z ${fmtSigned(z)}` : ''}"><span class="sv-rk-name">${avatarHtml(p.id, playerName(p.id), 22)}${escapeHtml(playerName(p.id))}${p.cat === 't' || p.cat === 'm' ? '' : ` <small>${escapeHtml(String(p.type).toLowerCase())}</small>`}</span>
-      <span class="sv-rk-track">${bar}${u != null ? `<u style="left:${Math.min(100, u / max * 100)}%"></u>` : ''}${avg != null ? `<s style="left:${Math.min(100, avg / max * 100)}%"></s>` : ''}</span><span class="sv-rk-val">${val}</span></button>`;
-  }).join('');
-}
-function svRankHtml(s) {
-  const foot = (extra = '') => `<div class="sv-rk-foot">${svLegend()}<span class="sv-lg"><span><i class="dash"></i>team average</span>${extra}</span></div>`;
-  return `<div class="sv-rk-grid">
-    <section class="sv-rk">${svRankHead(SV.td === 'td' ? 'Total distance' : 'Intensity · m/min', SV.td, s, segHtml('sv-td', [['td', 'Distance'], ['mpm', 'm/min']], SV.td))}${svRankRows(s, SV.td, { noRef: SV.td === 'mpm', other: SV.td === 'td' ? (p) => `${fmtN(p.mpm)} m/min` : (p) => `${fmtN(p.td)} m` })}${foot(SV.td === 'mpm' ? '<span>m/min: no personal reference yet</span>' : '')}</section>
-    <section class="sv-rk">${svRankHead(SV.hi === 'hit' ? 'High-intensity running · > 20 km/h' : 'High-speed running · > 15 km/h', SV.hi, s, segHtml('sv-hi', [['hit', '> 20 km/h'], ['d15', '> 15 km/h']], SV.hi))}${svRankRows(s, SV.hi, { other: (p) => (SV.hi === 'hit' ? `${fmtN(p.hit_n)} efforts` : `>20: ${fmtN(p.hit)}`) })}${foot()}</section>
-    <section class="sv-rk">${svRankHead('HIT accelerations + decelerations', 'acc_dec', s)}${svRankRows(s, 'acc_dec', { split: true })}${foot('<span>dark = acc · light = dec</span>')}</section>
-    <section class="sv-rk">${svRankHead('Sprints · distance > 25 km/h and number', 'spr', s)}${svRankRows(s, 'spr', { pips: true })}${foot('<span>bar = distance > 25 km/h · dots = number of sprints</span>')}</section>
-  </div>`;
+const svDrillName = (d) => String(d.name || 'Drill').replace(/^Game_/, '').replace(/(\d)(st|nd|rd|th)Half/i, '$1$2 half');
+function svDrillsHtml(s) {
+  const list = s.drills || [];
+  if (!list.length) return `<p class="note">No drill data for this session.</p>`;
+  if (!SV.drill || SV.drill.date !== s.date || !list[SV.drill.i]) SV.drill = { date: s.date, i: 0 };
+  const d = list[SV.drill.i], twoParts = new Set(list.map((x) => x.ampm)).size > 1;
+  const cat = Object.fromEntries(s.players.map((p) => [p.id, p]));
+  const rows = Object.entries(d.players).map(([id, x]) => ({ id, type: cat[id] ? cat[id].type : '', pro: cat[id] ? svPro(s, cat[id].cat) : false, time: x[0], td: x[1], d20: x[2], d25: x[3],
+    accdec: x[4], vmax: x[5], d15: x[6], sprints: x[7], hacc: x[8], hdec: x[9], mpm: x[0] ? Math.round(x[1] / x[0]) : null }));
+  const chips = list.map((x, i) => `<button type="button" data-dr="${i}" class="${i === SV.drill.i ? 'on' : ''}">${twoParts ? `${x.ampm} · ` : ''}${x.no} · ${escapeHtml(svDrillName(x))} <small>${fmtN(x.min)}'</small></button>`).join('');
+  const vm = d.vs_match || {}, pc = (v) => (v == null ? '–' : `${v} %`);
+  const avg = rows.length ? Math.round(rows.reduce((a, r) => a + (r.mpm || 0), 0) / rows.length) : 0;
+  const strip = `<div class="sv-dstrip"><b>${d.no} · ${escapeHtml(svDrillName(d))}</b><span>${fmtN(d.min)}' · ${rows.length} player${rows.length > 1 ? 's' : ''}</span><span>team ${avg} m/min${d.team && d.team.vmax ? ` · max speed ${fmtN(d.team.vmax, 1)} km/h` : ''}</span>
+    ${s.kind === 'match' ? '' : `<span class="sv-dvs" title="Median of the players' per-minute output in the drill vs their own per-minute match output">Intensity vs his match (per min): TD <b>${pc(vm.td)}</b> · &gt; 15 <b>${pc(vm.d15)}</b> · &gt; 20 <b>${pc(vm.hit)}</b> · Acc+Dec <b>${pc(vm.acc_dec)}</b></span>`}</div>`;
+  return `<div class="sv-dchips">${chips}</div>${strip}${svTable(rows, SV_DCOLS, { sort: SV.dsort, team: svAvgRow(rows, SV_DCOLS, (r) => r.pro) })}
+    <div class="rt-leg"><span>Time = minutes in the drill · m/min = his intensity in the drill</span><span><i class="sv-lg-b sv-lg-t"></i>team max in this drill</span><span>Ranked by ${SV.dsort ? svLabel(SV.dsort) : 'position'} · click a column to rank by it (Players = by position)</span></div>`;
 }
 
-// ------------------------------------------------------------------ individual panel (table / rankings)
+// ------------------------------------------------------------------ individual panel (full session / drills)
 function svIndividualHtml(s) {
+  const drills = SV.view === 'drills';
   return `<section class="panel sv-bleed" id="sv-ind">
-    <div class="panel-head"><h2 class="panel-title small">Individual ${s.kind === 'match' ? 'match' : 'training'} · full session</h2>${segHtml('sv-view', [['table', 'Table'], ['rank', 'Rankings']], SV.view)}</div>
-    ${SV.view === 'table' ? svTableHtml(s) : svRankHtml(s)}
-    ${s.absent.length ? `<p class="panel-foot"><b>Not in the session:</b> ${s.absent.map((a) => `${escapeHtml(playerName(a.id))} <span class="muted">(${escapeHtml(a.type)})</span>`).join(', ')}</p>` : ''}
-    <p class="panel-foot">${SV.view === 'table' ? 'Click a column header to sort (Player = back to positions) · click a player for his full session.' : 'Each panel ranks every player · colour = z vs his usual for this day · tick = his usual · dashed = team average · click a player for his full session.'}</p>
+    <div class="panel-head"><h2 class="panel-title small">Individual ${s.kind === 'match' ? 'match' : 'training'} · ${drills ? (s.kind === 'match' ? 'halves' : 'drills') : 'full session'}</h2>${segHtml('sv-view', [['table', 'Full session'], ['drills', s.kind === 'match' ? 'Halves' : 'Drills']], SV.view)}</div>
+    ${drills ? svDrillsHtml(s) : svTableHtml(s)}
+    ${s.absent.length && !drills ? `<p class="panel-foot"><b>Not in the session:</b> ${s.absent.map((a) => `${escapeHtml(playerName(a.id))} <span class="muted">(${escapeHtml(a.type)})</span>`).join(', ')}</p>` : ''}
+    <p class="panel-foot">Click a player for his full session.</p>
   </section>`;
 }
 function svDrawIndividual(s) {
@@ -346,11 +335,12 @@ function svDrawIndividual(s) {
 function svBindIndividual(s) {
   const el = document.getElementById('sv-ind');
   bindSeg('sv-view', (v) => { SV.view = v; svDrawIndividual(s); });
-  if (SV.view === 'table') svBindTable(s, el);
-  else {
-    bindSeg('sv-td', (v) => { SV.td = v; svDrawIndividual(s); });
-    bindSeg('sv-hi', (v) => { SV.hi = v; svDrawIndividual(s); });
-  }
+  el.querySelectorAll('.sv-th [data-k]').forEach((hd) => hd.addEventListener('click', () => {
+    const k = hd.dataset.k === 'name' ? null : hd.dataset.k;
+    if (SV.view === 'drills') SV.dsort = k; else SV.sort = k;
+    svDrawIndividual(s);
+  }));
+  el.querySelectorAll('[data-dr]').forEach((b) => b.addEventListener('click', () => { SV.drill = { date: s.date, i: Number(b.dataset.dr) }; svDrawIndividual(s); }));
   el.querySelectorAll('[data-id]').forEach((r) => r.addEventListener('click', () => svOpen(s, r.dataset.id)));
 }
 /** Width of the page scrollbar, so the full-width table panel stays centred on Windows too. */
@@ -451,7 +441,7 @@ function svSheetHtml(s, p, nav) {
     const vt = s.team[key] ? Math.round(v / s.team[key] * 100) : null, vm = p['p3_' + key];
     return `<tr class="m ${plan && key === SV.mc ? 'sel' : ''}" ${plan && mm && mm.target ? `data-mck="${key}"` : ''}><td class="lbl">${l}</td>${today}${cyc}<td class="num sep">${vt == null ? '—' : `${vt > 300 ? '>300' : vt}%`}</td><td class="num">${vm == null ? '—' : `${vm}%`}</td></tr>`;
   }).join('');
-  const refTxt = p.mdref ? `${p.mdref.src === 'own' ? `his ${p.mdref.n} ${s.kind === 'match' ? 'matches' : 'sessions'}` : 'squad reference'}${per90 ? `, scaled to his ${fmtN(p.min)} min` : ''}`
+  const refTxt = p.mdref ? `${p.mdref.src === 'own' ? `his ${p.mdref.n} ${s.kind === 'match' ? 'matches of 75 min +' : 'sessions'}` : 'squad reference'}${per90 && p.min < 75 ? `, scaled to his ${fmtN(p.min)} min — indicative` : ''}`
     : s.kind === 'match' && p.cat === 'm' && p.min < 20 ? 'under 20 min: no comparison' : 'no reference';
   const prep = plan && mc.prep;
   const cycTxt = prep ? `His preparation → this match <small>${mc.days[0].md} → MD-1 · vs his usual for these days</small>`
