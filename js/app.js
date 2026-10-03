@@ -95,12 +95,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('avatar').addEventListener('click', () => {
     if (!AUTH.demo && confirm('Sign out?')) signOut();
   });
-  const [start, arg, arg2] = decodeURIComponent(location.hash.slice(1)).split('/'); // e.g. #sessions/2026-09-04[/dame], #player/ounas
+  const parts = decodeURIComponent(location.hash.slice(1)).split('/'); // e.g. #sessions/2026-09-04[/dame], #player/ounas
+  if (parts[0] === 'downloads') parts[0] = 'reports'; // the Reports tab is now called Downloads
+  const [start, arg, arg2] = parts;
   const opts = arg ? { sessions: { date: arg, player: arg2 }, player: { player: arg }, testing: { athlete: arg, tab: 'profile' }, objectives: { cycle: arg }, reports: { date: arg, version: arg2 }, calendar: { mode: arg } }[start] : undefined;
   initAuth(async () => {
     // photos: once per device, then from the browser's storage (a few ms) — wait that long so pages draw with them
     await Promise.race([loadPlayerPhotos(), new Promise((ok) => setTimeout(ok, 400))]);
     switchView(VIEW_RENDER[start] ? start : 'wellness', opts);
-    window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEW_RENDER[v] && v !== CURRENT_VIEW) switchView(v); });
+    window.addEventListener('hashchange', () => { const h = location.hash.slice(1), v = h === 'downloads' ? 'reports' : h; if (VIEW_RENDER[v] && v !== CURRENT_VIEW) switchView(v); });
   });
 });

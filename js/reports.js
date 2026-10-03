@@ -1,5 +1,5 @@
 /**
- * Reports — the daily training report (Claude Design handoff "2a", same look as the PDF sent to the group).
+ * Downloads (view id "reports") — the daily training report (Claude Design handoff "2a", same look as the PDF sent to the group).
  * Pages (1290 × 790, landscape): full-session table · TD & >20 km/h charts · Acc+Dec & sprints charts ·
  * total week load · drills summary (rankings by m/min, 4 drills a page). "Download PDF" builds the PDF in the browser.
  * Players / Staff: the staff version (reports-staff.js) adds RPE, z vs the usual MD, A:C and the microcycle pages.
@@ -202,7 +202,7 @@ function renderReports(opts) {
   if (opts && opts.version) RP.version = opts.version === 'staff' ? 'staff' : 'players';
   const root = document.getElementById('view-reports');
   root.innerHTML = `
-    ${pageHead('Daily report', 'Reports', 'rp-sub', `${segHtml('rp-ver', [['players', 'Players'], ['staff', 'Staff']], RP.version)}<div class="stepper"><button type="button" id="rp-prev" aria-label="Previous session">‹</button>
+    ${pageHead('PDF reports', 'Downloads', 'rp-sub', `${segHtml('rp-ver', [['players', 'Players'], ['staff', 'Staff']], RP.version)}<div class="stepper"><button type="button" id="rp-prev" aria-label="Previous session">‹</button>
         <select class="select" id="rp-pick" aria-label="Session"></select><button type="button" id="rp-next" aria-label="Next session">›</button></div>
       <button type="button" class="btn-primary" id="rp-pdf" disabled>Download PDF</button>`)}
     <div class="rp-preview" id="rp-preview"><div class="panel"><div class="empty">Loading…</div></div></div>`;
