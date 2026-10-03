@@ -76,7 +76,14 @@ function applyPhotos(map) {
     const m = el.style.backgroundImage.match(/url\(["']?(.*?)["']?\)/), u = m && swap[m[1]];
     if (u) el.style.backgroundImage = `url('${u}')`;
   });
+  // a page drawn before the photos arrived (first visit on this device): draw it again with them
+  if (typeof CURRENT_VIEW !== 'undefined' && CURRENT_VIEW && !PHOTOS_REDRAWN) {
+    PHOTOS_REDRAWN = true;
+    const f = VIEW_REDRAW[CURRENT_VIEW] || VIEW_RENDER[CURRENT_VIEW];
+    if (f) setTimeout(() => f(), 0);
+  }
 }
+let PHOTOS_REDRAWN = false;
 function loadPlayerPhotos() {
   if (PHOTOS_READY) return PHOTOS_READY;
   PHOTOS_READY = (async () => {
