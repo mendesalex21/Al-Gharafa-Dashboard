@@ -204,7 +204,7 @@ function drawWeek() {
     <div class="panel-head bare"><h2 class="panel-title">Weekly load vs top-3 match</h2><span class="panel-note">shaded = target range (${d.weeks.bands_source === 'config' ? 'staff targets' : `interquartile range of ${d.weeks.bands_n} past competitive player-weeks`})</span></div>
     <div class="grid2">${WEEK_TARGET_METRICS.map(([k, l]) => `<section class="panel"><div class="panel-head"><h2 class="panel-title small">% of top-3 match · ${l}</h2><span class="panel-note">${bands[k] ? `target ${bands[k][0]}–${bands[k][1]}%` : ''}</span></div><div class="chart" id="wk-pct-${k}"></div></section>`).join('')}</div>
     <section class="panel"><div class="panel-head"><h2 class="panel-title small">Players · week totals</h2><span class="panel-note">grouped by position · % of top-3 match next to each total</span></div><div class="table-wrap" id="wk-table"></div></section>
-    <div class="panel-head bare"><h2 class="panel-title">Squad · week by week</h2><span class="panel-note">average available player · last 16 weeks</span></div>
+    <div class="panel-head bare"><h2 class="panel-title">Team · week by week</h2><span class="panel-note">the team (your Team rule: ProTraining, whole-game players, 0 on days off) · last 16 weeks</span></div>
     <div class="grid4">${[['td', 'Total distance'], ['hit', 'HIT distance'], ['acc_dec', 'HIT Acc + Dec'], ['srpe', 'sRPE']].map(([k, l]) => `<section class="panel mini"><div class="panel-head"><h2 class="panel-title small">${l}</h2></div><div class="chart" id="wk-season-${k}"></div></section>`).join('')}</div>`;
 
   ['td', 'hit', 'acc_dec', 'srpe'].forEach((k) => chXY(document.getElementById('wk-day-' + k), {

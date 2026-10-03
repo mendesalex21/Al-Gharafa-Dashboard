@@ -63,9 +63,9 @@ function renderSquad() {
         <p class="panel-foot">Dashed lines: ACWR 0.78 · 1.37 · 1.5. Shaded wedge: 0.78–1.37.</p>
       </section>
       <section class="panel">
-        <div class="panel-head"><h2 class="panel-title small">Squad weekly load</h2><span class="panel-note">average available player · weeks start Sunday</span></div>
+        <div class="panel-head"><h2 class="panel-title small">Team weekly load</h2><span class="panel-note">the team (your Team rule: ProTraining, whole-game players, 0 on days off) · weeks start Sunday</span></div>
         <div class="chart" id="sq-weekly"></div>
-        <div class="panel-head"><h2 class="panel-title small">Squad ACWR · rolling 7:28</h2></div>
+        <div class="panel-head"><h2 class="panel-title small">Team ACWR · rolling 7:28</h2></div>
         <div class="chart" id="sq-team-acwr"></div>
       </section>
     </div>
@@ -100,9 +100,9 @@ function drawSquad() {
       <div class="tile-sub">red = high risk · orange = monitor</div></div>
     <div class="tile"><div class="tile-label">Available</div><div class="tile-value">${ps.length - unavailable.length}<small> / ${ps.length}</small></div>
       <div class="tile-sub">${Object.entries(counts).map(([k, n]) => `${n} ${STATUS_LABEL[k].toLowerCase()}`).join(' · ') || 'full squad'}</div></div>
-    <div class="tile"><div class="tile-label">Squad ACWR</div>
+    <div class="tile"><div class="tile-label">Team ACWR</div>
       <div class="tile-value chips">${['td', 'hit', 'spr'].map((k) => `<span><small>${METRIC_SHORT[k]}</small>${acwrChip(d.team.acwr_now[k])}</span>`).join('')}</div>
-      <div class="tile-sub">rolling 7:28 on the average available player</div></div>
+      <div class="tile-sub">rolling 7:28 · the team (your Team rule)</div></div>
     <div class="tile"><div class="tile-label">This week · TD</div><div class="tile-value">${fmtN(wNow.td)}<small> m</small></div>
       <div class="tile-sub">${wNow.days < 7 ? `${wNow.days} of 7 days · ` : ''}last week ${fmtN(wPrev ? wPrev.td : null)} m</div></div>`;
 

@@ -327,10 +327,10 @@ function rpDataDraw() {
   const g = RP_GPS.info, n = (x) => Number(x || 0).toLocaleString('en-GB');
   const when = g.updated ? new Date(g.updated).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
   box.innerHTML = `<div class="panel rp-data">
-    <div class="rp-data-h"><b>GPS data</b><small>The columns of your Data_Full and Data_Drills files, sessions published from the Session Plan included, since 1 Jul 2023.</small></div>
+    <div class="rp-data-h"><b>GPS data</b><small>The columns of your Data_Full and Data_Drills files, sessions published from the Session Plan included, and the Team sheet (computed as your Team macro), since 1 Jul 2023.</small></div>
     <div class="rp-data-row"><div><b>Google Sheet</b><small>${g.url ? `${n(g.full)} full-session rows · ${n(g.drills)} drill rows${when ? ` · updated ${rpEsc(when)}` : ''}` : g.demo ? 'Not available in the local demo' : 'Created at the next “Update dashboard”'}</small></div>
       ${g.url ? `<a class="btn-light" href="${rpEsc(g.url)}" target="_blank" rel="noopener">Open in Google Sheets ↗</a>` : ''}</div>
-    <div class="rp-data-row"><div><b>Download Excel</b><small>One file, two sheets (Data_Full, Data_Drills), same columns as your files</small></div>
+    <div class="rp-data-row"><div><b>Download Excel</b><small>One file: Data_Full, Data_Drills and Team, same columns as your files</small></div>
       <div class="rp-data-dl"><select class="select" id="rp-gps-period" aria-label="Period">
         <option value="session">Last session</option><option value="week">This week</option><option value="4w">Last 4 weeks</option>
         <option value="season" selected>This season</option><option value="custom">Choose the dates…</option>${g.id ? '<option value="all">Everything since 2023 (Google Sheets)</option>' : ''}</select>
@@ -366,6 +366,7 @@ async function rpGpsDownload() {
     const wb = window.XLSX.utils.book_new();
     window.XLSX.utils.book_append_sheet(wb, sheet(d.cols_full, d.rows_full || []), 'Data_Full');
     window.XLSX.utils.book_append_sheet(wb, sheet(d.cols_drills, d.rows_drills || []), 'Data_Drills');
+    if ((d.cols_team || []).length) window.XLSX.utils.book_append_sheet(wb, sheet(d.cols_team, d.rows_team || []), 'Team');
     window.XLSX.writeFile(wb, from === to ? `GPS_data_${from}.xlsx` : `GPS_data_${from}_to_${to}.xlsx`);
     msg.textContent = `${(d.rows_full || []).length} full-session rows and ${(d.rows_drills || []).length} drill rows downloaded.`;
   } catch (e) {
