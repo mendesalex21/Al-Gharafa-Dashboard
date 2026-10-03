@@ -177,7 +177,7 @@ function svAttention(s) {
   const out = [];
   let calm = 0;
   svFlat(s).forEach((p) => {
-    const r = [], partial = s.kind === 'match' && (p.min || 0) < 75; // under 75 min his match values are scaled: in his sheet, not flagged
+    const game = s.kind === 'match' || p.cat === 'b', r = [], partial = game && (p.min || 0) < 75; // under 75 min his game values are scaled: in his sheet, not flagged
     Object.keys(SV_A).forEach((k) => {
       const z = partial ? null : svZ(p, k);
       if (z == null) return;
@@ -441,8 +441,9 @@ function svSheetHtml(s, p, nav) {
     const vt = s.team[key] ? Math.round(v / s.team[key] * 100) : null, vm = p['p3_' + key];
     return `<tr class="m ${plan && key === SV.mc ? 'sel' : ''}" ${plan && mm && mm.target ? `data-mck="${key}"` : ''}><td class="lbl">${l}</td>${today}${cyc}<td class="num sep">${vt == null ? '—' : `${vt > 300 ? '>300' : vt}%`}</td><td class="num">${vm == null ? '—' : `${vm}%`}</td></tr>`;
   }).join('');
-  const refTxt = p.mdref ? `${p.mdref.src === 'own' ? `his ${p.mdref.n} ${s.kind === 'match' ? 'matches of 75 min +' : 'sessions'}` : 'squad reference'}${per90 && p.min < 75 ? `, scaled to his ${fmtN(p.min)} min — indicative` : ''}`
-    : s.kind === 'match' && p.cat === 'm' && p.min < 20 ? 'under 20 min: no comparison' : 'no reference';
+  const game = s.kind === 'match' || p.cat === 'b'; // A-team match, or a B-team game on a training day
+  const refTxt = p.mdref ? `${p.mdref.src === 'own' ? `his ${p.mdref.n} ${game ? 'games of 75 min + (A + B, this season and last)' : 'sessions'}` : 'squad reference'}${per90 && p.min < 75 ? `, scaled to his ${fmtN(p.min)} min — indicative` : ''}`
+    : game && p.min < 20 ? 'under 20 min: no comparison' : 'no reference';
   const prep = plan && mc.prep;
   const cycTxt = prep ? `His preparation → this match <small>${mc.days[0].md} → MD-1 · vs his usual for these days</small>`
     : plan ? `His microcycle → match ${fmtDay(mc.matchDate, { weekday: 'short', day: 'numeric', month: 'short' })} <small>${mc.days[0].md} → MD-1 · as of ${s.md}</small>` : 'His microcycle <small>no plan on a break</small>';
@@ -455,7 +456,7 @@ function svSheetHtml(s, p, nav) {
       ${svAcHtml(s, p)}</div>
     <div class="sv-grid-wrap"><table class="sv-grid">
       <colgroup><col style="width:104px"><col><col style="width:112px"><col style="width:58px"><col><col style="width:112px"><col style="width:92px"><col style="width:56px"><col style="width:56px"></colgroup>
-      <thead><tr class="grp"><th></th><th colspan="3">Today vs his usual ${s.kind === 'match' ? 'match' : s.md || ''} <small>${refTxt}</small></th><th colspan="3" class="sep">${cycTxt}</th><th colspan="2" class="sep">Today vs</th></tr>
+      <thead><tr class="grp"><th></th><th colspan="3">Today vs his usual ${game ? 'match' : s.md || ''} <small>${refTxt}</small></th><th colspan="3" class="sep">${cycTxt}</th><th colspan="2" class="sep">Today vs</th></tr>
         <tr><th>Metric</th><th>blue · green usual · orange · red &nbsp;● today &nbsp;| usual</th><th class="r">today / usual</th><th class="c">z</th><th class="sep">${prep ? 'done · | his usual' : 'done · to do · target'}</th><th class="r">${prep ? 'done / usual' : 'done / target'}</th><th class="c">status</th><th class="r sep">team</th><th class="r">match</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     ${plan ? `<div class="sv-bottom"><div class="sv-ins">${ins.map((x) => `<div class="sv-in ${x.lv}"><i>${x.i}</i><span>${x.t}</span></div>`).join('')}

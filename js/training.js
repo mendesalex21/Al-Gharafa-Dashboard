@@ -134,7 +134,7 @@ function drawMdz(s) {
     mount.innerHTML = '';
     return;
   }
-  const day = ref.tag === 'MD' ? 'matches of 75 min or more (per 90 min; a player with less time today is compared at his minutes)' : `${ref.tag} sessions of ${TYPE_LABEL[ref.type].toLowerCase()} microcycles`;
+  const day = ref.tag === 'MD' ? 'A and B games of 75 min or more, this season and the last (per 90 min; a player with less time today is compared at his minutes)' : `${ref.tag} sessions of ${TYPE_LABEL[ref.type].toLowerCase()} microcycles`;
   note.innerHTML = `Each player is compared with <b>his own</b> previous ${day} since ${fmtDay(ref.since, { month: 'short', year: 'numeric' })} (${ref.sessions} sessions in the club history); with fewer than 5 of his own, the squad's is used. <span class="muted">z = (today − his usual) / his usual variation · hover a cell for the values · click a column to sort · click a player for his full session.</span>`;
   const ps = s.players.filter((p) => p.mdref);
   if (!ps.length) { mount.innerHTML = emptyState('No player with a reference for this session.'); return; }
