@@ -198,11 +198,12 @@ function rpDrillBoards(D, cols) {
 
 // ---------------------------------------------------------------- page
 function renderReports(opts) {
-  if (opts && opts.date) RP.wanted = opts.date;
+  if (opts && opts.date === 'data') RP.version = 'data';
+  else if (opts && opts.date) RP.wanted = opts.date;
   if (opts && opts.version) RP.version = opts.version === 'staff' ? 'staff' : 'players';
   const root = document.getElementById('view-reports');
   root.innerHTML = `
-    ${pageHead('PDF reports', 'Downloads', 'rp-sub', `${segHtml('rp-ver', [['players', 'Players'], ['staff', 'Staff']], RP.version)}<div class="stepper"><button type="button" id="rp-prev" aria-label="Previous session">‹</button>
+    ${pageHead('PDF reports · Excel data', 'Downloads', 'rp-sub', `${segHtml('rp-ver', [['players', 'Players'], ['staff', 'Staff'], ['data', 'Excel data']], RP.version)}<div class="stepper" id="rp-step"><button type="button" id="rp-prev" aria-label="Previous session">‹</button>
         <select class="select" id="rp-pick" aria-label="Session"></select><button type="button" id="rp-next" aria-label="Next session">›</button></div>
       <button type="button" class="btn-primary" id="rp-pdf" disabled>Download PDF</button>`)}
     <div class="rp-preview" id="rp-preview"><div class="panel"><div class="empty">Loading…</div></div></div>`;
@@ -246,7 +247,8 @@ function rpGo(i, part = 'all') {
 
 function rpHash() {
   const s = RP.data && RP.data.sessions[RP.idx];
-  if (s) history.replaceState(null, '', '#reports/' + s.date + (RP.version === 'staff' ? '/staff' : ''));
+  if (RP.version === 'data') history.replaceState(null, '', '#reports/data');
+  else if (s) history.replaceState(null, '', '#reports/' + s.date + (RP.version === 'staff' ? '/staff' : ''));
 }
 
 /** Staff version of this report: its pages, or why there is none (match days and B-team games: later). */
@@ -264,7 +266,12 @@ function rpBuild(D) { return RP.version === 'staff' ? rpStaffState(D).html || ''
 
 function drawReports() {
   const box = document.getElementById('rp-preview');
-  if (!box || !RP.data) return;
+  if (!box) return;
+  const data = RP.version === 'data';
+  document.getElementById('rp-step').style.display = data ? 'none' : '';
+  document.getElementById('rp-pdf').style.display = data ? 'none' : '';
+  if (data) { if (!box.querySelector('.rp-data')) rpDataDraw(); return; } // (re)drawn once: a late reports load must not reset the form
+  if (!RP.data) return;
   const list = RP.data.sessions;
   if (!list.length) { box.innerHTML = `<div class="panel">${emptyState('No sessions this season yet.')}</div>`; return; }
   const D = rpDoc(RP.data, RP.idx, RP.part);
@@ -300,6 +307,70 @@ function drawReports() {
   // warm up in the background so "Download PDF" is quick: this session's photos and the PDF tools
   rpPhotos(D);
   Promise.all(RP_JS.map(rpScript)).catch(() => { /* retried on click */ });
+}
+
+// ---------------------------------------------------------------- Excel data: the GPS file shared for Power BI
+const RP_GPS = { info: null, err: null, busy: false };
+const RP_XLSX = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+
+function rpDataDraw() {
+  const box = document.getElementById('rp-preview');
+  document.getElementById('rp-sub').textContent = 'GPS data · Data_Full + Data_Drills · the same file feeds the physical coach’s Power BI';
+  if (!RP_GPS.info && !RP_GPS.err) {
+    box.innerHTML = '<div class="panel"><div class="empty">Loading…</div></div>';
+    (AUTH.demo ? Promise.resolve({ url: null, demo: true }) : callApi('gps_rows', null, {}))
+      .then((d) => { RP_GPS.info = d || {}; }).catch((e) => { RP_GPS.err = e; })
+      .then(() => { if (RP.version === 'data') rpDataDraw(); });
+    return;
+  }
+  if (RP_GPS.err) { box.innerHTML = loadError(RP_GPS.err); return; }
+  const g = RP_GPS.info, n = (x) => Number(x || 0).toLocaleString('en-GB');
+  const when = g.updated ? new Date(g.updated).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  box.innerHTML = `<div class="panel rp-data">
+    <div class="rp-data-h"><b>GPS data</b><small>The columns of your Data_Full and Data_Drills files, sessions published from the Session Plan included, since 1 Jul 2023.</small></div>
+    <div class="rp-data-row"><div><b>Google Sheet</b><small>${g.url ? `${n(g.full)} full-session rows · ${n(g.drills)} drill rows${when ? ` · updated ${rpEsc(when)}` : ''}` : g.demo ? 'Not available in the local demo' : 'Created at the next “Update dashboard”'}</small></div>
+      ${g.url ? `<a class="btn-light" href="${rpEsc(g.url)}" target="_blank" rel="noopener">Open in Google Sheets ↗</a>` : ''}</div>
+    <div class="rp-data-row"><div><b>Download Excel</b><small>One file, two sheets (Data_Full, Data_Drills), same columns as your files</small></div>
+      <div class="rp-data-dl"><select class="select" id="rp-gps-period" aria-label="Period">
+        <option value="session">Last session</option><option value="week">This week</option><option value="4w">Last 4 weeks</option>
+        <option value="season" selected>This season</option><option value="custom">Choose the dates…</option>${g.id ? '<option value="all">Everything since 2023 (Google Sheets)</option>' : ''}</select>
+        <span id="rp-gps-dates" hidden><input type="date" id="rp-gps-from" aria-label="From"> → <input type="date" id="rp-gps-to" aria-label="To"></span>
+        <button type="button" class="btn-primary" id="rp-gps-dl"${g.url ? '' : ' disabled'}>Download</button></div></div>
+    <p class="rp-data-note" id="rp-gps-msg"></p></div>`;
+  const sel = document.getElementById('rp-gps-period');
+  sel.onchange = () => { document.getElementById('rp-gps-dates').hidden = sel.value !== 'custom'; };
+  document.getElementById('rp-gps-dl').onclick = rpGpsDownload;
+}
+
+/** [from, to] of the chosen period ('yyyy-mm-dd'). */
+function rpGpsPeriod(kind) {
+  const today = todayIso(), list = (RP.data && RP.data.sessions || []).filter((s) => !s.hidden);
+  if (kind === 'session') { const d = list.length ? list[list.length - 1].date : today; return [d, d]; }
+  if (kind === 'week') return [addDays(today, -new Date(today + 'T12:00:00Z').getUTCDay()), today];
+  if (kind === '4w') return [addDays(today, -27), today];
+  if (kind === 'custom') return [document.getElementById('rp-gps-from').value, document.getElementById('rp-gps-to').value || today];
+  return [list.length ? list[0].date : addDays(today, -120), today];
+}
+
+async function rpGpsDownload() {
+  const kind = document.getElementById('rp-gps-period').value, msg = document.getElementById('rp-gps-msg'), btn = document.getElementById('rp-gps-dl');
+  if (kind === 'all') { window.open(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(RP_GPS.info.id)}/export?format=xlsx`, '_blank', 'noopener'); return; }
+  const [from, to] = rpGpsPeriod(kind);
+  if (!from || from > to) { msg.textContent = 'Choose a start date before the end date.'; return; }
+  btn.disabled = true; msg.textContent = 'Preparing the file…';
+  try {
+    const [d] = await Promise.all([callApi('gps_rows', null, { from, to }), rpScript(RP_XLSX)]);
+    if (d.too_many) { msg.textContent = 'Too many rows for one file: choose a shorter period, or “Everything since 2023”.'; return; }
+    if (!(d.rows_full || []).length && !(d.rows_drills || []).length) { msg.textContent = 'No GPS data in this period.'; return; }
+    const sheet = (cols, rows) => window.XLSX.utils.aoa_to_sheet([cols, ...rows.map((r) => r.map((v, j) => (j === 0 && v ? new Date(v + 'T00:00:00') : v)))], { cellDates: true, dateNF: 'dd/mm/yyyy' });
+    const wb = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(wb, sheet(d.cols_full, d.rows_full || []), 'Data_Full');
+    window.XLSX.utils.book_append_sheet(wb, sheet(d.cols_drills, d.rows_drills || []), 'Data_Drills');
+    window.XLSX.writeFile(wb, from === to ? `GPS_data_${from}.xlsx` : `GPS_data_${from}_to_${to}.xlsx`);
+    msg.textContent = `${(d.rows_full || []).length} full-session rows and ${(d.rows_drills || []).length} drill rows downloaded.`;
+  } catch (e) {
+    msg.textContent = 'Not downloaded — ' + (e.message || e);
+  } finally { btn.disabled = false; }
 }
 
 /** The pages keep their exact print size (1290 px); the preview is zoomed to the available width. */
