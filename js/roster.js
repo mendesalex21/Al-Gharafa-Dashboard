@@ -1,11 +1,11 @@
 /**
  * Squad tab (Football-Manager-like): every current player with his profile — shirt number, age, nationality, height,
  * foot, position — from the "Squad" sheet (edited here, read by sync/build.py) and his season numbers
- * (build.py → squad_stats). Two views: List (default) and By position (who is available today; unavailable players
- * at the end of each position). The player sheet adds or edits a player (this also updates the wellness kiosk list)
+ * (build.py → squad_stats). Two views: By position (default: who is available today; unavailable players at the end
+ * of each position) and List. The player sheet adds or edits a player (this also updates the wellness kiosk list)
  * and replaces his photo (kept exactly as uploaded).
  */
-const RO = { data: null, view: 'list', sort: null, showLeft: false, sheet: null, photo: null };
+const RO = { data: null, view: 'pos', sort: null, showLeft: false, sheet: null, photo: null };
 const RO_LINES = [['Goalkeepers', ['GK']], ['Defenders', ['CD', 'WD']], ['Midfielders', ['CM', 'WM']], ['Forwards', ['FW']]];
 const RO_POS = { GK: 'Goalkeeper', CD: 'Centre-back', WD: 'Full-back', CM: 'Central midfielder', WM: 'Wide midfielder', FW: 'Forward' };
 const RO_COLS = [['GK', 'Goalkeepers'], ['CD', 'Centre-backs'], ['WD', 'Full-backs'], ['CM', 'Central mid.'], ['WM', 'Wide mid.'], ['FW', 'Forwards']];
@@ -84,7 +84,7 @@ function roPhoto(id, size) { const ph = typeof PHOTO_DATA !== 'undefined' && PHO
 function renderRoster() {
   const root = document.getElementById('view-roster');
   root.innerHTML = `
-    ${pageHead('Season 2026/27', 'Squad', 'ro-sub', `<div class="seg" id="ro-view"><button type="button" data-v="list" class="active">List</button><button type="button" data-v="pos">By position</button></div>
+    ${pageHead('Season 2026/27', 'Squad', 'ro-sub', `<div class="seg" id="ro-view"><button type="button" data-v="pos" class="active">By position</button><button type="button" data-v="list">List</button></div>
       <button type="button" class="btn-primary" id="ro-add">+ Add player</button>`)}
     <div class="ro-summary" id="ro-summary"></div>
     <div id="ro-body"><div class="panel"><div class="empty">Loading…</div></div></div>

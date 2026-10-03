@@ -210,10 +210,9 @@ function drawNextMatches(events, today) {
   box.hidden = !up.length;
   box.innerHTML = up.map((e, i) => {
     const dd = daysBetween(today, matchDate(e)), ha = matchHA(e), tbc = e.start !== (e.end || e.start) && !e.confirmed_date;
-    return `<button type="button" class="upc${i ? '' : ' first'}" data-ev="${e.id}" data-date="${matchDate(e)}">${crestHtml(e.opponent, 40)}
-      <div class="b"><div class="t"><h4>${escapeHtml(e.opponent || 'Opponent tbc')}</h4>${compChip(e)}</div>
-        <div class="s">${fmtDay(matchDate(e), { weekday: 'short', day: '2-digit', month: '2-digit' })}${tbc ? ' · TBC' : ''} · <b>${dd === 0 ? 'today' : dd === 1 ? 'tomorrow' : `in ${dd} days`}</b>${e.time ? ' · ' + escapeHtml(e.time) : ''}</div>
-        <div class="w">${ha ? `<span class="ha ha-${ha}">${ha}</span>` : ''}<span>${escapeHtml([e.round, venueShort(e.venue) || 'venue tbc'].filter(Boolean).join(' · '))}</span></div></div></button>`;
+    return `<button type="button" class="upc${i ? '' : ' first'}" data-ev="${e.id}" data-date="${matchDate(e)}" title="${escapeHtml([e.round, venueShort(e.venue)].filter(Boolean).join(' · '))}">${crestHtml(e.opponent, 34)}
+      <div class="b"><div class="t"><h4>${escapeHtml(e.opponent || 'Opponent tbc')}</h4>${ha ? `<span class="ha ha-${ha}">${ha}</span>` : ''}${compChip(e)}</div>
+        <div class="s">${fmtDay(matchDate(e), { weekday: 'short', day: '2-digit', month: '2-digit' })}${tbc ? ' · TBC' : ''} · <b>${dd === 0 ? 'today' : dd === 1 ? 'tomorrow' : `in ${dd} days`}</b>${e.time ? ' · ' + escapeHtml(e.time) : ''}<span class="v">${escapeHtml([e.round, venueShort(e.venue) || 'venue tbc'].filter(Boolean).join(' · '))}</span></div></div></button>`;
   }).join('');
   box.onclick = (ev) => { const c = ev.target.closest('[data-ev]'); if (c) openDay(c.dataset.date, { edit: c.dataset.ev }); };
 }

@@ -38,6 +38,7 @@ function svTagNum(tag) { const m = /^MD([+-])(\d+)$/.exec(tag || ''); return m ?
 /** Days that prepare the match (MD-6 → MD-1) of the microcycle of session s, from the MD tags: done, today, left.
  * MD+1 / MD+2 are left out: recovery for the starters, compensation for the others — not a shared target. */
 function svMicrocycle(s) {
+  if (s.kind === 'match') return svPrepCycle(s);
   const t = svTagNum(s.md);
   if (s.kind !== 'training' || t == null || !s.cycle.type || t < -6) return null;
   const toMatch = t < 0 ? -t : (s.cycle.length && !s.cycle.pre_match ? s.cycle.length - t : null);
@@ -53,6 +54,18 @@ function svMicrocycle(s) {
   }
   for (let j = Math.min(toMatch - 1, 6); j >= 1; j--) days.push({ date: addDays(matchDate, -j), md: `MD-${j}` });
   return { matchDate, type: s.cycle.type, days, today: s.date, started: t < 0 };
+}
+/** Match day: the training days that prepared this match (MD-6 → MD-1), all done — his preparation vs his usual. */
+function svPrepCycle(s) {
+  if (!SV.sorted || SV.sorted.src !== TR.sessions) SV.sorted = { src: TR.sessions, list: TR.sessions.sessions.slice().sort((a, b) => (a.date < b.date ? -1 : 1)) };
+  const sorted = SV.sorted.list, idx = sorted.findIndex((x) => x.date === s.date), days = [];
+  for (let i = idx - 1; i >= 0; i--) {
+    const x = sorted[i], n = svTagNum(x.md);
+    if (x.kind !== 'training' || n == null || n >= 0 || n < -6 || daysBetween(x.date, s.date) > 8) break;
+    days.unshift({ date: x.date, md: x.md, sess: x });
+  }
+  const type = s.cycle.type || (days.length ? days[days.length - 1].sess.cycle.type : null); // after a break: the type of the preparation days
+  return days.length && type ? { matchDate: s.date, type, days, today: s.date, started: true, prep: true } : null;
 }
 /** [mean, sd] of his usual for a day tag: that day's own reference when he trained, else the per-tag table (own, then squad). */
 function svUsualFor(pid, tag, type, k, sess) {
@@ -80,11 +93,15 @@ function svPlan(p, mc) {
     const fut = rows.filter((r) => !r.past);
     const share = shareOut(Math.max(0, target - done), fut.map((r) => ({ med: r.u, lo: 0, hi: (r.md === 'MD-1' ? 1.2 : 1.6) * r.u })));
     fut.forEach((r, i) => { r.obj = share[i] || 0; });
-    out[k] = { rows, target, done, expected, planned: fut.reduce((a, r) => a + r.obj, 0), left: fut.length };
+    out[k] = { rows, target, done, expected, planned: fut.reduce((a, r) => a + r.obj, 0), left: fut.length, prep: !!mc.prep };
   });
   return out;
 }
 function svMcStatus(m) {
+  if (m.prep) { // his preparation for a match, done: compared with his usual for those days
+    const r = m.target ? m.done / m.target : 1;
+    return r > 1.3 ? { lv: 'high', t: 'Well above' } : r > 1.15 ? { lv: 'above', t: 'Above' } : r >= 0.9 ? { lv: 'on', t: 'As usual ✓' } : r >= 0.7 ? { lv: 'on', t: 'Slightly below' } : { lv: 'below', t: 'Below' };
+  }
   if (m.done >= m.target * 0.97) return m.done > m.target * 1.3 ? { lv: 'high', t: 'Well above' } : { lv: 'on', t: m.left ? 'Reached ✓' : 'Done ✓' };
   const r = m.expected ? m.done / m.expected : 1;
   return r < 0.75 ? { lv: 'below', t: 'Behind' } : r > 1.25 ? { lv: 'above', t: 'Ahead' } : { lv: 'on', t: 'On track' };
@@ -130,6 +147,19 @@ function svMcChart(m, k) {
   return `<svg class="sv-mc-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${SV_LBL[k]} day by day">${g}</svg>`;
 }
 
+/** Match day: was his preparation (MD-k → MD-1) lighter or heavier than usual? */
+function svPrepInsights(plan, mc) {
+  const pc = (m) => Math.round(m.done / m.target * 100), ks = SV_M.map(([k]) => k).filter((k) => plan[k] && plan[k].target);
+  const lo = ks.filter((k) => plan[k].done < plan[k].target * 0.85), hi = ks.filter((k) => plan[k].done > plan[k].target * 1.15);
+  const span = `${mc.days[0].md} → MD-1`, ins = [];
+  if (lo.length) ins.push({ lv: 'below', i: '↓', t: `<b>Lighter preparation than usual</b> (${span}) — ${lo.map((k) => `${SV_LBL[k]} ${pc(plan[k])}%`).join(' · ')} of his usual for these days.` });
+  if (hi.length) ins.push({ lv: 'above', i: '↑', t: `<b>Heavier preparation than usual</b> (${span}) — ${hi.map((k) => `${SV_LBL[k]} ${pc(plan[k])}%`).join(' · ')} of his usual for these days.` });
+  const absent = (plan.td && plan.td.rows || []).filter((r) => r.absent);
+  if (absent.length) ins.push({ lv: 'below', i: '·', t: `Not in the team session on ${absent.map((r) => `${fmtDay(r.date, { weekday: 'short', day: 'numeric' })} (${r.md})`).join(', ')} — counted as 0.` });
+  if (!ins.length) ins.push({ lv: 'on', i: '✓', t: `Preparation as usual on every metric (${span}).` });
+  return ins;
+}
+
 /** Plain-language reading of his microcycle: joker, behind (top-up), volume already done, missed sessions. */
 function svInsights(s, plan, rd, left) {
   const pc = (a, b) => Math.round(a / b * 100), u = (k) => (SV_UNIT[k] ? ' ' + SV_UNIT[k] : '');
@@ -150,9 +180,9 @@ function svAttention(s) {
   const out = [];
   let calm = 0;
   svFlat(s).forEach((p) => {
-    const r = [];
+    const r = [], partial = s.kind === 'match' && (p.min || 0) < 45; // a substitute's per-90 values: in his sheet, not flagged
     Object.keys(SV_A).forEach((k) => {
-      const z = svZ(p, k);
+      const z = partial ? null : svZ(p, k);
       if (z == null) return;
       const d = `${fmtN(p[k])} vs ${fmtN(svUsual(p, k))} · z ${fmtSigned(z)}`;
       if (z >= 2) r.push({ lv: 'high', sev: 3, t: `${SV_A[k]} well above his usual`, d });
@@ -421,9 +451,12 @@ function svSheetHtml(s, p, nav) {
     const vt = s.team[key] ? Math.round(v / s.team[key] * 100) : null, vm = p['p3_' + key];
     return `<tr class="m ${plan && key === SV.mc ? 'sel' : ''}" ${plan && mm && mm.target ? `data-mck="${key}"` : ''}><td class="lbl">${l}</td>${today}${cyc}<td class="num sep">${vt == null ? '—' : `${vt > 300 ? '>300' : vt}%`}</td><td class="num">${vm == null ? '—' : `${vm}%`}</td></tr>`;
   }).join('');
-  const refTxt = p.mdref ? `${p.mdref.src === 'own' ? `his ${p.mdref.n} sessions` : 'squad reference'}${per90 ? ', to his minutes' : ''}` : 'no reference';
-  const cycTxt = plan ? `His microcycle → match ${fmtDay(mc.matchDate, { weekday: 'short', day: 'numeric', month: 'short' })} <small>${mc.days[0].md} → MD-1 · as of ${s.md}</small>` : 'His microcycle <small>no plan on a match day or a break</small>';
-  const ins = plan ? svInsights(s, plan, rd, left) : [];
+  const refTxt = p.mdref ? `${p.mdref.src === 'own' ? `his ${p.mdref.n} ${s.kind === 'match' ? 'matches' : 'sessions'}` : 'squad reference'}${per90 ? `, scaled to his ${fmtN(p.min)} min` : ''}`
+    : s.kind === 'match' && p.cat === 'm' && p.min < 20 ? 'under 20 min: no comparison' : 'no reference';
+  const prep = plan && mc.prep;
+  const cycTxt = prep ? `His preparation → this match <small>${mc.days[0].md} → MD-1 · vs his usual for these days</small>`
+    : plan ? `His microcycle → match ${fmtDay(mc.matchDate, { weekday: 'short', day: 'numeric', month: 'short' })} <small>${mc.days[0].md} → MD-1 · as of ${s.md}</small>` : 'His microcycle <small>no plan on a break</small>';
+  const ins = prep ? svPrepInsights(plan, mc) : plan ? svInsights(s, plan, rd, left) : [];
   return `
     <div class="sv-head3">${svWellHtml(p)}
       <div class="sv-mid"><div class="sv-top"><div class="sv-id"><h3>${escapeHtml(playerName(p.id))}</h3>
@@ -433,11 +466,12 @@ function svSheetHtml(s, p, nav) {
     <div class="sv-grid-wrap"><table class="sv-grid">
       <colgroup><col style="width:104px"><col><col style="width:112px"><col style="width:58px"><col><col style="width:112px"><col style="width:92px"><col style="width:56px"><col style="width:56px"></colgroup>
       <thead><tr class="grp"><th></th><th colspan="3">Today vs his usual ${s.kind === 'match' ? 'match' : s.md || ''} <small>${refTxt}</small></th><th colspan="3" class="sep">${cycTxt}</th><th colspan="2" class="sep">Today vs</th></tr>
-        <tr><th>Metric</th><th>blue · green usual · orange · red &nbsp;● today &nbsp;| usual</th><th class="r">today / usual</th><th class="c">z</th><th class="sep">done · to do · target</th><th class="r">done / target</th><th class="c">status</th><th class="r sep">team</th><th class="r">match</th></tr></thead>
+        <tr><th>Metric</th><th>blue · green usual · orange · red &nbsp;● today &nbsp;| usual</th><th class="r">today / usual</th><th class="c">z</th><th class="sep">${prep ? 'done · | his usual' : 'done · to do · target'}</th><th class="r">${prep ? 'done / usual' : 'done / target'}</th><th class="c">status</th><th class="r sep">team</th><th class="r">match</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     ${plan ? `<div class="sv-bottom"><div class="sv-ins">${ins.map((x) => `<div class="sv-in ${x.lv}"><i>${x.i}</i><span>${x.t}</span></div>`).join('')}
-        <div class="sv-leg"><span><i class="lg-done"></i>done</span><span><i class="lg-todo"></i>his objective for the days left</span><span><i class="lg-exp"></i>his usual by today</span><span><i class="lg-tgt"></i>microcycle target</span><span>target = his own usual for each day, added up · re-planned after every session</span></div></div>
-      <div class="sv-chart"><div class="sv-chart-h"><b>${SV_LBL[SV.mc]}</b> day by day <small>· click a line above to change · dark line = his usual for that day · dashed = his objective</small></div>${svMcChart(plan[SV.mc], SV.mc)}</div></div>` : ''}`;
+        ${prep ? '<div class="sv-leg"><span><i class="lg-done"></i>done, MD-k → MD-1</span><span><i class="lg-tgt"></i>his usual for these days, added up</span></div></div>'
+          : '<div class="sv-leg"><span><i class="lg-done"></i>done</span><span><i class="lg-todo"></i>his objective for the days left</span><span><i class="lg-exp"></i>his usual by today</span><span><i class="lg-tgt"></i>microcycle target</span><span>target = his own usual for each day, added up · re-planned after every session</span></div></div>'}
+      <div class="sv-chart"><div class="sv-chart-h"><b>${SV_LBL[SV.mc]}</b> day by day <small>· click a line above to change · dark line = his usual for that day${prep ? '' : ' · dashed = his objective'}</small></div>${svMcChart(plan[SV.mc], SV.mc)}</div></div>` : ''}`;
 }
 function svOpen(s, id) {
   const list = svFlat(s), i = list.findIndex((x) => x.id === id);

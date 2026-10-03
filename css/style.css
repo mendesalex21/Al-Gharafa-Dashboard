@@ -1218,21 +1218,24 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .ca-sec { font-size: 12px; font-weight: 700; color: var(--ink-muted); letter-spacing: .06em; text-transform: uppercase; margin: 22px 2px 10px; }
 .ca-step { gap: 6px; } .ca-step[hidden] { display: none; }
 .ca-step .month-label { min-width: 124px; text-align: center; font-weight: 650; }
-#view-calendar .cal-panel { margin-top: 12px; padding: 10px; }
-#view-calendar { padding-top: 28px; padding-bottom: 18px; }
-#view-calendar .pg-head { margin-bottom: 16px; }
+#view-calendar .cal-panel { margin-top: 8px; padding: 8px 10px 10px; }
+.cal2 .cal-dow { padding: 0 0 2px; font-size: 11px; }
+#view-calendar { padding-top: 14px; padding-bottom: 18px; }
+#view-calendar .pg-eyebrow { display: none; } /* one screen: the season is in the month and the cards */
+#view-calendar .pg-head { margin-bottom: 10px; }
 @media (min-width: 900px) { #view-calendar .pg-head { flex-wrap: nowrap; } #view-calendar .pg-head > div:first-child { min-width: 0; flex: 1 1 auto; } #view-calendar .pg-tools { flex-wrap: nowrap; flex: none; } }
 .ca-legend { padding: 8px 4px 0; font-size: 11.5px; gap: 6px 14px; }
 .cal2 .dc { min-height: 0; }
 .ca-month-h .month-label { color: var(--ink); }
 .ca-up { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 4px; }
-.upc { font: inherit; text-align: left; color: inherit; cursor: pointer; background: var(--surface); border: 1px solid var(--hairline); border-radius: 16px; padding: 9px 13px; display: flex; align-items: center; gap: 12px; min-width: 0; transition: box-shadow .15s; }
+.upc { font: inherit; text-align: left; color: inherit; cursor: pointer; background: var(--surface); border: 1px solid var(--hairline); border-radius: 14px; padding: 7px 12px; display: flex; align-items: center; gap: 12px; min-width: 0; transition: box-shadow .15s; }
 .upc:hover { box-shadow: var(--shadow); }
 .upc.first { background: linear-gradient(180deg, #eef4fd, var(--surface)); border-color: #cfe0f7; }
 .upc .b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.upc .t { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.upc .t { display: flex; align-items: center; gap: 6px; } .upc .t .comp { margin-left: auto; }
 .upc h4 { margin: 0; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.upc .s { font-size: 12px; color: var(--ink-muted); font-weight: 600; white-space: nowrap; } .upc .s b { color: #1d5fae; }
+.upc .s { font-size: 12px; color: var(--ink-muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .upc .s b { color: #1d5fae; }
+.upc .s .v { font-weight: 500; color: var(--ink-2); } .upc .s .v::before { content: ' · '; color: var(--ink-muted); }
 .upc .w { font-size: 11.5px; color: var(--ink-2); display: flex; gap: 6px; align-items: center; white-space: nowrap; min-width: 0; }
 .upc .w span:last-child { overflow: hidden; text-overflow: ellipsis; }
 .comp { display: inline-block; font-size: 10.5px; font-weight: 700; border-radius: 6px; padding: 2px 7px; white-space: nowrap; color: var(--cc); background: color-mix(in srgb, var(--cc) 13%, var(--surface)); }
