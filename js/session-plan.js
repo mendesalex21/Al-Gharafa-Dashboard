@@ -120,7 +120,7 @@ function splDrawWeek() {
   el.innerHTML = [...Array(7)].map((_, i) => {
     const d = addDays(SPL.week, i), tag = splTag(d), m = splMatchOn(d), r = SPL.lib.recent[d], p = (SPL.saved.plans || {})[d];
     const pub = Object.values(SPL.saved.published || {}).some((x) => x.date === d);
-    const badge = r && /^S\d+$/.test(r.sid) ? `<span class="sp-b done">${r.sid} · in the data ✓</span>` : pub ? '<span class="sp-b done">Published ✓</span>'
+    const badge = r && /^S\d+$/.test(r.sid) ? `<span class="sp-b done">${r.sid} · ${r.pub ? 'published' : 'in the data'} ✓</span>` : pub ? '<span class="sp-b done">Published ✓</span>'
       : m ? `<span class="sp-b match">${crestHtml(m.e.opponent, 16)}${escapeHtml([m.e.round || m.e.competition, m.e.opponent].filter(Boolean).join(' · '))}</span>`
         : p && (p.drills || []).length ? '<span class="sp-b plan">Planned</span>' : '<span class="sp-b none">+ Plan</span>';
     return `<button type="button" class="sp-day${d === SPL.date ? ' on' : ''}${m ? ' m' : ''}" data-day="${d}"><b>${SPL_DAY(d, { weekday: 'short', day: 'numeric' })}</b>${tag ? `<span class="sp-md${tag === 'MD' ? ' mdm' : ''}">${tag}</span>` : '<span class="sp-md off">—</span>'}${badge}</button>`;
@@ -143,7 +143,9 @@ const SPL_COL = ['#8e8e93', '#5b9bd5', '#34a853', '#2a78d6', '#ff9500', '#e5484d
 function splColor(name) { const lib = SPL.lib.library, i = lib.findIndex((x) => splName(x.name) === splName(name)); return SPL_NOT_TEAM.test(splName(name)) ? '#a463f2' : SPL_COL[(i < 0 ? 9 : i) % SPL_COL.length]; }
 function splPlanHtml() {
   const date = SPL.date, p = splPlan(date), lib = SPL.lib.library, tag = splTag(date);
-  const pub = Object.values(SPL.saved.published || {}).find((x) => x.date === date), inData = SPL.lib.recent[date] && /^S\d+$/.test(SPL.lib.recent[date].sid);
+  // in the data from the Excel files: nothing to do. Published from this page: can be published again (it replaces) or removed
+  const r = SPL.lib.recent[date], pub = Object.values(SPL.saved.published || {}).find((x) => x.date === date);
+  const inData = !!(r && /^S\d+$/.test(r.sid) && !r.pub), live = !!(r && r.pub);
   const team = p.drills.filter((d) => !SPL_NOT_TEAM.test(splName(d.name))), tot = team.reduce((a, d) => a + (Number(d.min) || 0), 0);
   const titleOf = {}; Object.entries({ ...SPL.lib.titles, ...SPL.saved.titles }).forEach(([t, n]) => { if (!titleOf[splName(n)]) titleOf[splName(n)] = t; });
   const opts = (cur) => `<option value="">Choose a drill…</option>${lib.map((x) => `<option ${splName(x.name) === splName(cur) ? 'selected' : ''}>${escapeHtml(splName(x.name))}</option>`).join('')}${cur && !lib.some((x) => splName(x.name) === splName(cur)) ? `<option selected>${escapeHtml(cur)}</option>` : ''}`;
@@ -156,7 +158,7 @@ function splPlanHtml() {
   const sugg = lib.filter((x) => x.md.includes(tag) && !p.drills.some((d) => splName(d.name) === splName(x.name))).slice(0, 4);
   const line = team.map((d) => `<i style="flex:${d.min || 1};background:${splColor(d.name)}" title="${escapeHtml(d.name)}"><b>${d.min || ''}'</b></i>`).join('');
   return `${splHead(date, inData || pub ? 2 : 0)}
-    ${inData ? `<p class="sp-banner ok">This session is already in the data (${SPL.lib.recent[date].sid}, from the Excel files). Nothing to import.</p>` : pub ? `<p class="sp-banner ok">Published ✓ ${escapeHtml(pub.rows || '')} · by ${escapeHtml(String(pub.by || '').split('@')[0])} — added to the dashboard at the next update. <button type="button" class="linkbtn" data-unpub="${escapeHtml(date + '_' + pub.sid)}">Unpublish</button></p>` : ''}
+    ${inData ? `<p class="sp-banner ok">This session is already in the data (${r.sid}, from the Excel files). Nothing to import.</p>` : pub ? `<p class="sp-banner ok">Published ✓ ${escapeHtml(pub.rows || '')} · by ${escapeHtml(String(pub.by || '').split('@')[0])} — ${live ? 'in the dashboard' : 'added to the dashboard at the next update'}. To correct it, drop the files again and publish: the new version replaces it at the next update. <button type="button" class="linkbtn" data-unpub="${escapeHtml(date + '_' + pub.sid)}">Unpublish</button></p>` : live ? `<p class="sp-banner warn">Unpublished — ${escapeHtml(r.sid)} leaves the dashboard at the next update.</p>` : ''}
     <div class="sp-two"><div class="sp-col">
       <div class="sp-h3">Drills <small>${tot}' of team work${p.drills.length ? ' · ▲▼ to reorder' : ''}</small>${last ? `<button type="button" class="btn-light sp-copy" data-copy="${last}">⟲ Copy last ${tag} · ${SPL_DAY(last, { weekday: 'short', day: 'numeric', month: 'short' })}</button>` : ''}</div>
       ${team.length ? `<div class="sp-line">${line}</div>` : ''}${rows || '<p class="sp-note">No drill yet — copy the last session of this MD or add drills below.</p>'}
