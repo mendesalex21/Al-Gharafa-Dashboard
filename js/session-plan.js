@@ -260,6 +260,7 @@ function splPlanHtml() {
   const line = team.map((d) => `<i style="flex:${d.min || 1};background:${splColor(d.name)}" title="${escapeHtml(d.name)}"><b>${d.min || ''}'</b></i>`).join('');
   return `${splHead(date, inData || pub ? 2 : 0)}
     ${inData ? `<p class="sp-banner ok">This session is already in the data (${r.sid}, from the Excel files). Nothing to import.</p>` : pub ? `<p class="sp-banner ok">Published ✓ ${escapeHtml(pub.rows || '')} · by ${escapeHtml(String(pub.by || '').split('@')[0])} — ${live ? 'in the dashboard' : 'added to the dashboard at the next update'}. To correct it, drop the files again and publish: the new version replaces it at the next update. <button type="button" class="linkbtn" data-unpub="${escapeHtml(date + '_' + pub.sid)}">Unpublish</button></p>` : live ? `<p class="sp-banner warn">Unpublished — ${escapeHtml(r.sid)} leaves the dashboard at the next update.</p>` : ''}
+    ${inData || live ? splNoRpeHtml(date) : ''}
     <div class="sp-two"><div class="sp-col">
       <div class="sp-h3">Drills <small>${tot}' of team work${p.drills.length ? ' · ▲▼ to reorder' : ''}</small>${last ? `<button type="button" class="btn-light sp-copy" data-copy="${last}">⟲ Copy last ${tag} · ${SPL_DAY(last, { weekday: 'short', day: 'numeric', month: 'short' })}</button>` : ''}</div>
       ${team.length ? `<div class="sp-line">${line}</div>` : ''}${rows || '<p class="sp-note">No drill yet — copy the last session of this MD or add drills below.</p>'}
@@ -268,6 +269,37 @@ function splPlanHtml() {
       ${splLoadHtml(date, p)}</div>
       ${splPlayersHtml(p)}</div>
     ${inData ? '' : `<label class="sp-drop mini" id="spl-drop"><input type="file" accept=".csv,text/csv" multiple hidden data-files><b>After the session</b><span>Drop <code>${escapeHtml(p.sid || splSid(date))}_Full.csv</code> and <code>${escapeHtml(p.sid || splSid(date))}_Drills.csv</code> here, or click to choose — the rows are built from this plan</span></label>`}`;
+}
+/** A session in the data: its players still without an RPE — the answers given since on the RPE page, or a value typed
+ * here (saved like a player's answer); both are added to the data at the next update, a value there is never replaced. */
+function splNoRpeHtml(date) {
+  const r = SPL.lib.recent[date], ids = (r && r.norpe) || [];
+  if (!ids.length) return '';
+  const day = ((SPL.saved && SPL.saved.rpe) || {})[date] || {};
+  const name = (id) => (SPL.lib.players.find((q) => q.id === id) || {}).name || ((SPL.lib.roster || {})[id] || {}).name || id;
+  const val = (id) => { const a = day[id]; return a && a.length ? a[a.length - 1][0] : null; };
+  const ready = ids.filter((id) => val(id) != null).length;
+  const cells = ids.map((id) => { const v = val(id), st = (r.types || {})[id];
+    return `<label class="${v != null ? 'k' : 'miss'}" title="${v != null ? 'Ready: added at the next update' : 'No RPE yet'}">${escapeHtml(name(id))}${st && st !== 'ProTraining' ? ` <small>${escapeHtml(st)}</small>` : ''}<input type="number" min="0" max="10" step="0.5" value="${v ?? ''}" data-norpe="${escapeHtml(id)}" aria-label="RPE of ${escapeHtml(name(id))}"></label>`; }).join('');
+  return `<div class="sp-norpe"><div class="sp-h3">RPE missing <small id="spl-norpe-n">${ids.length} player${ids.length > 1 ? 's' : ''} without an RPE in the data${ready ? ` · ${ready} ready, added at the next update` : ''}</small></div>
+    <div class="sp-rpe">${cells}</div>
+    <p class="sp-note"><span class="sp-key k"></span>answered since on the RPE page, or typed here · <span class="sp-key miss"></span>still missing. Type a value and leave the box: it is saved like the player's answer and added to the data at the next update (a value already in the data is never replaced).</p></div>`;
+}
+async function splSaveNoRpe(date, id, input) {
+  const v = input.value === '' ? null : Number(input.value), l = input.closest('label');
+  if (v == null || !(v >= 0 && v <= 10)) return;
+  const name = (SPL.lib.players.find((q) => q.id === id) || {}).name || ((SPL.lib.roster || {})[id] || {}).name || id;
+  SPL.state = `Saving the RPE of ${name}…`; splStateLine();
+  try {
+    if (AUTH.demo) splDemoStore(); else await callApi('rpe_add', null, { date, player_id: id, player_name: name, rpe: v });
+    const rp = SPL.saved.rpe || (SPL.saved.rpe = {}); (rp[date] || (rp[date] = {}))[id] = [[v, '']];
+    if (AUTH.demo) splDemoStore();
+    if (l) { l.classList.remove('miss'); l.classList.add('k'); l.title = 'Ready: added at the next update'; }
+    const ids = (SPL.lib.recent[date] || {}).norpe || [], ready = ids.filter((x) => ((rp[date] || {})[x] || []).length).length, el = document.getElementById('spl-norpe-n');
+    if (el) el.textContent = `${ids.length} player${ids.length > 1 ? 's' : ''} without an RPE in the data · ${ready} ready, added at the next update`;
+    SPL.state = `RPE of ${name}: ${v} saved ✓ — added to the data at the next update`;
+  } catch (err) { SPL.state = 'RPE not saved — ' + (err.message || err); }
+  splStateLine();
 }
 function splLoadHtml(date, p) {
   const c = SPL.lib.calib || {}, rate = (n, k) => { const r8 = splRateOf(n); return r8 ? r8.l[k] || 0 : 0; };
@@ -525,6 +557,7 @@ async function splUnpublish(key) {
 function splChange(e) {
   const t = e.target, date = SPL.date;
   if (t.dataset.files != null) { splReadFiles([...t.files]); return; }
+  if (t.dataset.norpe) { splSaveNoRpe(date, t.dataset.norpe, t); return; } // an RPE typed for a session in the data
   const p = splEnsure(date);
   if (t.dataset.drill != null) { p.drills[Number(t.dataset.drill)].name = t.value; splTouch(date); splDraw(); return; }
   if (t.dataset.add != null) {
