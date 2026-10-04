@@ -114,6 +114,7 @@ function drawSessions(opts) {
       </div>
       <div class="sh-meta">${fmtN(s.minutes)} min · ${s.n} players${s.n_core !== s.n ? ` · team averages on ${s.n_core} ${s.kind === 'match' ? 'whole-game players' : s.group === 'compensatory' ? 'compensatory players' : 'full-session players'}` : ''}</div>
       ${s.kind === 'match' ? '' : `<div class="sh-meta">${s.group === 'compensatory' ? 'The players who did not play the match did a compensatory session; the others recovered. ' : ''}${escapeHtml(sessComposition(s))}</div>`}
+      ${daysBetween(s.date, todayIso()) <= 30 ? `<button type="button" class="linkbtn sh-corr" data-correct="${s.date}">✎ Correct this session</button>` : ''}
     </section>
     ${objectivesPanel(s)}
     <div id="sv-attention"></div>
@@ -126,6 +127,8 @@ function drawSessions(opts) {
     ${s.drills.length ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Drills</h2><span class="panel-note">team average per drill · "vs match" = per-minute intensity as % of the players' match intensity · tap a drill for players</span></div><div class="drills-wrap" id="se-drills"></div></section>` : ''}`;
 
   drawMdz(s);
+  const corr = body.querySelector('[data-correct]');
+  if (corr) corr.onclick = () => splOpenCorrection(corr.dataset.correct); // the Session Plan's correction table (option A)
   document.getElementById('se-mdz').onclick = (e) => { const r = e.target.closest('[data-id]'); if (r) svOpen(s, r.dataset.id); };
   svMount(s);
   if (s.drills.length) drawDrills(s);

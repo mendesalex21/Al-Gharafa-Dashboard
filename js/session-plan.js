@@ -6,6 +6,8 @@
  * Before publishing, GPS times far from the session, from the plan or from the teammates are flagged (one-click fixes),
  * and the minutes written for each drill can be set to what it really lasted. Drill cards: a drill created here (its
  * exact name, optional pitch and players) is shared by the staff; until it has data, its forecast borrows another drill's.
+ * A session in the data (Excel or published) can be corrected: status, time, RPE per player; the corrected cells replace
+ * the Excel's at each update (build.py apply_corrections) — the Excel file is never written.
  * Data: plan_lib (sync/build.py → build_plan_lib) + calendar + the plans saved by the staff (API "plans").
  */
 const SPL = { lib: null, cal: null, events: null, matches: [], saved: null, week: null, date: null, view: 'plan', files: {}, timer: null, state: '', show: 'full' };
@@ -122,14 +124,16 @@ function splDraw() {
   document.getElementById('spl-wk').textContent = `${splWeekNo(SPL.week)} · ${SPL_DAY(SPL.week, { day: 'numeric', month: 'short' })} – ${SPL_DAY(addDays(SPL.week, 6), { day: 'numeric', month: 'short' })}`;
   document.getElementById('spl-sub').textContent = `Plan before training · drop the two StatSports files after it · data up to ${SPL_DAY(SPL.lib.last_date, { day: 'numeric', month: 'short' })} (${'S' + SPL.lib.last_sid})`;
   splDrawWeek();
-  document.getElementById('spl-main').innerHTML = SPL.view === 'import' && SPL.files.full ? splImportHtml() : splPlanHtml();
+  if (SPL.view === 'correct' && !splCorrKey(SPL.date)) SPL.view = 'plan'; // nothing to correct on that day
+  document.getElementById('spl-main').innerHTML = SPL.view === 'correct' ? splCorrectHtml() : SPL.view === 'import' && SPL.files.full ? splImportHtml() : splPlanHtml();
 }
 function splDrawWeek() {
   const el = document.getElementById('spl-week');
   el.innerHTML = [...Array(7)].map((_, i) => {
     const d = addDays(SPL.week, i), tag = splTag(d), m = splMatchOn(d), r = SPL.lib.recent[d], p = (SPL.saved.plans || {})[d];
     const pub = Object.values(SPL.saved.published || {}).some((x) => x.date === d);
-    const badge = r && /^S\d+$/.test(r.sid) ? `<span class="sp-b done">${r.sid} · ${r.pub ? 'published' : 'in the data'} ✓</span>` : pub ? '<span class="sp-b done">Published ✓</span>'
+    const corr = r && (SPL.saved.corrections || {})[`${d}_${r.sid}`];
+    const badge = r && /^S\d+$/.test(r.sid) ? `<span class="sp-b done">${r.sid} · ${r.pub ? 'published' : 'in the data'} ✓${corr ? ' · ✎' : ''}</span>` : pub ? '<span class="sp-b done">Published ✓</span>'
       : m ? `<span class="sp-b match">${crestHtml(m.e.opponent, 16)}${escapeHtml([m.e.round || m.e.competition, m.e.opponent].filter(Boolean).join(' · '))}</span>`
         : p && (p.drills || []).length ? '<span class="sp-b plan">Planned</span>' : '<span class="sp-b none">+ Plan</span>';
     return `<button type="button" class="sp-day${d === SPL.date ? ' on' : ''}${m ? ' m' : ''}" data-day="${d}"><b>${SPL_DAY(d, { weekday: 'short', day: 'numeric' })}</b>${tag ? `<span class="sp-md${tag === 'MD' ? ' mdm' : ''}">${tag}</span>` : '<span class="sp-md off">—</span>'}${badge}</button>`;
@@ -260,6 +264,7 @@ function splPlanHtml() {
   const line = team.map((d) => `<i style="flex:${d.min || 1};background:${splColor(d.name)}" title="${escapeHtml(d.name)}"><b>${d.min || ''}'</b></i>`).join('');
   return `${splHead(date, inData || pub ? 2 : 0)}
     ${inData ? `<p class="sp-banner ok">This session is already in the data (${r.sid}, from the Excel files). Nothing to import.</p>` : pub ? `<p class="sp-banner ok">Published ✓ ${escapeHtml(pub.rows || '')} · by ${escapeHtml(String(pub.by || '').split('@')[0])} — ${live ? 'in the dashboard' : 'added to the dashboard at the next update'}. To correct it, drop the files again and publish: the new version replaces it at the next update. <button type="button" class="linkbtn" data-unpub="${escapeHtml(date + '_' + pub.sid)}">Unpublish</button></p>` : live ? `<p class="sp-banner warn">Unpublished — ${escapeHtml(r.sid)} leaves the dashboard at the next update.</p>` : ''}
+    ${inData || live ? splCorrLineHtml(date) : ''}
     ${inData || live ? splNoRpeHtml(date) : ''}
     <div class="sp-two"><div class="sp-col">
       <div class="sp-h3">Drills <small>${tot}' of team work${p.drills.length ? ' · ▲▼ to reorder' : ''}</small>${last ? `<button type="button" class="btn-light sp-copy" data-copy="${last}">⟲ Copy last ${tag} · ${SPL_DAY(last, { weekday: 'short', day: 'numeric', month: 'short' })}</button>` : ''}</div>
@@ -318,9 +323,14 @@ function splLoadHtml(date, p) {
     ${bar('td', 'Total distance', 'm')}${bar('acc_dec', 'Acc + Dec', '')}${bar('hit', '> 20 km/h', 'm')}
     ${none.length ? `<p class="sp-note warn">Not in the forecast (no data yet): ${none.map(escapeHtml).join(', ')} — open its card (+ pitch / players) and choose “Forecast like”.</p>` : ''}</div>`;
 }
+/** The statuses to choose from: the usual ones, then the other types found in the files (matches left out). */
+function splStatusList() {
+  const known = new Set(SPL_STATUS.map(([k]) => k)), extra = (SPL.lib.types || []).filter((t) => !known.has(t) && !/^(Game|Friendly_Game|Game\+Compensatory|NC|Private)$/.test(t));
+  return [...SPL_STATUS, ...extra.map((t) => [t, t, '#aeaeb2'])];
+}
 function splPlayersHtml(p) {
   const known = new Set(SPL_STATUS.map(([k]) => k)), extra = (SPL.lib.types || []).filter((t) => !known.has(t) && !/^(Game|Friendly_Game|Game\+Compensatory|NC|Private)$/.test(t));
-  const status = [...SPL_STATUS, ...extra.map((t) => [t, t, '#aeaeb2'])], col = Object.fromEntries(status.map(([k, , c]) => [k, c])), lab = Object.fromEntries(status.map(([k, l]) => [k, l]));
+  const status = splStatusList(), col = Object.fromEntries(status.map(([k, , c]) => [k, c])), lab = Object.fromEntries(status.map(([k, l]) => [k, l]));
   const cnt = {}; SPL.lib.players.forEach((q) => { const t = p.status[q.id] || 'ProTraining'; cnt[t] = (cnt[t] || 0) + 1; });
   const order = ['GK', 'CD', 'WD', 'CM', 'WM', 'FW'], label = { GK: 'Goalkeepers', CD: 'Centre-backs', WD: 'Full-backs', CM: 'Midfielders', WM: 'Wingers', FW: 'Forwards' };
   const groups = [...order, ''].filter((g) => SPL.lib.players.some((q) => (order.includes(q.pos) ? q.pos : '') === g));
@@ -332,6 +342,128 @@ function splPlayersHtml(p) {
         const t = p.status[q.id] || 'ProTraining';
         return `<div class="sp-p${t === 'ProTraining' ? '' : ' out'}">${face(q.id)}<b>${escapeHtml(q.name)}</b><select class="sp-st" style="--c:${col[t] || '#aeaeb2'}" data-status="${escapeHtml(q.id)}">${status.map(([k, l]) => `<option value="${k}" ${k === t ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}${known.has(t) || extra.includes(t) ? '' : `<option selected>${escapeHtml(t)}</option>`}</select></div>`;
       }).join('')).join('')}</div></div>`;
+}
+
+// ------------------------------------------------------------------ correct a session in the data (option A)
+/** The key (date_sid) of the session of a day that can be corrected here: in the data, with its rows (last 30 days). */
+function splCorrKey(date) { const r = SPL.lib && SPL.lib.recent[date]; return r && r.rows && r.rows.length && /^S\d+$/.test(r.sid) ? `${date}_${r.sid}` : null; }
+/** Opens the correction of a day — from this page, or from the Sessions page. */
+function splOpenCorrection(date) {
+  SPL.week = addDays(date, -new Date(date + 'T12:00:00Z').getUTCDay()); SPL.date = date; SPL.view = 'correct'; SPL.files = {}; SPL.card = null; SPL.corr = null;
+  if (CURRENT_VIEW === 'plan') splDraw(); else switchView('plan');
+}
+/** The correction being edited: {player key: {type?, time?, rpe?}} — only the values that differ from the Excel's. */
+function splCorrDraft(date) {
+  const key = splCorrKey(date);
+  if (!SPL.corr || SPL.corr.key !== key) SPL.corr = { key, ch: JSON.parse(JSON.stringify((((SPL.saved.corrections || {})[key]) || {}).changes || {})) };
+  return SPL.corr.ch;
+}
+function splPName(id, k) { return (SPL.lib.players.find((q) => q.id === id) || {}).name || ((SPL.lib.roster || {})[id] || {}).name || String(k).split('#')[0]; }
+/** Each player row: the Excel's values (before any correction), the values shown (the correction, else the Excel's). */
+function splCorrRows(date) {
+  const r = SPL.lib.recent[date], orig = r.orig || {}, ch = splCorrDraft(date);
+  return r.rows.map(([k, id, pos, type, time, rpe, td, hit, nd, drpe, rehab, indiv]) => {
+    const xl = { type, time, rpe, ...(orig[k] || {}) }, c = ch[k] || {}, val = (f) => (f in c ? c[f] : xl[f]);
+    return { k, id, pos, td, hit, nd, drpe, rehab, indiv, xl, now: { type: val('type'), time: val('time'), rpe: val('rpe') }, chg: (f) => f in c && c[f] !== xl[f] };
+  });
+}
+const splF0 = (v) => (v == null || !Number.isFinite(v) ? '—' : Math.round(v).toLocaleString('en-GB'));
+const splMpm = (x, t) => (x.td != null && t ? x.td / t : null), splCarga = (rp, t) => (rp != null && t != null ? rp * t : null);
+function splCorrDrills(x) {
+  const s = (n) => `${n} drill row${n > 1 ? 's' : ''}`;
+  if (!x.nd) return '<span class="dim">—</span>';
+  if (x.rehab && x.xl.type === 'Rehab' && x.now.type !== 'Rehab') return `<b>Rehab → INDIVIDUAL</b> <small>${s(x.nd)}</small>`;
+  if (x.indiv && x.xl.type !== 'Rehab' && x.now.type === 'Rehab') return `<b>INDIVIDUAL → Rehab</b> <small>${s(x.nd)}</small>`;
+  if (x.chg('rpe') && x.drpe) return `<b>RPE ${x.now.rpe ?? '—'} on ${s(x.drpe)}</b>`;
+  return s(x.nd);
+}
+function splCorrSummary(rows) {
+  const lab = Object.fromEntries(splStatusList().map(([k, l]) => [k, l])), L = (t) => lab[t] || t;
+  const ch = rows.filter((x) => ['type', 'time', 'rpe'].some((f) => x.chg(f)));
+  if (!ch.length) return '<span class="dim">No change yet — change a status, a time or an RPE above.</span>';
+  return `<b>${ch.length} player${ch.length > 1 ? 's' : ''} changed</b><ul>${ch.map((x) => {
+    const p = [];
+    if (x.chg('type')) p.push(`${escapeHtml(L(x.xl.type))} → ${escapeHtml(L(x.now.type))}`);
+    if (x.chg('time')) p.push(`time ${x.xl.time ?? '—'}' → ${x.now.time ?? '—'}'`, ...(x.td != null ? [`m/min ${splF0(splMpm(x, x.xl.time))} → ${splF0(splMpm(x, x.now.time))}`] : []));
+    if (x.chg('rpe')) p.push(`RPE ${x.xl.rpe ?? '—'} → ${x.now.rpe ?? '—'}`);
+    if (x.chg('time') || x.chg('rpe')) p.push(`Carga RPE ${splF0(splCarga(x.xl.rpe, x.xl.time))} → ${splF0(splCarga(x.now.rpe, x.now.time))}`);
+    if (x.rehab && x.xl.type === 'Rehab' && x.now.type !== 'Rehab') p.push('his drill “Rehab” becomes “INDIVIDUAL”');
+    if (x.indiv && x.xl.type !== 'Rehab' && x.now.type === 'Rehab') p.push('his drill “INDIVIDUAL” becomes “Rehab”');
+    if (x.chg('rpe') && x.drpe) p.push(`RPE ${x.now.rpe ?? '—'} on his ${x.drpe} drill row${x.drpe > 1 ? 's' : ''} too`);
+    return `<li><b>${escapeHtml(splPName(x.id, x.k))}</b> · ${p.join(' · ')}</li>`;
+  }).join('')}</ul>`;
+}
+function splCorrRowHtml(x, status) {
+  const lab = Object.fromEntries(status.map(([k, l]) => [k, l])), ct = x.chg('type'), cm = x.chg('time'), cr = x.chg('rpe');
+  const opts = status.map(([k, l]) => `<option value="${escapeHtml(k)}" ${k === x.now.type ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('') + (lab[x.now.type] ? '' : `<option selected>${escapeHtml(x.now.type)}</option>`);
+  return `<tr data-ck="${escapeHtml(x.k)}"><td><b>${escapeHtml(splPName(x.id, x.k))}</b><span class="pos">${escapeHtml(x.pos)}</span></td>
+    <td><select class="${ct ? 'c' : ''}" data-cf="type" aria-label="Status">${opts}</select><span class="was" data-was="type">${ct ? escapeHtml(lab[x.xl.type] || x.xl.type) : ''}</span></td>
+    <td><input type="number" min="0" max="300" class="${cm ? 'c' : ''}" data-cf="time" value="${x.now.time ?? ''}" aria-label="Time"><span class="was" data-was="time">${cm ? `${x.xl.time ?? '—'}'` : ''}</span></td>
+    <td><input type="number" min="0" max="10" step="0.5" class="${cr ? 'c' : ''}" data-cf="rpe" value="${x.now.rpe ?? ''}" aria-label="RPE"><span class="was" data-was="rpe">${cr ? x.xl.rpe ?? '—' : ''}</span></td>
+    <td class="r">${splF0(x.td)}</td><td class="r${cm ? ' c' : ''}" data-cc="mpm">${splCorrCell(x, 'mpm')}</td><td class="r${cm || cr ? ' c' : ''}" data-cc="cg">${splCorrCell(x, 'cg')}</td><td data-cc="dr">${splCorrDrills(x)}</td></tr>`;
+}
+function splCorrCell(x, c) {
+  if (c === 'mpm') return `${splF0(splMpm(x, x.now.time))}${x.chg('time') ? `<span class="was">${splF0(splMpm(x, x.xl.time))}</span>` : ''}`;
+  return `${splF0(splCarga(x.now.rpe, x.now.time))}${x.chg('time') || x.chg('rpe') ? `<span class="was">${splF0(splCarga(x.xl.rpe, x.xl.time))}</span>` : ''}`;
+}
+/** Changed against the published correction (or the data, when there is none)? */
+function splCorrDirty(date) { const key = splCorrKey(date); return JSON.stringify(splCorrDraft(date)) !== JSON.stringify((((SPL.saved.corrections || {})[key]) || {}).changes || {}); }
+function splCorrectHtml() {
+  const date = SPL.date, r = SPL.lib.recent[date], key = splCorrKey(date), saved = (SPL.saved.corrections || {})[key];
+  const rows = splCorrRows(date), status = splStatusList();
+  return `${splHead(date, 2)}
+    <div class="sp-corr"><div class="sp-h3">Correct ${escapeHtml(r.sid)} <small>Change a status, a time or an RPE: the other columns follow. Yellow = changed (the old value struck through).</small></div>
+      <div class="sp-tw"><table class="sp-ctbl"><thead><tr><th>Player</th><th>Status</th><th>Time</th><th>RPE</th><th class="r">DT</th><th class="r">m/min</th><th class="r">Carga RPE</th><th>Drills</th></tr></thead>
+        <tbody>${rows.map((x) => splCorrRowHtml(x, status)).join('')}</tbody></table></div>
+      <div class="sp-csum" id="spl-csum">${splCorrSummary(rows)}</div>
+      <div class="sp-actions"><button type="button" class="btn-primary" data-corr-pub ${splCorrDirty(date) ? '' : 'disabled'}>Publish the correction</button><button type="button" class="btn-light" data-corr-cancel>Cancel</button>
+        ${saved ? '<button type="button" class="linkbtn sp-del" data-corr-del>Remove the correction</button>' : ''}
+        <span>Your Excel file isn't touched: at each update the corrected cells replace those of ${escapeHtml(r.sid)} — site, reports, Google Sheet / Power BI. Everything else still comes from the Excel.</span></div></div>`;
+}
+/** One cell changed: that row's columns, the summary and the publish button follow (the inputs stay, the focus too). */
+function splCorrEdit(t) {
+  const date = SPL.date, tr = t.closest('tr[data-ck]'), k = tr.dataset.ck, f = t.dataset.cf, ch = splCorrDraft(date);
+  const x0 = splCorrRows(date).find((y) => y.k === k);
+  const v = f === 'type' ? t.value : t.value === '' ? null : Number(t.value);
+  if (f !== 'type' && v != null && (!Number.isFinite(v) || v < 0 || v > (f === 'rpe' ? 10 : 300))) { t.value = x0.now[f] ?? ''; return; }
+  const c = ch[k] || (ch[k] = {});
+  if (v === x0.xl[f]) delete c[f]; else c[f] = v;
+  if (!Object.keys(c).length) delete ch[k];
+  const rows = splCorrRows(date), x = rows.find((y) => y.k === k), lab = Object.fromEntries(splStatusList().map(([a, l]) => [a, l]));
+  ['type', 'time', 'rpe'].forEach((g) => {
+    const el = tr.querySelector(`[data-cf="${g}"]`), w = tr.querySelector(`[data-was="${g}"]`);
+    if (el) el.classList.toggle('c', x.chg(g));
+    if (w) w.textContent = !x.chg(g) ? '' : g === 'type' ? lab[x.xl.type] || x.xl.type : g === 'time' ? `${x.xl.time ?? '—'}'` : String(x.xl.rpe ?? '—');
+  });
+  const mp = tr.querySelector('[data-cc="mpm"]'), cg = tr.querySelector('[data-cc="cg"]'), dr = tr.querySelector('[data-cc="dr"]');
+  mp.innerHTML = splCorrCell(x, 'mpm'); mp.classList.toggle('c', x.chg('time'));
+  cg.innerHTML = splCorrCell(x, 'cg'); cg.classList.toggle('c', x.chg('time') || x.chg('rpe'));
+  dr.innerHTML = splCorrDrills(x);
+  document.getElementById('spl-csum').innerHTML = splCorrSummary(rows);
+  document.querySelector('[data-corr-pub]').disabled = !splCorrDirty(date);
+}
+async function splCorrPublish(remove) {
+  const date = SPL.date, r = SPL.lib.recent[date], key = splCorrKey(date), ch = remove ? {} : splCorrDraft(date), n = Object.keys(ch).length;
+  SPL.state = remove ? 'Removing the correction…' : 'Publishing the correction…'; splStateLine();
+  try {
+    if (AUTH.demo) {
+      SPL.saved.corrections = SPL.saved.corrections || {};
+      if (n) SPL.saved.corrections[key] = { date, sid: r.sid, changes: JSON.parse(JSON.stringify(ch)), by: 'demo', at: new Date().toISOString() }; else delete SPL.saved.corrections[key];
+      splDemoStore();
+    } else { await callApi('correction_save', null, { date, sid: r.sid, changes: ch }); await splLoadSaved(); }
+    SPL.state = n ? `Correction of ${r.sid} published ✓ — applied at the next update` : `Correction of ${r.sid} removed — the Excel values come back at the next update`;
+    SPL.view = 'plan'; SPL.corr = null; splDraw();
+  } catch (err) { SPL.state = 'Not published — ' + (err.message || err); splStateLine(); }
+}
+/** Plan view of a session in the data: "✎ Correct this session", or the state of its correction. */
+function splCorrLineHtml(date) {
+  const key = splCorrKey(date);
+  if (!key) return '';
+  const r = SPL.lib.recent[date], c = (SPL.saved.corrections || {})[key];
+  if (!c) return `<p class="sp-corrline"><button type="button" class="btn-light" data-corr-open>✎ Correct this session</button><span>a status, a time or an RPE that is wrong — your Excel file isn't touched</span></p>`;
+  const col = { type: 3, time: 4, rpe: 5 }, n = Object.keys(c.changes || {}).length;
+  const applied = Object.entries(c.changes || {}).every(([k, ch]) => { const row = r.rows.find((x) => x[0] === k); return row && Object.entries(ch).every(([f, v]) => row[col[f]] === v); });
+  return `<p class="sp-corrline on"><button type="button" class="btn-light" data-corr-open>✎ Edit the correction</button><span>Corrected on the site${c.by ? ' by ' + escapeHtml(String(c.by).split('@')[0]) : ''} · ${n} player${n > 1 ? 's' : ''} · ${applied ? 'in the dashboard ✓' : 'applied at the next update'}</span></p>`;
 }
 
 // ------------------------------------------------------------------ step 2: the files → rows
@@ -510,6 +642,11 @@ function splClick(e) {
   if (!t || !SPL.date) return;
   const date = SPL.date, p = () => splEnsure(date);
   if (t.dataset.ampm) { p().ampm = t.dataset.ampm; splTouch(date); splDraw(); return; }
+  // correct a session in the data
+  if (t.dataset.corrOpen != null) { splOpenCorrection(date); return; }
+  if (t.dataset.corrCancel != null) { SPL.view = 'plan'; SPL.corr = null; splDraw(); return; }
+  if (t.dataset.corrPub != null) { splCorrPublish(false); return; }
+  if (t.dataset.corrDel != null) { if (confirm('Remove the correction of this session? The Excel values come back at the next update.')) splCorrPublish(true); return; }
   // checks before publishing (the chosen fix again = undone)
   if (t.dataset.fixT != null || t.dataset.fixC != null) {
     const kind = t.dataset.fixT != null ? 't' : 'c', b = splBuild(), x = kind === 't' ? b.checks.time[Number(t.dataset.fixT)] : b.checks.cut[Number(t.dataset.fixC)];
@@ -558,6 +695,7 @@ function splChange(e) {
   const t = e.target, date = SPL.date;
   if (t.dataset.files != null) { splReadFiles([...t.files]); return; }
   if (t.dataset.norpe) { splSaveNoRpe(date, t.dataset.norpe, t); return; } // an RPE typed for a session in the data
+  if (t.dataset.cf) { splCorrEdit(t); return; } // the correction table
   const p = splEnsure(date);
   if (t.dataset.drill != null) { p.drills[Number(t.dataset.drill)].name = t.value; splTouch(date); splDraw(); return; }
   if (t.dataset.add != null) {
