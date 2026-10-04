@@ -134,6 +134,17 @@ function rpRowH(D, rows, space, max) {
   return Math.max(17, Math.min(max, Math.floor((space - groups * 26) / Math.max(1, rows.length))));
 }
 
+/** The "% top 3 game avg" list beside a chart: every player fits in the block (325 px, 24 of them for the title) — the
+ * rows, then the text, get smaller when there are many players (a match day with 20+ players). */
+const RP_GM_H = 298;
+function rpGmList(gm) {
+  const slot = Math.max(9, Math.min(21, Math.floor(RP_GM_H / Math.max(1, gm.length))));
+  const fs = slot >= 18 ? 11 : slot >= 14 ? 10 : 9, bar = slot >= 16 ? 8 : 6;
+  return `<div class="rp-gm rp-gm-fit"><div class="rp-gh"><span>PLAYERS</span><span>% TOP 3 GAME AVG</span></div>
+    ${gm.map(([n, v]) => `<div class="rp-gr" style="height:${slot}px;font-size:${fs}px"><span>${rpEsc(n)}</span><div class="rp-tk" style="height:${bar}px"><i style="width:${Math.min(v, 100)}%;background:${rpGmColor(v)}"></i></div><span>${v}</span></div>`).join('')}
+  </div>`;
+}
+
 function rpChart(D, key, title, legend, gmKey) {
   const rows = [...D.fullSession].sort((a, b) => (b[key] || 0) - (a[key] || 0) || a.name.localeCompare(b.name));
   const m = Math.max(0, ...rows.map((r) => r[key] || 0)), avg = rows.length ? rows.reduce((s, r) => s + (r[key] || 0), 0) / rows.length : 0;
@@ -144,9 +155,7 @@ function rpChart(D, key, title, legend, gmKey) {
     <div class="rp-plot">${rows.map((r) => `<div class="rp-col">${r[key] ? rpFmt(key, r[key]) : ''}<i style="height:${h(r[key])};background:${RP_COLORS[key]}"></i></div>`).join('')}
       <div class="rp-avg" style="bottom:${h(avg)}"></div>${m ? '' : '<span class="rp-empty">No values in this session</span>'}</div>
     <div class="rp-names">${rows.map((r) => `<div><span>${rpEsc(r.name)}</span></div>`).join('')}</div>
-  </div><div class="rp-gm"><div class="rp-gh"><span>PLAYERS</span><span>% TOP 3 GAME AVG</span></div>
-    ${gm.map(([n, v]) => `<div class="rp-gr"><span>${rpEsc(n)}</span><div class="rp-tk"><i style="width:${Math.min(v, 100)}%;background:${rpGmColor(v)}"></i></div><span>${v}</span></div>`).join('')}
-  </div></div>`;
+  </div>${rpGmList(gm)}</div>`;
 }
 
 function rpPages(D) {
@@ -220,6 +229,7 @@ function renderReports(opts) {
     const shown = list.map((s, i) => i).filter((i) => !list[i].hidden);
     // a day with a B-team game alongside the team session offers three reports: all players, the session, the game
     RP.opts = shown.flatMap((i) => list[i].parts ? [[i, 'all'], [i, 't'], [i, 'b']] : [[i, 'all']]);
+    rpGpsPlayers(); // the Excel data view's player list, if it is open
     RP.idx = want >= 0 ? want : RP.idx >= 0 && RP.idx < list.length ? RP.idx : shown[shown.length - 1] ?? -1;
     if (!list[RP.idx] || !list[RP.idx].parts) RP.part = 'all';
     // newest session first; within a day: all players, the session, the B game
@@ -330,16 +340,41 @@ function rpDataDraw() {
     <div class="rp-data-h"><b>GPS data</b><small>The columns of your Data_Full and Data_Drills files, sessions published from the Session Plan included, and the Team sheet (computed as your Team macro), since 1 Jul 2023.</small></div>
     <div class="rp-data-row"><div><b>Google Sheet</b><small>${g.url ? `${n(g.full)} full-session rows · ${n(g.drills)} drill rows${when ? ` · updated ${rpEsc(when)}` : ''}` : g.demo ? 'Not available in the local demo' : 'Created at the next “Update dashboard”'}</small></div>
       ${g.url ? `<a class="btn-light" href="${rpEsc(g.url)}" target="_blank" rel="noopener">Open in Google Sheets ↗</a>` : ''}</div>
-    <div class="rp-data-row"><div><b>Download Excel</b><small>One file: Data_Full, Data_Drills and Team, same columns as your files</small></div>
-      <div class="rp-data-dl"><select class="select" id="rp-gps-period" aria-label="Period">
-        <option value="session">Last session</option><option value="week">This week</option><option value="4w">Last 4 weeks</option>
-        <option value="season" selected>This season</option><option value="custom">Choose the dates…</option>${g.id ? '<option value="all">Everything since 2023 (Google Sheets)</option>' : ''}</select>
-        <span id="rp-gps-dates" hidden><input type="date" id="rp-gps-from" aria-label="From"> → <input type="date" id="rp-gps-to" aria-label="To"></span>
-        <button type="button" class="btn-primary" id="rp-gps-dl"${g.url ? '' : ' disabled'}>Download</button></div></div>
+    <div class="rp-data-row rp-data-form"><div><b>Download Excel</b><small>Same columns as your files · one sheet per file chosen</small></div>
+      <div class="rp-data-grid">
+        <span class="rp-data-k">Files</span><div class="rp-data-chips" id="rp-gps-files">${RP_GPS_FILES.map(([k, l]) => `<label><input type="checkbox" value="${k}"${(RP_GPS.files || ['full']).includes(k) ? ' checked' : ''}> ${l}</label>`).join('')}</div>
+        <span class="rp-data-k">Player</span><div><select class="select" id="rp-gps-player" aria-label="Player"><option value="">All players</option></select></div>
+        <span class="rp-data-k">Period</span><div class="rp-data-dl"><select class="select" id="rp-gps-period" aria-label="Period">
+          <option value="session">Last session</option><option value="week">This week</option><option value="4w">Last 4 weeks</option>
+          <option value="season" selected>This season</option><option value="custom">Choose the dates…</option><option value="all">Everything since 2023</option></select>
+          <span id="rp-gps-dates" hidden><input type="date" id="rp-gps-from" aria-label="From"> → <input type="date" id="rp-gps-to" aria-label="To"></span></div>
+        <span></span><div><button type="button" class="btn-primary" id="rp-gps-dl"${g.url ? '' : ' disabled'}>Download</button></div>
+      </div></div>
     <p class="rp-data-note" id="rp-gps-msg"></p></div>`;
   const sel = document.getElementById('rp-gps-period');
   sel.onchange = () => { document.getElementById('rp-gps-dates').hidden = sel.value !== 'custom'; };
+  document.getElementById('rp-gps-player').onchange = rpGpsFiles;
+  document.getElementById('rp-gps-files').onchange = rpGpsFiles;
   document.getElementById('rp-gps-dl').onclick = rpGpsDownload;
+  rpGpsPlayers();
+}
+
+const RP_GPS_FILES = [['full', 'Full session'], ['drills', 'Drills'], ['team', 'Team']];
+/** The players of the season (their name in the Excel files), once the reports are loaded. */
+function rpGpsPlayers() {
+  const el = document.getElementById('rp-gps-player');
+  if (!el || !RP.data || el.options.length > 1) return;
+  const roster = RP.data.roster || {}, label = (gps) => { const p = roster[RP.data.pid[gps]]; return p && p.name.toUpperCase() !== gps ? `${p.name} (${gps})` : gps; };
+  Object.keys(RP.data.pid || {}).map((gps) => [gps, label(gps)]).sort((a, b) => a[1].localeCompare(b[1]))
+    .forEach(([gps, l]) => el.add(new Option(l, gps)));
+}
+/** Team rows are the team's average: not offered for one player. */
+function rpGpsFiles() {
+  const one = !!document.getElementById('rp-gps-player').value, team = document.querySelector('#rp-gps-files input[value="team"]');
+  if (one) team.checked = false;
+  team.disabled = one;
+  team.parentElement.title = one ? 'The Team sheet is the team average, not one player' : '';
+  RP_GPS.files = [...document.querySelectorAll('#rp-gps-files input:checked')].map((i) => i.value);
 }
 
 /** [from, to] of the chosen period ('yyyy-mm-dd'). */
@@ -354,21 +389,26 @@ function rpGpsPeriod(kind) {
 
 async function rpGpsDownload() {
   const kind = document.getElementById('rp-gps-period').value, msg = document.getElementById('rp-gps-msg'), btn = document.getElementById('rp-gps-dl');
-  if (kind === 'all') { window.open(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(RP_GPS.info.id)}/export?format=xlsx`, '_blank', 'noopener'); return; }
-  const [from, to] = rpGpsPeriod(kind);
+  const player = document.getElementById('rp-gps-player').value;
+  const tables = [...document.querySelectorAll('#rp-gps-files input:checked')].map((i) => i.value);
+  if (!tables.length) { msg.textContent = 'Tick at least one file.'; return; }
+  // the whole file, as it is in Google Sheets (all players, all three sheets): Google's own Excel export, quicker
+  if (kind === 'all' && !player && tables.length === RP_GPS_FILES.length) { window.open(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(RP_GPS.info.id)}/export?format=xlsx`, '_blank', 'noopener'); return; }
+  const [from, to] = kind === 'all' ? ['2023-07-01', todayIso()] : rpGpsPeriod(kind);
   if (!from || from > to) { msg.textContent = 'Choose a start date before the end date.'; return; }
   btn.disabled = true; msg.textContent = 'Preparing the file…';
   try {
-    const [d] = await Promise.all([callApi('gps_rows', null, { from, to }), rpScript(RP_XLSX)]);
-    if (d.too_many) { msg.textContent = 'Too many rows for one file: choose a shorter period, or “Everything since 2023”.'; return; }
-    if (!(d.rows_full || []).length && !(d.rows_drills || []).length) { msg.textContent = 'No GPS data in this period.'; return; }
+    const [d] = await Promise.all([callApi('gps_rows', null, { from, to, tables, player }), rpScript(RP_XLSX)]);
+    if (d.too_many) { msg.textContent = 'Too many rows for one file: choose a shorter period, one player, or fewer files.'; return; }
+    const got = tables.filter((t) => (d['rows_' + t] || []).length);
+    if (!got.length) { msg.textContent = player ? 'No GPS data for this player in this period.' : 'No GPS data in this period.'; return; }
     const sheet = (cols, rows) => window.XLSX.utils.aoa_to_sheet([cols, ...rows.map((r) => r.map((v, j) => (j === 0 && v ? new Date(v + 'T00:00:00') : v)))], { cellDates: true, dateNF: 'dd/mm/yyyy' });
+    const names = { full: 'Data_Full', drills: 'Data_Drills', team: 'Team' }, short = { full: 'Full', drills: 'Drills', team: 'Team' };
     const wb = window.XLSX.utils.book_new();
-    window.XLSX.utils.book_append_sheet(wb, sheet(d.cols_full, d.rows_full || []), 'Data_Full');
-    window.XLSX.utils.book_append_sheet(wb, sheet(d.cols_drills, d.rows_drills || []), 'Data_Drills');
-    if ((d.cols_team || []).length) window.XLSX.utils.book_append_sheet(wb, sheet(d.cols_team, d.rows_team || []), 'Team');
-    window.XLSX.writeFile(wb, from === to ? `GPS_data_${from}.xlsx` : `GPS_data_${from}_to_${to}.xlsx`);
-    msg.textContent = `${(d.rows_full || []).length} full-session rows and ${(d.rows_drills || []).length} drill rows downloaded.`;
+    tables.forEach((t) => window.XLSX.utils.book_append_sheet(wb, sheet(d['cols_' + t] || [], d['rows_' + t] || []), names[t]));
+    const who = player ? '_' + player.replace(/[^A-Za-z0-9]+/g, '-') : '';
+    window.XLSX.writeFile(wb, `GPS_${tables.map((t) => short[t]).join('-')}${who}_${from === to ? from : `${from}_to_${to}`}.xlsx`);
+    msg.textContent = tables.map((t) => `${(d['rows_' + t] || []).length} ${short[t].toLowerCase()} rows`).join(' · ') + ' downloaded.';
   } catch (e) {
     msg.textContent = 'Not downloaded — ' + (e.message || e);
   } finally { btn.disabled = false; }

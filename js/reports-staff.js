@@ -57,9 +57,7 @@ function rsChart(D, C, key, title, legend) {
     }).join('')}
       <div class="rp-avg" style="bottom:${h(avg)}"></div></div>
     <div class="rp-names">${rows.map((r) => `<div><span>${rpEsc(r.name)}</span></div>`).join('')}</div>
-  </div><div class="rp-gm"><div class="rp-gh"><span>PLAYERS</span><span>% TOP 3 GAME AVG</span></div>
-    ${gm.map(([n, v]) => `<div class="rp-gr" style="height:${Math.max(12, Math.min(19, Math.floor(250 / Math.max(1, gm.length))))}px"><span>${rpEsc(n)}</span><div class="rp-tk"><i style="width:${Math.min(v, 100)}%;background:${rpGmColor(v)}"></i></div><span>${v}</span></div>`).join('')}
-  </div></div>`;
+  </div>${rpGmList(gm)}</div>`;
 }
 
 // ---------------------------------------------------------------- page 4: A:C 7:28 = bar · previous week (14:35) = thin dash · 2W = both weeks out of the zone
