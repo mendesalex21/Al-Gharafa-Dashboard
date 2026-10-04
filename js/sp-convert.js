@@ -76,7 +76,9 @@ function spMetrics(r, time) {
 /**
  * The session's rows. ctx = { date, sid, week, label, md, ampm, sessionTime, players: {GPSNAME: {name, pos, type}}, extra: [{name, pos, type}]
  * (players without GPS: injured, NT…), rpe: {GPSNAME: n}, drills: {title: {no, name, min}} with optional per-player names
- * (rehab / individual work inside a drill), drillName(player, drill) }.
+ * (rehab / individual work inside a drill), drillName(player, drill), ownTime: Set of GPS names whose full-session time
+ * is their own GPS time (a team-session player who arrived late…), cutOwn: Set of "title\u0001GPSNAME" written with the
+ * player's own minutes in that drill }.
  * Returns { full: [row], drills: [row], issues: [text] } — rows are objects keyed by the Excel column names.
  */
 function spBuildRows(fullCsv, drillsCsv, ctx) {
@@ -91,7 +93,7 @@ function spBuildRows(fullCsv, drillsCsv, ctx) {
     if (!pn) return;
     if (!ctx.players[pn]) issues.push(`${pn}: not in the squad list`);
     const type = (ctx.players[pn] || {}).type || 'ProTraining';
-    const time = SP_SESSION_TYPES.has(type) && session ? session : Math.floor(spNum(r['Total Time']) + 1e-9);
+    const time = SP_SESSION_TYPES.has(type) && session && !(ctx.ownTime && ctx.ownTime.has(pn)) ? session : Math.floor(spNum(r['Total Time']) + 1e-9);
     const rpe = ctx.rpe && ctx.rpe[pn] != null && ctx.rpe[pn] !== '' ? Number(ctx.rpe[pn]) : null;
     full.push({ ...head(pn), Time: time, Type: type, 'N°Exercice': 1, ...spMetrics(r, time), RPE: rpe, 'Carga RPE': rpe != null ? rpe * time : null, AMPM: ctx.ampm || 'PM' });
   });
@@ -106,7 +108,8 @@ function spBuildRows(fullCsv, drillsCsv, ctx) {
       const d = (ctx.drills || {})[title];
       if (!d) { issues.push(`drill "${title}": not in the plan`); return; }
       // planned minutes (a 2 × 10' game is 20'), but individual / rehab work keeps the player's own minutes
-      const time = d.own ? Math.floor(spNum(r['Total Time']) + 1e-9) : d.min, rpe = ctx.rpe && ctx.rpe[pn] != null && ctx.rpe[pn] !== '' ? Number(ctx.rpe[pn]) : null;
+      const own = d.own || (ctx.cutOwn && ctx.cutOwn.has(title + '\u0001' + pn));
+      const time = own ? Math.floor(spNum(r['Total Time']) + 1e-9) : d.min, rpe = ctx.rpe && ctx.rpe[pn] != null && ctx.rpe[pn] !== '' ? Number(ctx.rpe[pn]) : null;
       const name = ctx.drillName ? ctx.drillName(pn, d) : d.name;
       drills.push({ ...head(pn), Time: time, Type: name, 'N°Exercice': d.no, ...spMetrics(r, time), RPE: rpe, 'Carga RPE': rpe != null ? rpe * time : null, AMPM: ctx.ampm || 'PM' });
     });

@@ -3,6 +3,9 @@
  * from the last session), with the team load they forecast vs the usual for that MD. After training: drop the two
  * StatSports exports (S##_Full.csv, S##_Drills.csv) → the rows are built in the club's Excel format (sp-convert.js),
  * checked, then published to the season (added by the next update) or downloaded as Excel.
+ * Before publishing, GPS times far from the session, from the plan or from the teammates are flagged (one-click fixes),
+ * and the minutes written for each drill can be set to what it really lasted. Drill cards: a drill created here (its
+ * exact name, optional pitch and players) is shared by the staff; until it has data, its forecast borrows another drill's.
  * Data: plan_lib (sync/build.py → build_plan_lib) + calendar + the plans saved by the staff (API "plans").
  */
 const SPL = { lib: null, cal: null, events: null, matches: [], saved: null, week: null, date: null, view: 'plan', files: {}, timer: null, state: '', show: 'full' };
@@ -13,6 +16,11 @@ const SPL_STATUS = [['ProTraining', 'Team session', '#34c759'], ['Partial', 'Par
 const SPL_KEEP = new Set(['Injury', 'Injury_no_muscular', 'Rehab', 'NT', 'Sick']); // statuses carried over to the next session
 const SPL_IN_SESSION = new Set(['ProTraining', 'Partial', 'ProTraining+ExtraWork']); // expected in the GPS file
 const SPL_NOT_TEAM = /^(INDIVIDUAL|Individual|Rehab|GYM|STRENGTH)$/; // drills that are not the team's (left out of the forecast)
+// before publishing: a team-session player this far from the session time, a drill this far from its planned minutes,
+// a player this far from his teammates in the same drill (this season: about one session in five has one)
+const SPL_CHECK = { sessMin: 5, sessPct: 0.1, drillMin: 2, cutMin: 2, cutPct: 0.2 };
+const splKey = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); // a drill name, case / accents / punctuation ignored
+const splMedian = (xs) => { const a = xs.filter((x) => x > 0).sort((p, q) => p - q), m = a.length >> 1; return !a.length ? 0 : a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
 const SPL_DAY = (iso, o) => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { ...o, timeZone: 'UTC' });
 const splNorm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z]/g, '').replace(/y/g, 'i').replace(/(.)\1+/g, '$1');
 const splName = (s) => String(s || '').replace(/\s+/g, ' ').trim();
@@ -32,13 +40,14 @@ function renderPlan() {
   document.getElementById('spl-main').addEventListener('input', splInput);
   withData('plan_lib', (d) => { SPL.lib = d; splDraw(); }, (err) => { document.getElementById('spl-main').innerHTML = loadError(err); });
   withData('calendar', (d) => { SPL.cal = d; SPL.events = applyCalendarEdits(d); splMatches(); splDraw(); }, () => { SPL.cal = { events: [], match_days: [] }; SPL.events = []; splDraw(); });
-  splLoadSaved().then(() => splDraw()).catch((err) => { SPL.saved = { plans: {}, titles: {}, published: {} }; SPL.state = 'Plans not loaded: ' + (err.message || err); splDraw(); });
+  splLoadSaved().then(() => splDraw()).catch((err) => { SPL.saved = { plans: {}, titles: {}, published: {}, drills: {} }; SPL.state = 'Plans not loaded: ' + (err.message || err); splDraw(); });
 }
 
 // ------------------------------------------------------------------ saved plans (API, or this browser in the local demo)
 async function splLoadSaved() {
-  if (AUTH.demo) { try { SPL.saved = JSON.parse(localStorage.getItem('demo_plans')) || null; } catch (e) { SPL.saved = null; } SPL.saved = SPL.saved || { plans: {}, titles: {}, published: {} }; return; }
+  if (AUTH.demo) { try { SPL.saved = JSON.parse(localStorage.getItem('demo_plans')) || null; } catch (e) { SPL.saved = null; } SPL.saved = SPL.saved || { plans: {}, titles: {}, published: {} }; SPL.saved.drills = SPL.saved.drills || {}; return; }
   SPL.saved = await callApi('plans', null, {});
+  SPL.saved.drills = SPL.saved.drills || {};
 }
 function splDemoStore() { try { localStorage.setItem('demo_plans', JSON.stringify(SPL.saved)); } catch (e) { /* private mode */ } }
 async function splSavePlan(date) {
@@ -101,7 +110,7 @@ function splPlan(date) {
 function splEnsure(date) { const p = splPlan(date); if (p.fresh) { delete p.fresh; SPL.saved.plans[date] = p; } return p; }
 
 // ------------------------------------------------------------------ page
-function splGoWeek(n) { SPL.week = addDays(SPL.week, n); SPL.date = null; SPL.view = 'plan'; splDraw(); }
+function splGoWeek(n) { SPL.week = addDays(SPL.week, n); SPL.date = null; SPL.view = 'plan'; SPL.card = null; splDraw(); }
 function splDraw() {
   if (!SPL.lib || !SPL.saved || !document.getElementById('spl-main')) return;
   const today = todayIso();
@@ -125,7 +134,7 @@ function splDrawWeek() {
         : p && (p.drills || []).length ? '<span class="sp-b plan">Planned</span>' : '<span class="sp-b none">+ Plan</span>';
     return `<button type="button" class="sp-day${d === SPL.date ? ' on' : ''}${m ? ' m' : ''}" data-day="${d}"><b>${SPL_DAY(d, { weekday: 'short', day: 'numeric' })}</b>${tag ? `<span class="sp-md${tag === 'MD' ? ' mdm' : ''}">${tag}</span>` : '<span class="sp-md off">—</span>'}${badge}</button>`;
   }).join('');
-  el.onclick = (e) => { const b = e.target.closest('[data-day]'); if (b) { SPL.date = b.dataset.day; SPL.view = 'plan'; SPL.files = {}; splDraw(); } };
+  el.onclick = (e) => { const b = e.target.closest('[data-day]'); if (b) { SPL.date = b.dataset.day; SPL.view = 'plan'; SPL.files = {}; SPL.card = null; splDraw(); } };
 }
 
 function splHead(date, step) {
@@ -141,6 +150,94 @@ function splHead(date, step) {
 // ------------------------------------------------------------------ step 1: plan
 const SPL_COL = ['#8e8e93', '#5b9bd5', '#34a853', '#2a78d6', '#ff9500', '#e5484d', '#a463f2', '#c7a600', '#30b0c7', '#8e1b4f'];
 function splColor(name) { const lib = SPL.lib.library, i = lib.findIndex((x) => splName(x.name) === splName(name)); return SPL_NOT_TEAM.test(splName(name)) ? '#a463f2' : SPL_COL[(i < 0 ? 9 : i) % SPL_COL.length]; }
+
+// ------------------------------------------------------------------ drill cards (created here: exact name, optional pitch and players)
+function splDefs() { return (SPL.saved && SPL.saved.drills) || {}; }
+function splDef(name) { const k = splKey(name); return k ? Object.values(splDefs()).find((x) => splKey(x.name) === k) || null : null; }
+function splLibOf(name) { const k = splKey(name); return k ? SPL.lib.library.find((x) => splKey(x.name) === k) || null : null; }
+/** The per-minute load the forecast uses: the drill's own history, else the drill its card borrows from (until it has data). */
+function splRateOf(name) {
+  const own = splLibOf(name);
+  if (own) return { l: own, own: true };
+  const d = splDef(name), like = d && d.like ? splLibOf(d.like) : null;
+  return like ? { l: like, own: false } : null;
+}
+/** The drills to choose from: the library (drills with data), then the drills created here that have no data yet. */
+function splChoices() {
+  const names = SPL.lib.library.map((x) => splName(x.name)), seen = new Set(names.map(splKey));
+  return { names, extra: Object.values(splDefs()).map((x) => splName(x.name)).filter((n) => !seen.has(splKey(n))).sort((a, b) => a.localeCompare(b)) };
+}
+function splArea(d) { return d && d.length && d.width && d.players ? Math.round(d.length * d.width / d.players) : null; }
+function splDefTxt(d) {
+  if (!d) return '';
+  const a = splArea(d);
+  return [d.length && d.width ? `${d.length} × ${d.width} m` : '', d.players ? `${d.players} players` : '', a ? `${a} m²/player` : ''].filter(Boolean).join(' · ');
+}
+/** The library drill a new one is probably like (changed in the card if wrong): the drill the club's StatSports titles of
+ * the same kind were named (same family and format: "Poss 5v5" → BOX RONDO), else from its words or number of players. */
+function splGuessLike(name, players) {
+  const toks = (s) => splKey(s).split(' ').filter(Boolean), mine = toks(name), fam = mine[0], fmt = mine.find((w) => /^\d+v\d+$/.test(w));
+  let best = '', score = 0;
+  Object.entries({ ...SPL.lib.titles, ...((SPL.saved && SPL.saved.titles) || {}) }).forEach(([t, nm]) => {
+    const tt = toks(t), l = splLibOf(nm);
+    if (!fam || !l || SPL_NOT_TEAM.test(splName(l.name))) return;
+    const s = (tt[0] === fam ? 3 : 0) + (fmt && tt.includes(fmt) ? 3 : 0) + mine.filter((w) => w !== fam && w !== fmt && tt.includes(w)).length;
+    if (s > score) { score = s; best = splName(l.name); }
+  });
+  if (score >= 3) return best;
+  const n = splKey(name), find = (re) => { const x = SPL.lib.library.find((y) => re.test(y.name)); return x ? splName(x.name) : ''; };
+  const v = /(\d+) ?v ?(\d+)/.exec(n), side = v ? Math.max(Number(v[1]), Number(v[2])) : players ? Math.ceil(players / 2) : 0;
+  if (/warm|echauf/.test(n)) return find(/^WARM-UP$/i);
+  if (/rondo/.test(n)) return find(/RONDO/i);
+  if (/finish|cross|shoot|frappe/.test(n)) return find(/^FINISHING AND CROSSING$/i);
+  if (/set piece|corner|free kick|coup franc/.test(n)) return find(/^SET PIECES$/i);
+  if (/speed|sprint|vitesse/.test(n)) return find(/^SPEED$/i);
+  if (/endurance|running|interval|fractionne/.test(n)) return find(/^ENDURANCE$/i);
+  if (/possess|positional|conservation/.test(n)) return find(/^POSITIONAL PLAY POSSESSION & TRANSITION$/i);
+  if (side) return find(side <= 5 ? /^SMALL SIDED/i : side <= 8 ? /^MEDIUM SIDED/i : /^LARGE GAME/i);
+  if (/\bssg\b|small/.test(n)) return find(/^SMALL SIDED/i);
+  if (/\bmsg\b|medium/.test(n)) return find(/^MEDIUM SIDED/i);
+  if (/\blsg\b|large|game|match/.test(n)) return find(/^LARGE GAME/i);
+  if (/pass/.test(n)) return find(/^PASSING DRILL$/i);
+  if (/tactic|transition|attack|defen/.test(n)) return find(/^AT-DEF & TRANSITION$/i);
+  return '';
+}
+/** The card under the drills: a new drill, or the pitch / players of one already in the plan. */
+function splCardHtml() {
+  const c = SPL.card;
+  if (!c) return '';
+  const hasData = !!splLibOf(c.name), area = splArea({ length: Number(c.length), width: Number(c.width), players: Number(c.players) });
+  const lib = SPL.lib.library.filter((x) => !SPL_NOT_TEAM.test(splName(x.name)) && !/^(Game|TEST$)/i.test(splName(x.name))); // a team drill to borrow from
+  return `<div class="sp-card"><div class="sp-h3">${c.edit != null ? escapeHtml(c.name) : 'New drill'} <small>${c.edit != null ? 'pitch and players are optional' : 'its name goes into Data_Drills as you write it · pitch and players are optional'}</small></div>
+    ${c.edit != null ? '' : `<label class="sp-f"><span>Name</span><input data-card="name" value="${escapeHtml(c.name)}" maxlength="60" placeholder="e.g. SSG 4v4 + GK" autocomplete="off"></label>`}
+    <div class="sp-fr"><label class="sp-f"><span>Pitch (m)</span><span class="sp-xy"><input type="number" min="5" max="150" data-card="length" value="${c.length}" placeholder="length" aria-label="Pitch length">×<input type="number" min="5" max="150" data-card="width" value="${c.width}" placeholder="width" aria-label="Pitch width"></span></label>
+      <label class="sp-f"><span>Players</span><input type="number" min="2" max="40" data-card="players" value="${c.players}" placeholder="e.g. 10"></label>
+      <span class="sp-area">${area ? `${area} m² per player` : ''}</span></div>
+    ${hasData ? '' : `<label class="sp-f"><span>Forecast like <small>until it has data of its own (after its first session)</small></span><select data-card="like"><option value="">— not in the forecast —</option>${lib.map((x) => `<option ${splKey(x.name) === splKey(c.like) ? 'selected' : ''}>${escapeHtml(splName(x.name))}</option>`).join('')}</select></label>`}
+    <div class="sp-card-a"><button type="button" class="btn-primary" data-card-save>${c.edit != null ? 'Save' : 'Create and add'}</button><button type="button" class="btn-light" data-card-cancel>Cancel</button><em class="sp-card-msg"></em>${c.edit != null && !hasData && splDef(c.name) ? '<button type="button" class="linkbtn sp-del" data-card-del>Delete this drill</button>' : ''}</div></div>`;
+}
+async function splCardSave() {
+  const c = SPL.card, date = SPL.date, name = splName(c.name);
+  if (!name) { const el = document.querySelector('.sp-card-msg'); if (el) el.textContent = 'Write the name of the drill.'; return; }
+  const num = (v, lo, hi) => { const x = Math.round(Number(v)); return v === '' || v == null || !Number.isFinite(x) || !x ? null : Math.max(lo, Math.min(hi, x)); };
+  const prev = splDef(name), inLib = splLibOf(name), key = prev ? prev.name : inLib ? splName(inLib.name) : name; // one card per drill, whatever the spelling
+  const def = { name: key, length: num(c.length, 1, 150), width: num(c.width, 1, 150), players: num(c.players, 1, 40), like: inLib ? '' : c.like || '' };
+  SPL.saved.drills = { ...splDefs(), [key]: def };
+  if (c.edit == null) { const r8 = splRateOf(key); splEnsure(date).drills.push({ name: key, min: r8 ? r8.l.min : 10 }); splTouch(date); }
+  SPL.card = null; splDraw();
+  try { if (AUTH.demo) splDemoStore(); else await callApi('drill_save', null, def); SPL.state = `Drill card “${key}” saved ✓`; } catch (err) { SPL.state = 'Drill card not saved — ' + (err.message || err); }
+  splStateLine();
+}
+async function splCardDelete() {
+  const def = splDef(SPL.card.name);
+  SPL.card = null;
+  if (!def) { splDraw(); return; }
+  const all = { ...splDefs() };
+  delete all[def.name];
+  SPL.saved.drills = all; splDraw();
+  try { if (AUTH.demo) splDemoStore(); else await callApi('drill_delete', null, { name: def.name }); SPL.state = 'Drill deleted'; } catch (err) { SPL.state = 'Not deleted — ' + (err.message || err); }
+  splStateLine();
+}
 function splPlanHtml() {
   const date = SPL.date, p = splPlan(date), lib = SPL.lib.library, tag = splTag(date);
   // in the data from the Excel files: nothing to do. Published from this page: can be published again (it replaces) or removed
@@ -148,12 +245,16 @@ function splPlanHtml() {
   const inData = !!(r && /^S\d+$/.test(r.sid) && !r.pub), live = !!(r && r.pub);
   const team = p.drills.filter((d) => !SPL_NOT_TEAM.test(splName(d.name))), tot = team.reduce((a, d) => a + (Number(d.min) || 0), 0);
   const titleOf = {}; Object.entries({ ...SPL.lib.titles, ...SPL.saved.titles }).forEach(([t, n]) => { if (!titleOf[splName(n)]) titleOf[splName(n)] = t; });
-  const opts = (cur) => `<option value="">Choose a drill…</option>${lib.map((x) => `<option ${splName(x.name) === splName(cur) ? 'selected' : ''}>${escapeHtml(splName(x.name))}</option>`).join('')}${cur && !lib.some((x) => splName(x.name) === splName(cur)) ? `<option selected>${escapeHtml(cur)}</option>` : ''}`;
-  const rows = p.drills.map((d, i) => { const l = lib.find((x) => splName(x.name) === splName(d.name));
+  const ch = splChoices(), opt = (n, cur) => `<option ${splKey(n) === splKey(cur) ? 'selected' : ''}>${escapeHtml(n)}</option>`;
+  const list = (cur) => ch.names.map((n) => opt(n, cur)).join('') + (ch.extra.length ? `<optgroup label="Created here · no data yet">${ch.extra.map((n) => opt(n, cur)).join('')}</optgroup>` : '');
+  const opts = (cur) => `<option value="">Choose a drill…</option>${list(cur)}${cur && ![...ch.names, ...ch.extra].some((n) => splKey(n) === splKey(cur)) ? `<option selected>${escapeHtml(cur)}</option>` : ''}`;
+  const rows = p.drills.map((d, i) => { const r8 = splRateOf(d.name), own = SPL_NOT_TEAM.test(splName(d.name)), ss = titleOf[splName(d.name)];
+    const cap = own ? 'individual / rehab work' : [ss ? 'StatSports: ' + escapeHtml(ss) : '', escapeHtml(splDefTxt(splDef(d.name))),
+      !r8 ? '<span class="sp-warn">no data yet — not in the forecast</span>' : r8.own ? '' : `forecast like ${escapeHtml(splName(r8.l.name))}`].filter(Boolean).join(' · ');
     return `<div class="sp-dr"><span class="sp-ord"><button type="button" data-up="${i}" ${i ? '' : 'disabled'} aria-label="Move up">▲</button><button type="button" data-down="${i}" ${i < p.drills.length - 1 ? '' : 'disabled'} aria-label="Move down">▼</button></span><span class="no" style="background:${splColor(d.name)}">${i + 1}</span>
-      <span class="nm"><select data-drill="${i}">${opts(d.name)}</select><small>${titleOf[splName(d.name)] ? 'StatSports: ' + escapeHtml(titleOf[splName(d.name)]) : SPL_NOT_TEAM.test(splName(d.name)) ? 'individual / rehab work' : 'new name'}</small></span>
+      <span class="nm"><select data-drill="${i}">${opts(d.name)}</select><small>${cap}${own ? '' : `<button type="button" class="sp-ed" data-card-edit="${i}">${splDef(d.name) ? '✎ card' : '+ pitch / players'}</button>`}</small></span>
       <span class="sp-min"><button type="button" data-min="${i}" data-step="-1">−</button><input type="number" min="1" max="120" value="${d.min || ''}" data-mins="${i}" aria-label="Minutes"><button type="button" data-min="${i}" data-step="1">+</button></span>
-      <span class="sp-int">${l && l.td ? `≈ ${Math.round(l.td)} m/min` : ''}</span><button type="button" class="x" data-del="${i}" aria-label="Remove">×</button></div>`; }).join('');
+      <span class="sp-int">${r8 && r8.l.td ? `≈ ${Math.round(r8.l.td)} m/min` : ''}</span><button type="button" class="x" data-del="${i}" aria-label="Remove">×</button></div>`; }).join('');
   const last = Object.keys(SPL.lib.recent).filter((d) => d < date && SPL.lib.recent[d].md === tag && SPL.lib.recent[d].drills.length).sort().pop();
   const sugg = lib.filter((x) => x.md.includes(tag) && !p.drills.some((d) => splName(d.name) === splName(x.name))).slice(0, 4);
   const line = team.map((d) => `<i style="flex:${d.min || 1};background:${splColor(d.name)}" title="${escapeHtml(d.name)}"><b>${d.min || ''}'</b></i>`).join('');
@@ -162,15 +263,17 @@ function splPlanHtml() {
     <div class="sp-two"><div class="sp-col">
       <div class="sp-h3">Drills <small>${tot}' of team work${p.drills.length ? ' · ▲▼ to reorder' : ''}</small>${last ? `<button type="button" class="btn-light sp-copy" data-copy="${last}">⟲ Copy last ${tag} · ${SPL_DAY(last, { weekday: 'short', day: 'numeric', month: 'short' })}</button>` : ''}</div>
       ${team.length ? `<div class="sp-line">${line}</div>` : ''}${rows || '<p class="sp-note">No drill yet — copy the last session of this MD or add drills below.</p>'}
-      <div class="sp-add"><select data-add aria-label="Add a drill"><option value="">+ Add a drill…</option>${lib.map((x) => `<option>${escapeHtml(splName(x.name))}</option>`).join('')}<option value="__other">Other (new name)…</option></select>${sugg.length ? `<small>Often on ${tag}:</small>${sugg.map((x) => `<button type="button" data-sugg="${escapeHtml(splName(x.name))}">${escapeHtml(splName(x.name))} <small>${x.min}'</small></button>`).join('')}` : ''}</div>
+      <div class="sp-add"><select data-add aria-label="Add a drill"><option value="">+ Add a drill…</option>${list('')}<option value="__new">+ Create a new drill…</option></select>${sugg.length ? `<small>Often on ${tag}:</small>${sugg.map((x) => `<button type="button" data-sugg="${escapeHtml(splName(x.name))}">${escapeHtml(splName(x.name))} <small>${x.min}'</small></button>`).join('')}` : ''}</div>
+      ${splCardHtml()}
       ${splLoadHtml(date, p)}</div>
       ${splPlayersHtml(p)}</div>
     ${inData ? '' : `<label class="sp-drop mini" id="spl-drop"><input type="file" accept=".csv,text/csv" multiple hidden data-files><b>After the session</b><span>Drop <code>${escapeHtml(p.sid || splSid(date))}_Full.csv</code> and <code>${escapeHtml(p.sid || splSid(date))}_Drills.csv</code> here, or click to choose — the rows are built from this plan</span></label>`}`;
 }
 function splLoadHtml(date, p) {
-  const c = SPL.lib.calib || {}, rate = (n, k) => { const l = SPL.lib.library.find((x) => splName(x.name) === splName(n)); return l ? l[k] || 0 : 0; };
+  const c = SPL.lib.calib || {}, rate = (n, k) => { const r8 = splRateOf(n); return r8 ? r8.l[k] || 0 : 0; };
   const team = p.drills.filter((d) => !SPL_NOT_TEAM.test(splName(d.name)) && d.min);
   if (!team.length) return '';
+  const none = [...new Set(team.filter((d) => !splRateOf(d.name)).map((d) => splName(d.name)))]; // created drills with no data and no "forecast like"
   const pred = (k) => team.reduce((a, d) => a + rate(d.name, k) * d.min, 0) * ((c[k] || {}).k || 1);
   const typ = splCycleType(date), ref = ((SPL.lib.usual[typ] || {})[splTag(date)]) || null;
   const bar = (k, label, unit) => {
@@ -180,7 +283,8 @@ function splLoadHtml(date, p) {
       <b>${k === 'td' ? (v / 1000).toFixed(1) + 'k' : Math.round(v)}<small> ${unit}</small></b><em class="${lv}">${lv === 'ok' ? 'usual ✓' : lv === 'lo' ? 'lighter' : lv === 'hi' ? 'heavier' : '—'}</em><small class="sp-acc">${(c[k] || {}).err != null ? (k === 'hit' ? 'indicative' : `±${c[k].err} %`) : ''}</small></div>`;
   };
   return `<div class="sp-load"><div class="sp-h3">Planned team load <small>each drill's usual per-minute load × its planned minutes${ref ? ` · grey = usual ${splTag(date)} of a ${typ} microcycle (p25–p75, ${ref.n} sessions), line = average` : ' · no usual reference for this day'}</small></div>
-    ${bar('td', 'Total distance', 'm')}${bar('acc_dec', 'Acc + Dec', '')}${bar('hit', '> 20 km/h', 'm')}</div>`;
+    ${bar('td', 'Total distance', 'm')}${bar('acc_dec', 'Acc + Dec', '')}${bar('hit', '> 20 km/h', 'm')}
+    ${none.length ? `<p class="sp-note warn">Not in the forecast (no data yet): ${none.map(escapeHtml).join(', ')} — open its card (+ pitch / players) and choose “Forecast like”.</p>` : ''}</div>`;
 }
 function splPlayersHtml(p) {
   const known = new Set(SPL_STATUS.map(([k]) => k)), extra = (SPL.lib.types || []).filter((t) => !known.has(t) && !/^(Game|Friendly_Game|Game\+Compensatory|NC|Private)$/.test(t));
@@ -236,31 +340,85 @@ function splBuild() {
   const extra = lib.players.filter((q) => !inGps.has(q.gps) && !SPL_IN_SESSION.has(st(q))).map((q) => ({ name: q.gps, pos: q.pos, type: st(q) }));
   const missing = lib.players.filter((q) => !inGps.has(q.gps) && SPL_IN_SESSION.has(st(q)));
   const titles = { ...lib.titles, ...SPL.saved.titles }, map = p.titlemap || {};
-  const plan = p.drills.map((d, i) => ({ no: i + 1, name: splName(d.name), min: Number(d.min) || 0, own: SPL_NOT_TEAM.test(splName(d.name)) }));
-  const seen = [...new Set(drillRows.map((r) => String(r['Drill Title'] || '').trim()).filter(Boolean))];
+  // minutes written in the rows: the planned ones, or the ones set after the session (the drill really lasted longer)
+  const plan = p.drills.map((d, i) => ({ i, no: i + 1, name: splName(d.name), planned: Number(d.min) || 0, min: Number(d.act) || Number(d.min) || 0, chk: !!d.chk, own: SPL_NOT_TEAM.test(splName(d.name)) }));
+  const titleOfRow = (r) => String(r['Drill Title'] || '').trim();
+  const seen = [...new Set(drillRows.map(titleOfRow).filter(Boolean))];
   const drills = {}, mapping = [];
   seen.forEach((t) => {
     const name = splName(map[t] || titles[t] || '');
-    const d = plan.find((x) => x.name === name) || (/individual|rehab/i.test(t) && plan.find((x) => SPL_NOT_TEAM.test(x.name))) || null;
+    // a title named once, or written exactly like a drill of the plan, is recognised
+    const d = (name && plan.find((x) => x.name === name)) || plan.find((x) => splKey(x.name) === splKey(t)) || (/individual|rehab/i.test(t) && plan.find((x) => SPL_NOT_TEAM.test(x.name))) || null;
     if (d) drills[t] = d;
-    mapping.push({ title: t, d, n: drillRows.filter((r) => String(r['Drill Title'] || '').trim() === t).length, min: Math.max(...drillRows.filter((r) => String(r['Drill Title'] || '').trim() === t).map((r) => spNum(r['Total Time']))) });
+    const times = drillRows.filter((r) => titleOfRow(r) === t).map((r) => ({ g: spName(r['Player First Name']), t: spNum(r['Total Time']) })).filter((x) => x.g);
+    mapping.push({ title: t, d, n: times.length, times, min: Math.max(0, ...times.map((x) => x.t)), med: splMedian(times.map((x) => x.t)) });
   });
   const sessionTime = Number(p.time) || spSessionTime(fullRows);
   // RPE: the players' kiosk answers, unless one was typed here
   const kiosk = splKioskRpe(date, p.ampm || 'PM'), rpe = {}, fromKiosk = new Set();
   lib.players.forEach((q) => { if (kiosk[q.id] != null) { rpe[q.gps] = kiosk[q.id]; fromKiosk.add(q.gps); } });
   Object.entries(p.rpe || {}).forEach(([g, v]) => { if (v != null && v !== '') { rpe[g] = v; fromKiosk.delete(g); } });
+  // before publishing: GPS times far from the session, from the plan, or from the teammates in the same drill
+  const fix = p.fix || {}, fixT = fix.t || {}, fixC = fix.c || {}, checks = { time: [], drill: [], cut: [] }, gpsTime = {};
+  fullRows.forEach((r) => { const g = spName(r['Player First Name']); if (g) gpsTime[g] = spNum(r['Total Time']); });
+  Object.entries(players).forEach(([g, pl]) => {
+    const t = gpsTime[g], dev = Math.abs(t - sessionTime);
+    if (SP_SESSION_TYPES.has(pl.type) && sessionTime && t > 0 && dev >= SPL_CHECK.sessMin && dev >= SPL_CHECK.sessPct * sessionTime)
+      checks.time.push({ g, name: (byGps[g] || {}).name || pl.name, pid: (byGps[g] || {}).id || null, t, own: Math.floor(t + 1e-9), fix: fixT[g] || null });
+  });
+  plan.filter((d) => !d.own).forEach((d) => {
+    const ts = mapping.filter((m) => m.d === d).flatMap((m) => m.times.map((x) => x.t)), med = splMedian(ts);
+    if (ts.length >= 3 && Math.abs(med - d.planned) >= SPL_CHECK.drillMin)
+      checks.drill.push({ i: d.i, no: d.no, name: d.name, planned: d.planned, used: d.min, med, gps: Math.round(med), done: d.chk || Math.abs(med - d.min) < SPL_CHECK.drillMin });
+  });
+  mapping.filter((m) => m.d && !m.d.own && m.times.length >= 4).forEach((m) => m.times.forEach((x) => {
+    const dev = Math.abs(x.t - m.med), key = m.title + '\u0001' + x.g;
+    if (dev >= SPL_CHECK.cutMin && dev >= SPL_CHECK.cutPct * m.med)
+      checks.cut.push({ key, title: m.title, g: x.g, name: (byGps[x.g] || {}).name || x.g, no: m.d.no, drill: m.d.name, t: x.t, med: m.med, own: Math.floor(x.t + 1e-9), used: m.d.min, fix: fixC[key] || null });
+  }));
+  checks.left = checks.time.filter((x) => !x.fix).length + checks.drill.filter((x) => !x.done).length + checks.cut.filter((x) => !x.fix).length;
+  const ownTime = new Set(Object.keys(fixT).filter((g) => fixT[g] === 'own')), cutOwn = new Set(Object.keys(fixC).filter((k) => fixC[k] === 'own'));
   const out = spBuildRows(SPL.files.full.text, SPL.files.drills ? SPL.files.drills.text : '', {
-    date, sid: p.sid || splSid(date), week: splWeekNo(date), label: p.label || splLabel(date), md: splTag(date) || '/', ampm: p.ampm || 'PM', sessionTime, players, extra, rpe, drills,
+    date, sid: p.sid || splSid(date), week: splWeekNo(date), label: p.label || splLabel(date), md: splTag(date) || '/', ampm: p.ampm || 'PM', sessionTime, players, extra, rpe, drills, ownTime, cutOwn,
     drillName: (pn, d) => (SPL_NOT_TEAM.test(d.name) && players[pn] && players[pn].type === 'Rehab' ? 'Rehab' : d.name),
   });
-  return { ...out, fileDate, missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk };
+  return { ...out, fileDate, missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk, checks };
+}
+/** The checks above the three columns: each flagged time with its one-click fixes (the chosen one stays highlighted). */
+function splChecksHtml(b) {
+  const c = b.checks, n = c.time.length + c.drill.length + c.cut.length;
+  if (!n) return `<p class="sp-allok">✓ Times checked — every team-session player within ${SPL_CHECK.sessMin}' of the session, every drill within ${SPL_CHECK.drillMin}' of its planned minutes, no player far from his teammates in a drill.</p>`;
+  const btn = (attr, label, on) => `<button type="button" class="sp-fx${on ? ' on' : ''}" ${attr}>${label}</button>`, f1 = (v) => v.toFixed(1);
+  const rows = [];
+  if (c.time.length) {
+    rows.push(`<div class="sp-cg">Session time<small>team-session players get ${b.sessionTime}'</small>${c.time.length > 2 ? `<span>${btn('data-fix-all="own"', `Use each one's GPS time (${c.time.length})`)}${btn('data-fix-all="keep"', `Keep ${b.sessionTime}' for all`)}</span>` : ''}</div>`);
+    c.time.forEach((x, i) => rows.push(`<div class="sp-ci${x.fix ? ' done' : ''}"><b>${escapeHtml(x.name)}</b><span>${f1(x.t)}' on the GPS · session ${b.sessionTime}' — arrived late, left early, or extra work?</span><span class="sp-cb">${btn(`data-fix-t="${i}" data-v="own"`, `Use his ${x.own}'`, x.fix === 'own')}${x.pid ? btn(`data-partial="${escapeHtml(x.pid)}"`, 'Partial') : ''}${btn(`data-fix-t="${i}" data-v="keep"`, `Keep ${b.sessionTime}'`, x.fix === 'keep')}</span></div>`));
+  }
+  if (c.drill.length) {
+    rows.push(`<div class="sp-cg">Drill time<small>planned minutes vs the GPS (median of the players) · a game in halves includes its break</small></div>`);
+    c.drill.forEach((x) => rows.push(`<div class="sp-ci${x.done ? ' done' : ''}"><b>${x.no} · ${escapeHtml(x.name)}</b><span>planned ${x.planned}' · ${f1(x.med)}' on the GPS${x.used !== x.planned ? ` · ${x.used}' written` : ''}</span><span class="sp-cb">${btn(`data-act="${x.i}" data-v="${x.gps}"`, `Use ${x.gps}'`, x.done && x.used === x.gps && x.gps !== x.planned)}${btn(`data-act="${x.i}" data-v="${x.planned}"`, `Keep ${x.planned}'`, x.done && x.used === x.planned)}</span></div>`));
+  }
+  if (c.cut.length) {
+    rows.push(`<div class="sp-cg">Drill cuts<small>a player far from his teammates in the same drill — a bad cut? correct it in StatSports and drop the files again</small></div>`);
+    const groups = {};
+    c.cut.forEach((x, i) => { (groups[x.title] = groups[x.title] || []).push([x, i]); });
+    Object.values(groups).forEach((g) => {
+      const x0 = g[0][0];
+      if (g.length >= 4) { // a whole group on another duration (two groups in one drill?): one line for all of them
+        const set = g.every(([x]) => x.fix === g[0][0].fix) ? x0.fix : null;
+        rows.push(`<div class="sp-ci${g.every(([x]) => x.fix) ? ' done' : ''}"><b>${g.length} players</b><span>${x0.no} · ${escapeHtml(x0.drill)} — about ${f1(splMedian(g.map(([x]) => x.t)))}' vs ${f1(x0.med)}' for the others: ${g.map(([x]) => escapeHtml(x.name)).join(', ')}</span><span class="sp-cb">${btn(`data-fix-cg="${encodeURIComponent(x0.title)}" data-v="own"`, 'Use their own times', set === 'own')}${btn(`data-fix-cg="${encodeURIComponent(x0.title)}" data-v="keep"`, `Keep ${x0.used}'`, set === 'keep')}</span></div>`);
+        return;
+      }
+      g.forEach(([x, i]) => rows.push(`<div class="sp-ci${x.fix ? ' done' : ''}"><b>${escapeHtml(x.name)}</b><span>${x.no} · ${escapeHtml(x.drill)} — ${f1(x.t)}' vs ${f1(x.med)}' for the others</span><span class="sp-cb">${btn(`data-fix-c="${i}" data-v="own"`, `Use his ${x.own}'`, x.fix === 'own')}${btn(`data-fix-c="${i}" data-v="keep"`, `Keep ${x.used}'`, x.fix === 'keep')}</span></div>`));
+    });
+  }
+  return `<div class="sp-checks${c.left ? '' : ' clear'}"><div class="sp-h3">${c.left ? `To check before publishing <small>${c.left} left · times far from the session, from the plan or from the teammates</small>` : `✓ Times checked <small>${n} looked at · the preview shows what is written</small>`}</div>${rows.join('')}</div>`;
 }
 function splImportHtml() {
   const date = SPL.date, p = splEnsure(date), b = splBuild();
   const gpsRows = b.full.filter((r) => r.Time > 0 || r.DT != null), unmapped = b.mapping.filter((m) => !m.d);
   const drillOpts = (t, cur) => `<select data-map="${escapeHtml(t)}"><option value="">Which drill of the plan?</option>${b.plan.map((d) => `<option value="${escapeHtml(d.name)}" ${cur && cur.name === d.name ? 'selected' : ''}>${d.no} · ${escapeHtml(d.name)}</option>`).join('')}</select>`;
-  const mapRows = b.mapping.map((m) => `<div class="sp-mr${m.d ? '' : ' warn'}"><code title="${escapeHtml(m.title)}">${escapeHtml(m.title)}</code><span class="arr">→</span><span class="tg">${m.d ? `<b style="--c:${splColor(m.d.name)}">${m.d.no} · ${escapeHtml(m.d.name)}</b><small>${m.d.min}' planned (GPS ${m.min.toFixed(1)}') · ${m.n} player${m.n > 1 ? 's' : ''}</small>` : drillOpts(m.title, null)}</span><span class="ok">${m.d ? '✓' : '!'}</span></div>`).join('');
+  const mapRows = b.mapping.map((m) => `<div class="sp-mr${m.d ? '' : ' warn'}"><code title="${escapeHtml(m.title)}">${escapeHtml(m.title)}</code><span class="arr">→</span><span class="tg">${m.d ? `<b style="--c:${splColor(m.d.name)}">${m.d.no} · ${escapeHtml(m.d.name)}</b><small>${m.d.own ? `each player's own minutes · ${m.n} player${m.n > 1 ? 's' : ''}` : `<input type="number" class="sp-act" min="1" max="120" value="${m.d.min}" data-actmin="${m.d.i}" aria-label="Minutes written">' written · planned ${m.d.planned}' · GPS ${m.med.toFixed(1)}' · ${m.n} player${m.n > 1 ? 's' : ''}`}</small>` : drillOpts(m.title, null)}</span><span class="ok">${m.d ? '✓' : '!'}</span></div>`).join('');
   // green = the player's own answer on the kiosk, white = typed here, orange = no RPE yet
   const rpeGrid = gpsRows.map((r) => { const g = spName(r.Players), k = b.fromKiosk.has(g);
     return `<label class="${r.RPE == null ? 'miss' : k ? 'k' : ''}"${k ? ' title="From the kiosk"' : ''}>${escapeHtml(r.Players)}<input type="number" min="0" max="10" step="0.5" value="${r.RPE ?? ''}" data-rpe="${escapeHtml(g)}"></label>`; }).join('');
@@ -274,9 +432,10 @@ function splImportHtml() {
     <div class="sp-files"><div class="sp-file ok"><span class="ic">CSV</span><div><b>${escapeHtml(SPL.files.full.name)}</b><small>${gpsRows.length} players · ${b.fileDate ? SPL_DAY(b.fileDate, { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'no date'} · session ${b.sessionTime}'</small></div></div>
       <div class="sp-file ${SPL.files.drills ? 'ok' : 'miss'}"><span class="ic">CSV</span><div><b>${SPL.files.drills ? escapeHtml(SPL.files.drills.name) : 'Drills file missing'}</b><small>${SPL.files.drills ? `${b.mapping.length} drills · ${b.drills.length} rows` : 'drop S##_Drills.csv too'}</small></div></div>
       <label class="sp-drop small"><input type="file" accept=".csv,text/csv" multiple hidden data-files>Drop other files to replace</label></div>
+    ${SPL.files.drills || b.checks.time.length ? splChecksHtml(b) : ''}
     <div class="sp-three">
       <div class="sp-chk"><div class="sp-h3"><i class="n">1</i>Drills <small>StatSports title → the drill of the plan</small></div>${mapRows || '<p class="sp-note">No drills file yet.</p>'}
-        <p class="sp-note">Time = the planned minutes (a 2 × 10' game is 20', not the 22' of the GPS). A title you name once is remembered.</p></div>
+        <p class="sp-note">Minutes written = the planned ones (a 2 × 10' game is 20', not the 22' of the GPS); type the real minutes if the drill lasted longer. A title you name once, or written exactly like the drill, is recognised.</p></div>
       <div class="sp-chk"><div class="sp-h3"><i class="n">2</i>Players <small>${gpsRows.length} in the GPS file${b.unknown.length ? ` · ${b.unknown.length} unknown` : ' · all recognised ✓'}</small></div>
         ${b.unknown.length ? `<p class="sp-note warn">Not in the squad list (kept with their GPS name): ${b.unknown.map(escapeHtml).join(', ')} — add them in Squad.</p>` : ''}
         ${b.missing.length ? `<p class="sp-note warn">In the session in the plan but not in the GPS file: ${b.missing.map((q) => escapeHtml(q.name)).join(', ')} — change their status if they did not train.</p>` : ''}
@@ -289,7 +448,7 @@ function splImportHtml() {
     <div class="sp-tw"><table class="sp-tbl"><thead><tr>${cols.map((c) => `<th class="${auto.has(c) ? 'a' : ''}">${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${cols.map((c) => `<td class="${auto.has(c) ? 'a' : ''}">${fmtv(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
     ${b.issues.length ? `<p class="sp-note warn">${b.issues.map(escapeHtml).join(' · ')}</p>` : ''}
     <div class="sp-actions"><button type="button" class="btn-primary" data-publish ${ready ? '' : 'disabled'}>Publish ${escapeHtml(p.sid || splSid(date))}</button><button type="button" class="btn-light" data-xlsx>Download Excel · Full + Drills</button><button type="button" class="btn-light" data-back>Back to the plan</button>
-      <span>${ready ? 'Publishing adds the rows to the season: the dashboard and the staff e-mail follow at the next update.' : unmapped.length ? 'Name every drill first.' : 'The files are not from this day.'}</span></div>`;
+      <span>${ready ? (b.checks.left ? `${b.checks.left} time${b.checks.left > 1 ? 's' : ''} not checked above — you can still publish: the preview shows what is written.` : 'Publishing adds the rows to the season: the dashboard and the staff e-mail follow at the next update.') : unmapped.length ? 'Name every drill first.' : 'The files are not from this day.'}</span></div>`;
 }
 
 async function splPublish() {
@@ -319,6 +478,33 @@ function splClick(e) {
   if (!t || !SPL.date) return;
   const date = SPL.date, p = () => splEnsure(date);
   if (t.dataset.ampm) { p().ampm = t.dataset.ampm; splTouch(date); splDraw(); return; }
+  // checks before publishing (the chosen fix again = undone)
+  if (t.dataset.fixT != null || t.dataset.fixC != null) {
+    const kind = t.dataset.fixT != null ? 't' : 'c', b = splBuild(), x = kind === 't' ? b.checks.time[Number(t.dataset.fixT)] : b.checks.cut[Number(t.dataset.fixC)];
+    if (x) { const f = p().fix || (p().fix = {}), m = f[kind] || (f[kind] = {}), id = kind === 't' ? x.g : x.key; if (m[id] === t.dataset.v) delete m[id]; else m[id] = t.dataset.v; }
+    splTouch(date); splDraw(); return;
+  }
+  if (t.dataset.fixAll || t.dataset.fixCg) {
+    const b = splBuild(), f = p().fix || (p().fix = {}), title = t.dataset.fixCg ? decodeURIComponent(t.dataset.fixCg) : null;
+    if (title == null) { f.t = f.t || {}; b.checks.time.forEach((x) => { f.t[x.g] = t.dataset.fixAll; }); }
+    else { f.c = f.c || {}; b.checks.cut.filter((x) => x.title === title).forEach((x) => { f.c[x.key] = t.dataset.v; }); }
+    splTouch(date); splDraw(); return;
+  }
+  if (t.dataset.act != null) {
+    const d = p().drills[Number(t.dataset.act)], v = Number(t.dataset.v);
+    if (d) { const on = d.chk && (Number(d.act) || Number(d.min)) === v; d.act = on || v === Number(d.min) ? undefined : v; d.chk = !on; }
+    splTouch(date); splDraw(); return;
+  }
+  if (t.dataset.partial) { p().status[t.dataset.partial] = 'Partial'; splTouch(date); splDraw(); return; }
+  // drill cards
+  if (t.dataset.cardEdit != null) {
+    const d = p().drills[Number(t.dataset.cardEdit)], def = splDef(d.name) || {}, inLib = !!splLibOf(d.name);
+    SPL.card = { edit: Number(t.dataset.cardEdit), name: splName(d.name), length: def.length || '', width: def.width || '', players: def.players || '', like: def.like || (inLib ? '' : splGuessLike(d.name, def.players || 0)), auto: !def.like };
+    splDraw(); const el = document.querySelector('.sp-card'); if (el) el.scrollIntoView({ block: 'nearest' }); return;
+  }
+  if (t.dataset.cardSave != null) { splCardSave(); return; }
+  if (t.dataset.cardCancel != null) { SPL.card = null; splDraw(); return; }
+  if (t.dataset.cardDel != null) { splCardDelete(); return; }
   if (t.dataset.up != null || t.dataset.down != null) { const i = Number(t.dataset.up ?? t.dataset.down), j = t.dataset.up != null ? i - 1 : i + 1, d = p().drills; [d[i], d[j]] = [d[j], d[i]]; splTouch(date); splDraw(); return; }
   if (t.dataset.del != null) { p().drills.splice(Number(t.dataset.del), 1); splTouch(date); splDraw(); return; }
   if (t.dataset.min != null) { const d = p().drills[Number(t.dataset.min)]; d.min = Math.max(1, (Number(d.min) || 0) + Number(t.dataset.step)); splTouch(date); splDraw(); return; }
@@ -342,11 +528,13 @@ function splChange(e) {
   const p = splEnsure(date);
   if (t.dataset.drill != null) { p.drills[Number(t.dataset.drill)].name = t.value; splTouch(date); splDraw(); return; }
   if (t.dataset.add != null) {
-    let name = t.value;
-    if (name === '__other') name = (prompt('Name of the new drill (as in your files):') || '').trim();
-    if (name) { const l = SPL.lib.library.find((x) => splName(x.name) === name); p.drills.push({ name, min: l ? l.min : 10 }); splTouch(date); }
+    const name = t.value;
+    if (name === '__new') { SPL.card = { name: '', length: '', width: '', players: '', like: '', auto: true }; splDraw(); const el = document.querySelector('[data-card="name"]'); if (el) el.focus(); return; }
+    if (name) { const r8 = splRateOf(name); p.drills.push({ name, min: r8 ? r8.l.min : 10 }); splTouch(date); }
     splDraw(); return;
   }
+  if (t.dataset.card) { if (t.dataset.card === 'like' && SPL.card) { SPL.card.like = t.value; SPL.card.auto = false; } return; }
+  if (t.dataset.actmin != null) { splDraw(); return; } // minutes written: refresh the checks and the preview when done
   if (t.dataset.status) { p.status[t.dataset.status] = t.value; splTouch(date); splDraw(); return; }
   if (t.dataset.map) {
     p.titlemap = { ...(p.titlemap || {}), [t.dataset.map]: t.value };
@@ -358,6 +546,15 @@ function splChange(e) {
 }
 function splInput(e) {
   const t = e.target, date = SPL.date;
+  if (t.dataset.card && t.dataset.card !== 'like' && SPL.card) { // the card: the area per player and the guessed "forecast like" follow what is typed
+    const c = SPL.card;
+    c[t.dataset.card] = t.value;
+    if (c.auto && (t.dataset.card === 'name' || t.dataset.card === 'players') && !splLibOf(c.name)) { c.like = splGuessLike(c.name, Number(c.players) || 0); const s = document.querySelector('[data-card="like"]'); if (s) s.value = c.like; }
+    const a = splArea({ length: Number(c.length), width: Number(c.width), players: Number(c.players) }), el = document.querySelector('.sp-area');
+    if (el) el.textContent = a ? `${a} m² per player` : '';
+    return;
+  }
+  if (t.dataset.actmin != null) { const d = splEnsure(date).drills[Number(t.dataset.actmin)], v = Number(t.value) || 0; if (d) { d.act = v && v !== Number(d.min) ? v : undefined; d.chk = !!v; } splTouch(date); return; }
   if (t.dataset.mins != null) { splEnsure(date).drills[Number(t.dataset.mins)].min = Number(t.value) || ''; splTouch(date); }
   if (t.dataset.rpe != null) {
     const p = splEnsure(date), l = t.closest('label');
