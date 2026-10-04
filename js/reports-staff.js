@@ -32,12 +32,12 @@ function rpStaffCtx(D, S) {
 
 // ---------------------------------------------------------------- page 1: team strip above the table
 function rsTeamStrip(C, md) {
-  const r = C.X.team;
+  const r = C.X.team, comp = C.X.group === 'compensatory'; // compensatory session: vs the past compensatory sessions
   if (!r) return '';
   return `<div class="rs-strip">${[['td', 'Total distance', 'm'], ['hit', 'HIT > 20', 'm'], ['acc_dec', 'High Acc+Dec', ''], ['srpe', 'sRPE', 'AU'], ['mpm', 'm/min', '']].map(([k, l, u]) => {
     const x = r[k];
-    return x ? `<div class="rs-kpi"><span>${l} · team</span><b>${stK(x.v)}<small> ${u}</small></b><em style="color:${stZCol(x.z)}">● z ${stSigned(x.z)} vs usual ${rpEsc(md)}</em></div>` : '';
-  }).join('')}<div class="rs-kpi rs-note"><span>Usual ${rpEsc(md)}</span><b>${r.n || '—'}<small> sessions</small></b><em>${rpEsc(C.X.cycle || '')} microcycle</em></div></div>`;
+    return x ? `<div class="rs-kpi"><span>${l} · ${comp ? 'comp.' : 'team'}</span><b>${stK(x.v)}<small> ${u}</small></b><em style="color:${stZCol(x.z)}">● z ${stSigned(x.z)} vs usual ${comp ? 'comp.' : rpEsc(md)}</em></div>` : '';
+  }).join('')}<div class="rs-kpi rs-note"><span>${comp ? 'Usual compensatory' : 'Usual ' + rpEsc(md)}</span><b>${r.n || '—'}<small> sessions</small></b><em>${comp ? 'players who did not play' : rpEsc(C.X.cycle || '') + ' microcycle'}</em></div></div>`;
 }
 
 // ---------------------------------------------------------------- pages 2–3: bar colour = his z vs his usual MD, z printed when not green
@@ -78,7 +78,7 @@ function rsAcPanel(D, C, key, title) {
 
 // ---------------------------------------------------------------- page 6: team, microcycle so far — dot = this week, grey bar = usual range of that MD
 function rsProfile(C, k, title, unit) {
-  const days = C.X.profile, W = 600, H = 255, padL = 10, padB = 36, padT = 24;
+  const days = C.X.profile, W = 600, H = 255, padL = 10, padB = 36, padT = 24; // a compensatory day: vs the usual compensatory session
   const slots = [...days.map((d) => d.md), 'MD'];
   const pts = days.map((d) => d[k] && d[k][0] != null ? d[k] : null);
   const max = Math.max(1, ...pts.filter(Boolean).map((p) => Math.max(p[0], p[3] || 0))) * 1.12;
@@ -89,7 +89,7 @@ function rsProfile(C, k, title, unit) {
     if (d) {
       if (p && p[2] != null && p[3] != null) svg += `<rect x="${x(i) - 26}" y="${y(p[3])}" width="52" height="${Math.max(3, y(p[2]) - y(p[3]))}" rx="7" fill="#e9ebf1"/>`;
       if (p && p[1] != null) svg += `<line x1="${x(i) - 26}" x2="${x(i) + 26}" y1="${y(p[1])}" y2="${y(p[1])}" stroke="#b8bcc8" stroke-width="2"/>`;
-      svg += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="10.5" fill="#8a8f9e">${stDay(d.date, { weekday: 'short', day: 'numeric' })}</text>`;
+      svg += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="10.5" fill="#8a8f9e">${stDay(d.date, { weekday: 'short', day: 'numeric' })}${d.comp ? ' · comp.' : ''}</text>`;
     } else {
       svg += `<rect x="${x(i) - 26}" y="${padT}" width="52" height="${H - padT - padB}" rx="7" fill="none" stroke="#c9ccd6" stroke-dasharray="4 4"/><text x="${x(i)}" y="${(padT + H - padB) / 2}" text-anchor="middle" font-size="11" fill="#8a8f9e" font-weight="700">match</text>`;
     }
@@ -112,7 +112,8 @@ function rsMicro(C, s) {
   const body = C.X.profile.length
     ? `<div class="rs-profs">${rsProfile(C, 'td', 'TOTAL DISTANCE', 'm')}${rsProfile(C, 'hit', 'DISTANCE > 20 km/h', 'm')}${rsProfile(C, 'acc_dec', 'HIGH ACC + DEC', '')}${rsProfile(C, 'srpe', 'SESSION × RPE', 'AU')}</div>`
     : '<div class="rs-profs"><span class="rp-empty">No usual reference for these days yet</span></div>';
-  return `<div class="rs-intro"><span>Team · each dot = this week · grey bar = the team's usual range for that MD (p25–p75) in a ${rpEsc(C.X.cycle || '')} microcycle · line = usual average · z shown when not usual</span>${next}</div>
+  const comp = C.X.profile.some((d) => d.comp) ? ' · comp. = compensatory session (the players who did not play), vs the usual compensatory session' : '';
+  return `<div class="rs-intro"><span>Team · each dot = this week · grey bar = the team's usual range for that MD (p25–p75) in a ${rpEsc(C.X.cycle || '')} microcycle · line = usual average · z shown when not usual${comp}</span>${next}</div>
     ${body}
     <div class="rs-acrow"><span class="rs-acl">Team A:C 7:28 today</span>${[['td', 'Total distance'], ['hit', 'HIT > 20'], ['acc_dec', 'Acc + Dec'], ['srpe', 'sRPE']].map(([k, l]) => `<div class="rs-act"><i style="background:${stAcCol(ac[k])}"></i>${l}<b>${ac[k] != null ? ac[k].toFixed(2) : '–'}</b></div>`).join('')}</div>`;
 }
@@ -146,11 +147,13 @@ function rpStaffPages(D, S) {
   D.fullSession.forEach((r) => { const p = C.px(r.name); r.rpe = p ? p.rpe : null; });
   const title = `${s.id} · ${s.dateLabel}`, short = (iso) => stDay(iso, { day: 'numeric', month: 'short' });
   const meta = [['WEEK', s.week], ['MD', s.md], ['TIME', s.time + "'"], ['N EXERCICE', s.exercise], ['AM/PM', s.ampm]];
-  const kicker = 'FULL SESSION · STAFF' + (s.part ? ' · ' + s.part.toUpperCase() : '');
+  const comp = X.group === 'compensatory', anyComp = Object.values(X.players).some((p) => p.comp);
+  const kicker = (comp ? 'COMPENSATORY SESSION' : 'FULL SESSION') + ' · STAFF' + (s.part ? ' · ' + s.part.toUpperCase() : '');
   const cycle = (X.cycle || '—').toUpperCase(), pages = [];
   const strip = rsTeamStrip(C, s.md);
   pages.push(rpHeader(kicker, title, meta) + strip + rpTable(D, D.fullSession, ['time', 'rpe', 'mpm', 'td', 'd15', 'd20', 'vmax', 'pmax', 'days', 'sprints', 'accdec'], {}, RP_TABLE_H - (strip ? 73 : 0)));
-  const note = `<div class="rp-legend"><span>Colour = the player's z vs his usual ${rpEsc(s.md)} (same microcycle type) · z printed when not usual · grey = individual or rehab session, not compared with his ${rpEsc(s.md)}</span></div>`;
+  const note = comp ? `<div class="rp-legend"><span>Compensatory session (the players who did not play the match) · colour = the player's z vs his usual compensatory session, not vs a usual ${rpEsc(s.md)} · z printed when not usual · grey = individual or rehab session, not compared</span></div>`
+    : `<div class="rp-legend"><span>Colour = the player's z vs his usual ${rpEsc(s.md)} (same microcycle type)${anyComp ? ' — compensatory players: vs their usual compensatory session' : ''} · z printed when not usual · grey = individual or rehab session, not compared with his ${rpEsc(s.md)}</span></div>`;
   pages.push(rpHeader(kicker, title, meta) + rsChart(D, C, 'td', 'TOTAL DISTANCE', true) + rsChart(D, C, 'd20', 'DISTANCE >20kmh') + note);
   pages.push(rpHeader(kicker, title, meta) + rsChart(D, C, 'accdec', 'Acceleration + Deceleration', true) + rsChart(D, C, 'sprints', 'Number of Sprints >25kmh') + note);
   pages.push(rpHeader('ACUTE : CHRONIC RATIO', title, [['WEEK', s.week], ['MD', s.md], ['RULE', '7:28 · 14:35']]) + rsAcLegend()

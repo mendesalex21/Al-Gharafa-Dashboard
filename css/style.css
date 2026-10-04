@@ -404,6 +404,7 @@ main.page { padding-top: 40px; }
 .stat-sub { font-size: 13px; color: var(--ink-muted); }
 .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); background: var(--surface-2); padding: 3px 10px 3px 8px; border-radius: 999px; white-space: nowrap; }
 .tag.strong { background: var(--ink); color: var(--bg); }
+.tag.comp { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .chip-v { display: inline-block; min-width: 44px; text-align: center; font-size: 12.5px; font-weight: 700; padding: 3px 8px; border-radius: 8px; font-variant-numeric: tabular-nums; }
 .chip-v.green { color: #1f8a3a; background: rgba(52, 199, 89, .14); }
 .chip-v.orange { color: #a15c00; background: rgba(255, 159, 10, .18); }

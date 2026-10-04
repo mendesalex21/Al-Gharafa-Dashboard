@@ -34,15 +34,17 @@ function zBulletHtml(label, unit, actual, ref) {
 
 function objectivesPanel(s) {
   const cyc = s.cycle, ref = s.team_ref;
-  const per90 = s.kind === 'match';
+  const per90 = s.kind === 'match', comp = s.group === 'compensatory';
   if (!ref) {
-    return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Team averages</h2><span class="panel-note">no objective: outside a standard microcycle (break or pre-season)</span></div>
+    return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">${comp ? 'Compensatory session · averages' : 'Team averages'}</h2><span class="panel-note">${comp ? 'no reference yet for compensatory sessions' : 'no objective: outside a standard microcycle (break or pre-season)'}</span></div>
       <div class="obj-plain">${OBJ_BARS.map(([k, l, u]) => { const v = k === 'minutes' ? s.minutes : s.team[k]; return v == null ? '' : `<div><span>${l}</span><b>${fmtN(v)}<small> ${u}</small></b></div>`; }).join('')}</div></section>`;
   }
   const bars = OBJ_BARS.filter(([k]) => ref[k] && ref[k].z != null)
     .map(([k, l, u]) => zBulletHtml(l, u + (per90 && k !== 'mpm' ? ' /90' : ''), ref[k].v, ref[k])).join(''); // v = value behind the z
   return `<section class="panel">
-    <div class="panel-head"><h2 class="panel-title small">Objectives · ${s.md} of a ${TYPE_LABEL[cyc.type].toLowerCase()} microcycle${per90 ? ' (per 90 min)' : ''}</h2><span class="panel-note">team average vs ${ref.n} past ${s.md} sessions since ${fmtDay(TR.obj ? TR.obj.since : '2024-07-01', { month: 'short', year: 'numeric' })}</span></div>
+    <div class="panel-head">${comp
+    ? `<h2 class="panel-title small">Objectives · compensatory session${s.md ? ` (${s.md})` : ''}</h2><span class="panel-note">average of the ${s.n_core} compensatory players vs ${ref.n} past compensatory sessions since ${fmtDay(TR.obj ? TR.obj.since : '2024-07-01', { month: 'short', year: 'numeric' })} — not vs the usual ${s.md || 'training'}</span>`
+    : `<h2 class="panel-title small">Objectives · ${s.md} of a ${TYPE_LABEL[cyc.type].toLowerCase()} microcycle${per90 ? ' (per 90 min)' : ''}</h2><span class="panel-note">team average vs ${ref.n} past ${s.md} sessions since ${fmtDay(TR.obj ? TR.obj.since : '2024-07-01', { month: 'short', year: 'numeric' })}</span>`}</div>
     <div class="bullets">${bars}</div>
     <p class="panel-foot">Green = usual ± 1 SD (on target, |z| &lt; 1) · blue below · orange 1–2 SD above · red more than 2 SD above. Dark tick = usual. Same z-scores as the calendar and the planner.</p></section>`;
 }
@@ -62,8 +64,21 @@ function renderSessions(opts) {
 }
 
 function sessionLabel(s) {
-  const kind = s.kind === 'match' ? `Match${s.cycle.opponent ? ' · ' + s.cycle.opponent : ''}` : s.md || 'Training';
+  const kind = s.kind === 'match' ? `Match${s.cycle.opponent ? ' · ' + s.cycle.opponent : ''}` : `${s.md || 'Training'}${s.group === 'compensatory' ? ' · compensatory' : ''}`;
   return `${fmtDay(s.date)} · ${kind}`;
+}
+
+/** Who did what: "6 compensatory · 1 partial · 12 recovery (no GPS)" — players with GPS data, then the recovery /
+ * gym group without GPS (the starters the day after a match). */
+const SESS_TYPE = { ProTraining: 'training', 'ProTraining+ExtraWork': 'training + extra work', 'ProTraining+Compensatory': 'training + compensatory',
+  Training_TeamB: 'B-team training', Compensatory: 'compensatory', Partial: 'partial', Adapted: 'adapted', INDIVIDUAL: 'individual', Individual: 'individual',
+  GYM: 'gym', Gym: 'gym', Recovery: 'recovery', Game_B: 'B-team game', 'Game B': 'B-team game' };
+function sessComposition(s) {
+  const lab = (t) => SESS_TYPE[t] || String(t || 'other').toLowerCase();
+  const count = (list) => list.reduce((o, p) => { o[lab(p.type)] = (o[lab(p.type)] || 0) + 1; return o; }, {});
+  const sorted = (o) => Object.entries(o).sort((a, b) => b[1] - a[1]);
+  return [...sorted(count(s.players)).map(([t, n]) => `${n} ${t}`),
+    ...sorted(count(s.absent.filter((a) => a.cat === 'i'))).map(([t, n]) => `${n} ${t} (no GPS)`)].join(' · ');
 }
 
 function drawSessions(opts) {
@@ -92,12 +107,13 @@ function drawSessions(opts) {
     <section class="panel sess-head">
       <div class="sh-date">${fmtDay(s.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
       <div class="sh-tags">
-        <span class="tag ${s.kind === 'match' ? 'strong' : ''}">${s.kind === 'match' ? 'Match' : 'Training'}</span>
+        <span class="tag ${s.kind === 'match' ? 'strong' : s.group === 'compensatory' ? 'comp' : ''}">${s.kind === 'match' ? 'Match' : s.group === 'compensatory' ? 'Compensatory session' : 'Training'}</span>
         ${s.md ? `<span class="tag">${s.md}</span>` : ''}
         <span class="tag">${cycText}</span>
         ${cyc.competition ? `<span class="tag">${escapeHtml(cyc.competition)}${cyc.opponent ? ' · ' + escapeHtml(cyc.opponent) : ''}</span>` : ''}
       </div>
-      <div class="sh-meta">${fmtN(s.minutes)} min · ${s.n} players${s.n_core !== s.n ? ` · team averages on ${s.n_core} ${s.kind === 'match' ? 'players ≥60 min' : 'full-session players'}` : ''}</div>
+      <div class="sh-meta">${fmtN(s.minutes)} min · ${s.n} players${s.n_core !== s.n ? ` · team averages on ${s.n_core} ${s.kind === 'match' ? 'whole-game players' : s.group === 'compensatory' ? 'compensatory players' : 'full-session players'}` : ''}</div>
+      ${s.kind === 'match' ? '' : `<div class="sh-meta">${s.group === 'compensatory' ? 'The players who did not play the match did a compensatory session; the others recovered. ' : ''}${escapeHtml(sessComposition(s))}</div>`}
     </section>
     ${objectivesPanel(s)}
     <div id="sv-attention"></div>
@@ -134,8 +150,14 @@ function drawMdz(s) {
     mount.innerHTML = '';
     return;
   }
-  const day = ref.tag === 'MD' ? 'A and B games of 75 min or more, this season and the last (per 90 min; a player with less time today is compared at his minutes)' : `${ref.tag} sessions of ${TYPE_LABEL[ref.type].toLowerCase()} microcycles`;
-  note.innerHTML = `Each player is compared with <b>his own</b> previous ${day} since ${fmtDay(ref.since, { month: 'short', year: 'numeric' })} (${ref.sessions} sessions in the club history); with fewer than 5 of his own, the squad's is used. <span class="muted">z = (today − his usual) / his usual variation · hover a cell for the values · click a column to sort · click a player for his full session.</span>`;
+  // each player vs his own sessions of the same type: training (this MD, same microcycle type), compensatory, or match
+  const nC = s.players.filter((p) => p.mdref && p.mdref.kind === 'comp').length, nT = s.players.filter((p) => p.mdref && p.mdref.kind !== 'comp').length;
+  const day = ref.tag === 'MD' ? 'previous A and B games of 75 min or more, this season and the last (per 90 min; a player with less time today is compared at his minutes)' : `previous ${ref.tag} sessions of ${(TYPE_LABEL[ref.type] || '').toLowerCase()} microcycles`;
+  const since = fmtDay(ref.since, { month: 'short', year: 'numeric' });
+  const compTxt = `previous <b>compensatory sessions</b> since ${since} (the players who did not play the match; ${ref.comp} in the club history)`;
+  const dayTxt = `${day} since ${since} (${ref.sessions} sessions in the club history)`;
+  const what = nC && nT ? `compensatory players with his ${compTxt}, the others with his ${dayTxt}` : nC ? `his ${compTxt}, not with a usual ${ref.tag || 'training'}` : `his ${dayTxt}`;
+  note.innerHTML = `Each player is compared with <b>his own</b> sessions of the same type: ${what}; with fewer than 5 of his own, the squad's is used. <span class="muted">z = (today − his usual) / his usual variation · hover a cell for the values · click a column to sort · click a player for his full session.</span>`;
   const ps = s.players.filter((p) => p.mdref);
   if (!ps.length) { mount.innerHTML = emptyState('No player with a reference for this session.'); return; }
   const k0 = TR.mdzSort || 'td';
@@ -146,7 +168,7 @@ function drawMdz(s) {
   };
   const rows = ps.slice().sort((a, b) => (k0 === 'name' ? playerName(a.id).localeCompare(playerName(b.id)) : (b.mdref.z[k0] ?? -9) - (a.mdref.z[k0] ?? -9)));
   mount.innerHTML = `<div class="table-wrap"><table class="dtable compact mz-tab"><thead><tr><th data-mz="name" class="${k0 === 'name' ? 'sorted' : ''}">Player</th>${MDZ_METRICS.map(([k, l]) => `<th class="c ${k0 === k ? 'sorted' : ''}" data-mz="${k}">${l}${k0 === k ? ' ↓' : ''}</th>`).join('')}<th class="c">Reference</th></tr></thead><tbody>
-    ${rows.map((p) => `<tr data-id="${p.id}" class="clickable"><td><span class="mz-p">${avatarHtml(p.id, playerName(p.id), 22)}<b>${escapeHtml(playerName(p.id))}</b>${p.cat === 't' || p.cat === 'm' ? '' : `<small>${escapeHtml(String(p.type).toLowerCase())}</small>`}</span></td>${MDZ_METRICS.map(([k]) => cell(p, k)).join('')}<td class="c"><small class="muted">${p.mdref.src === 'own' ? `his ${p.mdref.n}` : 'squad'}</small></td></tr>`).join('')}
+    ${rows.map((p) => `<tr data-id="${p.id}" class="clickable"><td><span class="mz-p">${avatarHtml(p.id, playerName(p.id), 22)}<b>${escapeHtml(playerName(p.id))}</b>${p.cat === 't' || p.cat === 'm' ? '' : `<small>${escapeHtml(String(p.type).toLowerCase())}</small>`}</span></td>${MDZ_METRICS.map(([k]) => cell(p, k)).join('')}<td class="c"><small class="muted">${p.mdref.src === 'own' ? `his ${p.mdref.n}` : 'squad'}${p.mdref.kind === 'comp' ? ' comp.' : ''}</small></td></tr>`).join('')}
     </tbody></table></div>`;
   mount.querySelectorAll('th[data-mz]').forEach((th) => th.addEventListener('click', (e) => { e.stopPropagation(); TR.mdzSort = th.dataset.mz; drawMdz(s); }));
 }

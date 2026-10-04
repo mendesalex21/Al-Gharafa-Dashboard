@@ -227,7 +227,7 @@ function svAttentionHtml(s) {
       <span class="sv-sum"><b>${at.calm}</b> of ${n} players within their usual range<span class="sep"></span><i style="background:${Z_COL.high}"></i>${cnt('high')} well above / speed exposure<i style="background:${Z_COL.below}"></i>${cnt('below')} below<i style="background:${Z_COL.above}"></i>${cnt('above')} slightly above</span></div>
     ${plans}
     ${at.list.length ? `<div class="sv-cards">${at.list.map(card).join('')}</div>${at.list.length > 10 ? `<button type="button" class="sv-more-btn" data-allcards>Show all ${at.list.length} players ›</button>` : ''}` : '<p class="note">Every player is within his usual range for this day ✓</p>'}
-    <p class="panel-foot">Automatic — vs each player's usual ${s.md || 'day'}${s.cycle.type ? ` of ${TYPE_LABEL[s.cycle.type].toLowerCase()} microcycles` : ''} (z-score) · speed exposure = no sprint ≥ 90 % of his max speed for 10 days or more · 2 weeks in a row = A:C 7:28 above 1.37 (or under 0.78) this week and last week on TD, HI Acc+Dec, HIT > 20 or sprints · click a player for his full session.</p>
+    <p class="panel-foot">Automatic — vs each player's ${s.group === 'compensatory' ? 'usual compensatory session' : `usual ${s.md || 'day'}${s.cycle.type ? ` of ${TYPE_LABEL[s.cycle.type].toLowerCase()} microcycles` : ''}${s.players.some((p) => p.mdref && p.mdref.kind === 'comp') ? ' (compensatory players: their usual compensatory session)' : ''}`} (z-score) · speed exposure = no sprint ≥ 90 % of his max speed for 10 days or more · 2 weeks in a row = A:C 7:28 above 1.37 (or under 0.78) this week and last week on TD, HI Acc+Dec, HIT > 20 or sprints · click a player for his full session.</p>
   </section>`;
 }
 
@@ -238,12 +238,15 @@ const SV_DCOLS = ['time', 'mpm', 'td', 'd15', 'd20', 'd25', 'vmax', 'sprints', '
 const SV_W = { td: 'minmax(0,1.55fr)', d15: 'minmax(0,1.35fr)', d20: 'minmax(0,0.95fr)', d25: 'minmax(0,0.8fr)', vmax: 'minmax(0,0.9fr)', accdec: 'minmax(0,1fr)',
   hacc: '50px', hdec: '50px', time: '40px', rpe: '38px', mpm: '50px', pmax: '56px', days: '46px', sprints: '54px' }; // site only: the PDF keeps RP_WIDTHS
 const svLabel = (k) => ({ hacc: 'HIT Acc', hdec: 'HIT Dec' })[k] || RP_LABELS[k]; // reports.js loads after this file
-/** Players the team average is made of: full session only (matches: ≥ 60 min) — same rule as the build. */
+/** Players the team average is made of — same rule as the build: the players of the whole game (matches), the
+ * compensatory players (a compensatory session: the others recovered without GPS), else the full session. */
 function rtCore(s) {
-  const core = s.players.filter((p) => (s.kind === 'match' ? p.cat === 'm' && p.min >= 60 : p.cat === 't'));
+  const whole = s.kind === 'match' ? Math.min(90, Math.max(0, ...s.players.filter((p) => p.cat === 'm').map((p) => p.min || 0)) - 2) : 0;
+  const core = s.players.filter((p) => (s.kind === 'match' ? p.cat === 'm' && p.min >= whole : s.group === 'compensatory' ? p.cat === 'c' : p.cat === 't'));
   return core.length >= 3 ? core : s.players.filter((p) => p.min > 0);
 }
-const svPro = (s, cat) => (s.kind === 'match' ? cat === 'm' : cat === 't'); // did the team session: the grey "team max" track
+const svPro = (s, cat) => (s.kind === 'match' ? cat === 'm' : s.group === 'compensatory' ? cat === 'c' : cat === 't'); // did the session of the group: the grey "team max" track
+const svGroupTxt = (s) => (s.kind === 'match' ? 'whole-game players' : s.group === 'compensatory' ? 'compensatory players' : 'full-session players');
 
 /** The table: rows = {id, pro, type, metrics…}; sort = a column (ranked list) or null (position groups). */
 function svTable(rows, cols, o = {}) {
@@ -296,7 +299,7 @@ function svTableHtml(s) {
   const team = svAvgRow(rows, SV_COLS, (r) => core.has(r.id));
   team.time = s.minutes;
   return svTable(rows, SV_COLS, { sort: SV.sort, team, full })
-    + `<div class="rt-leg"><span><i class="sv-lg-b" style="background:#6fb0ee"></i>player value</span><span><i class="sv-lg-b sv-lg-t"></i>team max (players of the team session)</span><span><b class="rt-or">Orange time</b> = partial session</span><span>HIT Acc / Dec: lighter → darker = fewer → more</span><span>Days = since his last run ≥ 90 % of his max speed</span><span>Team avg = full-session players only</span></div>`;
+    + `<div class="rt-leg"><span><i class="sv-lg-b" style="background:#6fb0ee"></i>player value</span><span><i class="sv-lg-b sv-lg-t"></i>team max (players of the ${s.group === 'compensatory' ? 'compensatory session' : 'team session'})</span><span><b class="rt-or">Orange time</b> = partial session</span><span>HIT Acc / Dec: lighter → darker = fewer → more</span><span>Days = since his last run ≥ 90 % of his max speed</span><span>Team avg = ${svGroupTxt(s)} only</span></div>`;
 }
 const svDrillName = (d) => String(d.name || 'Drill').replace(/^Game_/, '').replace(/(\d)(st|nd|rd|th)Half/i, '$1$2 half');
 function svDrillsHtml(s) {
@@ -442,7 +445,8 @@ function svSheetHtml(s, p, nav) {
     return `<tr class="m ${plan && key === SV.mc ? 'sel' : ''}" ${plan && mm && mm.target ? `data-mck="${key}"` : ''}><td class="lbl">${l}</td>${today}${cyc}<td class="num sep">${vt == null ? '—' : `${vt > 300 ? '>300' : vt}%`}</td><td class="num">${vm == null ? '—' : `${vm}%`}</td></tr>`;
   }).join('');
   const game = s.kind === 'match' || p.cat === 'b'; // A-team match, or a B-team game on a training day
-  const refTxt = p.mdref ? `${p.mdref.src === 'own' ? `his ${p.mdref.n} ${game ? 'games of 75 min + (A + B, this season and last)' : 'sessions'}` : 'squad reference'}${per90 && p.min < 75 ? `, scaled to his ${fmtN(p.min)} min — indicative` : ''}`
+  const comp = p.mdref && p.mdref.kind === 'comp'; // a compensatory session: vs his usual compensatory session
+  const refTxt = p.mdref ? `${p.mdref.src === 'own' ? `his ${p.mdref.n} ${game ? 'games of 75 min + (A + B, this season and last)' : comp ? 'compensatory sessions' : 'sessions'}` : comp ? 'squad, compensatory sessions' : 'squad reference'}${per90 && p.min < 75 ? `, scaled to his ${fmtN(p.min)} min — indicative` : ''}`
     : game && p.min < 20 ? 'under 20 min: no comparison' : 'no reference';
   const prep = plan && mc.prep;
   const cycTxt = prep ? `His preparation → this match <small>${mc.days[0].md} → MD-1 · vs his usual for these days</small>`
@@ -456,7 +460,7 @@ function svSheetHtml(s, p, nav) {
       ${svAcHtml(s, p)}</div>
     <div class="sv-grid-wrap"><table class="sv-grid">
       <colgroup><col style="width:104px"><col><col style="width:112px"><col style="width:58px"><col><col style="width:112px"><col style="width:92px"><col style="width:56px"><col style="width:56px"></colgroup>
-      <thead><tr class="grp"><th></th><th colspan="3">Today vs his usual ${game ? 'match' : s.md || ''} <small>${refTxt}</small></th><th colspan="3" class="sep">${cycTxt}</th><th colspan="2" class="sep">Today vs</th></tr>
+      <thead><tr class="grp"><th></th><th colspan="3">Today vs his usual ${game ? 'match' : comp ? 'compensatory session' : s.md || ''} <small>${refTxt}</small></th><th colspan="3" class="sep">${cycTxt}</th><th colspan="2" class="sep">Today vs</th></tr>
         <tr><th>Metric</th><th>blue · green usual · orange · red &nbsp;● today &nbsp;| usual</th><th class="r">today / usual</th><th class="c">z</th><th class="sep">${prep ? 'done · | his usual' : 'done · to do · target'}</th><th class="r">${prep ? 'done / usual' : 'done / target'}</th><th class="c">status</th><th class="r sep">team</th><th class="r">match</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     ${plan ? `<div class="sv-bottom"><div class="sv-ins">${ins.map((x) => `<div class="sv-in ${x.lv}"><i>${x.i}</i><span>${x.t}</span></div>`).join('')}

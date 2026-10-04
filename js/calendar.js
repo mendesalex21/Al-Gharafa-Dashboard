@@ -251,6 +251,7 @@ function drawMonth(events, today) {
     if (camp && iso === camp.start) inner += `<span class="dnote" style="--cc:${eventColor(camp)}">${escapeHtml(camp.note || 'Camp')}</span>`;
     if (kind === 'off') inner += '<span class="doff">Day off</span>';
     else if (kind === 'individual') inner += '<span class="dnote">Recovery / individual</span>';
+    if (g && g.comp) inner += '<span class="dnote" title="The players who did not play the match; the others recovered (no GPS). Compared with past compensatory sessions.">Compensatory</span>';
     inner += calMetricsHtml(g);
     const stripe = evs.find((e) => e.kind === 'international' || (e.kind === 'window' && e.start !== e.end));
     html += `<div class="dc k-${kind || 'none'} ${iso === today ? 'today' : ''} ${camp ? 'camp' : ''}" data-date="${iso}" ${col ? `style="--cc:${col}"` : ''}>
@@ -344,12 +345,13 @@ function drawDay() {
     const lv = zLevel(v[1]);
     return `<div><span>${METRIC_LONG[k]}${g.per90 ? ' <small>/90</small>' : ''}</span><b>${fmtN(v[0])}</b>${lv ? `<span class="zs ${lv}">${Z_LABEL[lv]} · z ${fmtSigned(v[1])}</span>` : '<small class="muted">no reference</small>'}</div>`;
   }).join('')}</div>` : '';
-  const kindTxt = g ? ({ match: 'Match', training: `Training${g.md ? ' · ' + g.md : ''}`, off: 'Day off', individual: 'Recovery / individual work', none: 'No team session' }[g.kind]) : iso > d.as_of ? 'Upcoming' : 'No GPS data';
+  const kindTxt = g ? ({ match: 'Match', training: `${g.comp ? 'Compensatory session' : 'Training'}${g.md ? ' · ' + g.md : ''}`, off: 'Day off', individual: 'Recovery / individual work', none: 'No team session' }[g.kind]) : iso > d.as_of ? 'Upcoming' : 'No GPS data';
 
   const evRow = (e) => `<div class="li"><i style="background:${eventColor(e)}"></i><div><b>${escapeHtml(eventTitle(e))}${e.edit ? ' <span class="edited">edited</span>' : ''}</b><small>${e.start === e.end ? fmtDay(e.start) : `${fmtDay(e.start, { day: 'numeric', month: 'short' })} – ${fmtDay(e.end, { day: 'numeric', month: 'short' })} · date TBC`}${e.time ? ' · ' + escapeHtml(e.time) : ''}${e.venue ? ' · ' + escapeHtml(e.venue) : ''}${e.edit ? ` · by ${escapeHtml(String(e.edit.by || '').split('@')[0])}` : ''}</small></div><button type="button" class="btn-light" data-edit="${e.id}">Edit</button></div>`;
 
   el.innerHTML = `
     <div class="sheet-head"><div><div class="pg-eyebrow">${kindTxt}</div><h2>${fmtDay(iso, { weekday: 'long', day: 'numeric', month: 'long' })}</h2></div><button type="button" class="sheet-x" aria-label="Close">×</button></div>
+    ${g && g.comp && metrics ? '<p class="note">Average of the players who did not play the match (the others recovered, no GPS) · z vs the past compensatory sessions.</p>' : ''}
     ${metrics}
     ${sess ? `<button type="button" class="btn-light wide" id="sh-open">Open the session report ›</button>` : ''}
     ${other.length ? `<div class="sh-notes">${other.map((e) => `<span class="cnote">${escapeHtml(eventTitle(e))}</span>`).join('')}</div>` : ''}
