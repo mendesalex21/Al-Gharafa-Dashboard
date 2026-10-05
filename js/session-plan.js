@@ -171,16 +171,26 @@ function splChoices() {
   const names = SPL.lib.library.map((x) => splName(x.name)), seen = new Set(names.map(splKey));
   return { names, extra: Object.values(splDefs()).map((x) => splName(x.name)).filter((n) => !seen.has(splKey(n))).sort((a, b) => a.localeCompare(b)) };
 }
-function splArea(d) { return d && d.length && d.width && d.players ? Math.round(d.length * d.width / d.players) : null; }
+/** Players in a free "players" text, for the area per player: 4vs1 → 5, 3vs0 → 3, 4v4+2 → 10, 10 → 10. */
+function splNPlayers(v) { const ns = String(v ?? '').match(/\d+/g), n = ns ? ns.reduce((a, x) => a + Number(x), 0) : 0; return n >= 1 && n <= 60 ? n : null; }
+function splArea(d) { const n = d && splNPlayers(d.players); return d && d.length && d.width && n ? Math.round(d.length * d.width / n) : null; }
+const splDim = (c) => (Number(c.length) && Number(c.width) ? `${Math.round(Number(c.length))}x${Math.round(Number(c.width))}` : ''); // the pitch as written in a name
+/** True when `part` (the players or the pitch) is written in the drill's name: the drill is compared with that format only. */
+function splInName(name, part) { const k = splKey(part); return !!k && (' ' + splKey(name) + ' ').includes(' ' + k + ' '); }
+/** A new drill's name in Data_Drills — what its history is matched on: the name, + the players and / or the pitch when it is
+ * compared with that format only (cmp 'p', 'd' or 'pd'). */
+function splCardName(c) { const pl = splName(c.players); return splName([c.name, /p/.test(c.cmp || '') && pl ? pl : '', /d/.test(c.cmp || '') ? splDim(c) : ''].join(' ')); }
 function splDefTxt(d) {
   if (!d) return '';
-  const a = splArea(d);
-  return [d.length && d.width ? `${d.length} × ${d.width} m` : '', d.players ? `${d.players} players` : '', a ? `${a} m²/player` : ''].filter(Boolean).join(' · ');
+  const a = splArea(d), pl = d.players == null ? '' : String(d.players).trim(), dim = d.length && d.width ? `${d.length}x${d.width}` : '';
+  return [dim && !splInName(d.name, dim) ? `${d.length} × ${d.width} m` : '', pl && !splInName(d.name, pl) ? (/^\d+$/.test(pl) ? `${pl} players` : pl) : '', a ? `${a} m²/player` : ''].filter(Boolean).join(' · ');
 }
+/** "Forecast like" proposed for a new drill: the same drill without its players / pitch when that one has data (RONDO 4vs1 → RONDO), else a guess. */
+function splLikeFor(c) { const base = splLibOf(c.name), full = splCardName(c); return base && splKey(base.name) !== splKey(full) ? splName(base.name) : splGuessLike(full, c.players); }
 /** The library drill a new one is probably like (changed in the card if wrong): the drill the club's StatSports titles of
  * the same kind were named (same family and format: "Poss 5v5" → BOX RONDO), else from its words or number of players. */
 function splGuessLike(name, players) {
-  const toks = (s) => splKey(s).split(' ').filter(Boolean), mine = toks(name), fam = mine[0], fmt = mine.find((w) => /^\d+v\d+$/.test(w));
+  const toks = (s) => splKey(s).split(' ').filter(Boolean), mine = toks(name), fam = mine[0], fmt = mine.find((w) => /^\d+vs?\d+$/.test(w));
   let best = '', score = 0;
   Object.entries({ ...SPL.lib.titles, ...((SPL.saved && SPL.saved.titles) || {}) }).forEach(([t, nm]) => {
     const tt = toks(t), l = splLibOf(nm);
@@ -190,7 +200,7 @@ function splGuessLike(name, players) {
   });
   if (score >= 3) return best;
   const n = splKey(name), find = (re) => { const x = SPL.lib.library.find((y) => re.test(y.name)); return x ? splName(x.name) : ''; };
-  const v = /(\d+) ?v ?(\d+)/.exec(n), side = v ? Math.max(Number(v[1]), Number(v[2])) : players ? Math.ceil(players / 2) : 0;
+  const v = /(\d+) ?vs? ?(\d+)/.exec(`${n} ${splKey(players)}`), np = splNPlayers(players), side = v ? Math.max(Number(v[1]), Number(v[2])) : np ? Math.ceil(np / 2) : 0;
   if (/warm|echauf/.test(n)) return find(/^WARM-UP$/i);
   if (/rondo/.test(n)) return find(/RONDO/i);
   if (/finish|cross|shoot|frappe/.test(n)) return find(/^FINISHING AND CROSSING$/i);
@@ -210,22 +220,43 @@ function splGuessLike(name, players) {
 function splCardHtml() {
   const c = SPL.card;
   if (!c) return '';
-  const hasData = !!splLibOf(c.name), area = splArea({ length: Number(c.length), width: Number(c.width), players: Number(c.players) });
-  const lib = SPL.lib.library.filter((x) => !SPL_NOT_TEAM.test(splName(x.name)) && !/^(Game|TEST$)/i.test(splName(x.name))); // a team drill to borrow from
-  return `<div class="sp-card"><div class="sp-h3">${c.edit != null ? escapeHtml(c.name) : 'New drill'} <small>${c.edit != null ? 'pitch and players are optional' : 'its name goes into Data_Drills as you write it · pitch and players are optional'}</small></div>
-    ${c.edit != null ? '' : `<label class="sp-f"><span>Name</span><input data-card="name" value="${escapeHtml(c.name)}" maxlength="60" placeholder="e.g. SSG 4v4 + GK" autocomplete="off"></label>`}
-    <div class="sp-fr"><label class="sp-f"><span>Pitch (m)</span><span class="sp-xy"><input type="number" min="5" max="150" data-card="length" value="${c.length}" placeholder="length" aria-label="Pitch length">×<input type="number" min="5" max="150" data-card="width" value="${c.width}" placeholder="width" aria-label="Pitch width"></span></label>
-      <label class="sp-f"><span>Players</span><input type="number" min="2" max="40" data-card="players" value="${c.players}" placeholder="e.g. 10"></label>
+  const isNew = c.edit == null, hasData = !isNew && !!splLibOf(c.name), area = splArea({ length: Number(c.length), width: Number(c.width), players: c.players });
+  const lockP = !isNew && splInName(c.name, c.players), lockD = !isNew && splInName(c.name, splDim(c)); // written in its name: fixed
+  return `<div class="sp-card"><div class="sp-h3">${isNew ? 'New drill' : escapeHtml(c.name)} <small>${isNew ? 'players and pitch are optional · add them to its name to compare it with that format only' : 'players and pitch are optional'}</small></div>
+    ${isNew ? `<label class="sp-f"><span>Name</span><input data-card="name" value="${escapeHtml(c.name)}" maxlength="50" placeholder="e.g. RONDO, SSG + GK" autocomplete="off"></label>` : ''}
+    <div class="sp-fr"><label class="sp-f"><span>Players</span><input data-card="players" value="${escapeHtml(c.players)}" maxlength="15" placeholder="e.g. 4vs1, 3vs0, 10" autocomplete="off"${lockP ? ' readonly title="Written in its name"' : ''}></label>
+      <label class="sp-f"><span>Pitch (m)</span><span class="sp-xy"><input type="number" min="5" max="150" data-card="length" value="${c.length}" placeholder="length" aria-label="Pitch length"${lockD ? ' readonly' : ''}>×<input type="number" min="5" max="150" data-card="width" value="${c.width}" placeholder="width" aria-label="Pitch width"${lockD ? ' readonly' : ''}></span></label>
       <span class="sp-area">${area ? `${area} m² per player` : ''}</span></div>
-    ${hasData ? '' : `<label class="sp-f"><span>Forecast like <small>until it has data of its own (after its first session)</small></span><select data-card="like"><option value="">— not in the forecast —</option>${lib.map((x) => `<option ${splKey(x.name) === splKey(c.like) ? 'selected' : ''}>${escapeHtml(splName(x.name))}</option>`).join('')}</select></label>`}
-    <div class="sp-card-a"><button type="button" class="btn-primary" data-card-save>${c.edit != null ? 'Save' : 'Create and add'}</button><button type="button" class="btn-light" data-card-cancel>Cancel</button><em class="sp-card-msg"></em>${c.edit != null && !hasData && splDef(c.name) ? '<button type="button" class="linkbtn sp-del" data-card-del>Delete this drill</button>' : ''}</div></div>`;
+    <div class="sp-dyn">${splCardDyn()}</div>
+    <div class="sp-card-a"><button type="button" class="btn-primary" data-card-save>${isNew ? 'Create and add' : 'Save'}</button><button type="button" class="btn-light" data-card-cancel>Cancel</button><em class="sp-card-msg"></em>${!isNew && !hasData && splDef(c.name) ? '<button type="button" class="linkbtn sp-del" data-card-del>Delete this drill</button>' : ''}</div></div>`;
+}
+/** The part of the card that follows what is typed: what a new drill is compared with (its name in Data_Drills) and the
+ * drill the forecast borrows from until it has data of its own. */
+function splCardDyn() {
+  const c = SPL.card, isNew = c.edit == null, base = splName(c.name), pl = splName(c.players), dim = splDim(c);
+  const opts = isNew && base ? [['', base], ...(pl ? [['p', `${base} ${pl}`]] : []), ...(dim ? [['d', `${base} ${dim}`]] : []), ...(pl && dim ? [['pd', `${base} ${pl} ${dim}`]] : [])] : [];
+  if (isNew && !opts.some(([k]) => k === (c.cmp || ''))) c.cmp = '';
+  const full = isNew ? splCardName(c) : c.name, hasData = !!splLibOf(full);
+  const lib = SPL.lib.library.filter((x) => !SPL_NOT_TEAM.test(splName(x.name)) && !/^(Game|TEST$)/i.test(splName(x.name))); // a team drill to borrow from
+  const hist = (nm) => { const l = splLibOf(nm); return l ? `${l.n} session${l.n > 1 ? 's' : ''}` : splDef(nm) ? 'created · no data yet' : 'new · no data yet'; };
+  const what = { '': `every ${base}`, p: 'same players only', d: 'same pitch only', pd: 'same players and pitch only' };
+  return `${opts.length > 1 ? `<div class="sp-f"><span>Compared with <small>its history = the sessions with exactly this name in Data_Drills</small></span><div class="sp-cmps">${opts.map(([k, nm]) => `<label class="sp-cmp${(c.cmp || '') === k ? ' on' : ''}"><input type="radio" name="sp-cmp" data-card="cmp" value="${k}"${(c.cmp || '') === k ? ' checked' : ''}><b>${escapeHtml(nm)}</b><small>${escapeHtml(what[k])} · ${hist(nm)}</small></label>`).join('')}</div></div>` : ''}
+    ${hasData ? '' : `<label class="sp-f"><span>Forecast like <small>until it has data of its own (after its first session)</small></span><select data-card="like"><option value="">— not in the forecast —</option>${lib.map((x) => `<option ${splKey(x.name) === splKey(c.like) ? 'selected' : ''}>${escapeHtml(splName(x.name))}</option>`).join('')}</select></label>`}`;
+}
+/** As the card is typed in: the area per player, what it can be compared with and the guessed "forecast like". */
+function splCardRefresh() {
+  const c = SPL.card, isNew = c.edit == null;
+  if (c.auto && !splLibOf(isNew ? splCardName(c) : c.name)) c.like = isNew ? splLikeFor(c) : splGuessLike(c.name, c.players);
+  const a = splArea({ length: Number(c.length), width: Number(c.width), players: c.players }), el = document.querySelector('.sp-area'), dyn = document.querySelector('.sp-dyn');
+  if (el) el.textContent = a ? `${a} m² per player` : '';
+  if (dyn) dyn.innerHTML = splCardDyn();
 }
 async function splCardSave() {
-  const c = SPL.card, date = SPL.date, name = splName(c.name);
-  if (!name) { const el = document.querySelector('.sp-card-msg'); if (el) el.textContent = 'Write the name of the drill.'; return; }
+  const c = SPL.card, date = SPL.date, name = c.edit == null ? splCardName(c) : splName(c.name); // a new drill: + its players / pitch if compared with them only
+  if (!splName(c.name)) { const el = document.querySelector('.sp-card-msg'); if (el) el.textContent = 'Write the name of the drill.'; return; }
   const num = (v, lo, hi) => { const x = Math.round(Number(v)); return v === '' || v == null || !Number.isFinite(x) || !x ? null : Math.max(lo, Math.min(hi, x)); };
   const prev = splDef(name), inLib = splLibOf(name), key = prev ? prev.name : inLib ? splName(inLib.name) : name; // one card per drill, whatever the spelling
-  const def = { name: key, length: num(c.length, 1, 150), width: num(c.width, 1, 150), players: num(c.players, 1, 40), like: inLib ? '' : c.like || '' };
+  const def = { name: key, length: num(c.length, 1, 150), width: num(c.width, 1, 150), players: splName(c.players).slice(0, 15) || null, like: inLib ? '' : c.like || '' };
   SPL.saved.drills = { ...splDefs(), [key]: def };
   if (c.edit == null) { const r8 = splRateOf(key); splEnsure(date).drills.push({ name: key, min: r8 ? r8.l.min : 10 }); splTouch(date); }
   SPL.card = null; splDraw();
@@ -668,7 +699,8 @@ function splClick(e) {
   // drill cards
   if (t.dataset.cardEdit != null) {
     const d = p().drills[Number(t.dataset.cardEdit)], def = splDef(d.name) || {}, inLib = !!splLibOf(d.name);
-    SPL.card = { edit: Number(t.dataset.cardEdit), name: splName(d.name), length: def.length || '', width: def.width || '', players: def.players || '', like: def.like || (inLib ? '' : splGuessLike(d.name, def.players || 0)), auto: !def.like };
+    const pl = def.players == null ? '' : String(def.players);
+    SPL.card = { edit: Number(t.dataset.cardEdit), name: splName(d.name), length: def.length || '', width: def.width || '', players: pl, like: def.like || (inLib ? '' : splGuessLike(d.name, pl)), auto: !def.like };
     splDraw(); const el = document.querySelector('.sp-card'); if (el) el.scrollIntoView({ block: 'nearest' }); return;
   }
   if (t.dataset.cardSave != null) { splCardSave(); return; }
@@ -700,11 +732,15 @@ function splChange(e) {
   if (t.dataset.drill != null) { p.drills[Number(t.dataset.drill)].name = t.value; splTouch(date); splDraw(); return; }
   if (t.dataset.add != null) {
     const name = t.value;
-    if (name === '__new') { SPL.card = { name: '', length: '', width: '', players: '', like: '', auto: true }; splDraw(); const el = document.querySelector('[data-card="name"]'); if (el) el.focus(); return; }
+    if (name === '__new') { SPL.card = { name: '', length: '', width: '', players: '', like: '', auto: true, cmp: '' }; splDraw(); const el = document.querySelector('[data-card="name"]'); if (el) el.focus(); return; }
     if (name) { const r8 = splRateOf(name); p.drills.push({ name, min: r8 ? r8.l.min : 10 }); splTouch(date); }
     splDraw(); return;
   }
-  if (t.dataset.card) { if (t.dataset.card === 'like' && SPL.card) { SPL.card.like = t.value; SPL.card.auto = false; } return; }
+  if (t.dataset.card) {
+    if (t.dataset.card === 'like' && SPL.card) { SPL.card.like = t.value; SPL.card.auto = false; }
+    if (t.dataset.card === 'cmp' && SPL.card) { SPL.card.cmp = t.value; splCardRefresh(); } // what a new drill is compared with
+    return;
+  }
   if (t.dataset.actmin != null) { splDraw(); return; } // minutes written: refresh the checks and the preview when done
   if (t.dataset.status) { p.status[t.dataset.status] = t.value; splTouch(date); splDraw(); return; }
   if (t.dataset.map) {
@@ -717,12 +753,9 @@ function splChange(e) {
 }
 function splInput(e) {
   const t = e.target, date = SPL.date;
-  if (t.dataset.card && t.dataset.card !== 'like' && SPL.card) { // the card: the area per player and the guessed "forecast like" follow what is typed
-    const c = SPL.card;
-    c[t.dataset.card] = t.value;
-    if (c.auto && (t.dataset.card === 'name' || t.dataset.card === 'players') && !splLibOf(c.name)) { c.like = splGuessLike(c.name, Number(c.players) || 0); const s = document.querySelector('[data-card="like"]'); if (s) s.value = c.like; }
-    const a = splArea({ length: Number(c.length), width: Number(c.width), players: Number(c.players) }), el = document.querySelector('.sp-area');
-    if (el) el.textContent = a ? `${a} m² per player` : '';
+  if (t.dataset.card && t.dataset.card !== 'like' && t.dataset.card !== 'cmp' && SPL.card) { // the card follows what is typed
+    SPL.card[t.dataset.card] = t.value;
+    splCardRefresh();
     return;
   }
   if (t.dataset.actmin != null) { const d = splEnsure(date).drills[Number(t.dataset.actmin)], v = Number(t.value) || 0; if (d) { d.act = v && v !== Number(d.min) ? v : undefined; d.chk = !!v; } splTouch(date); return; }

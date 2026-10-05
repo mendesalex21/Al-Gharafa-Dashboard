@@ -1479,6 +1479,13 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .sp-f input, .sp-f select { font: inherit; font-size: 13.5px; color: var(--ink); border: 1px solid var(--hairline); border-radius: 9px; background: var(--surface); padding: 6px 9px; max-width: 100%; }
 .sp-fr { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; } .sp-fr .sp-f > input { width: 84px; }
 .sp-xy { display: inline-flex; align-items: center; gap: 6px; } .sp-xy input { width: 72px; } .sp-area { font-size: 13px; font-weight: 700; color: #2a78d6; padding-bottom: 8px; }
+.sp-dyn { display: flex; flex-direction: column; gap: 10px; } .sp-dyn:empty { display: none; }
+.sp-cmps { display: flex; flex-wrap: wrap; gap: 6px; }
+.sp-cmp { position: relative; display: inline-flex; flex-direction: column; gap: 1px; padding: 7px 12px; border: 1px solid var(--hairline); border-radius: 10px; background: var(--surface); cursor: pointer; }
+.sp-cmp input { position: absolute; opacity: 0; pointer-events: none; } .sp-cmp:focus-within { outline: 2px solid color-mix(in srgb, #2a78d6 45%, transparent); outline-offset: 1px; }
+.sp-cmp b { font-size: 13px; font-weight: 650; color: var(--ink); } .sp-cmp small { font-size: 11.5px; font-weight: 500; color: var(--ink-muted); }
+.sp-cmp.on { border-color: #2a78d6; box-shadow: inset 0 0 0 1px #2a78d6; background: color-mix(in srgb, #2a78d6 8%, var(--surface)); }
+.sp-f input[readonly] { color: var(--ink-muted); background: color-mix(in srgb, var(--ink) 4%, var(--surface)); }
 .sp-card-a { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .sp-card-a em { font-style: normal; font-size: 12px; color: color-mix(in srgb, #ff9f0a 70%, var(--ink)); } .sp-del { margin-left: auto; color: #d64545; }
 @media (max-width: 700px) { .sp-ci { grid-template-columns: 1fr; gap: 4px; } .sp-cb { justify-content: flex-start; } }
 @media (max-width: 1000px) { .sp-two, .sp-three { grid-template-columns: 1fr; } .sp-week { grid-template-columns: repeat(4, minmax(0, 1fr)); } .sp-files { grid-template-columns: 1fr 1fr; } }
