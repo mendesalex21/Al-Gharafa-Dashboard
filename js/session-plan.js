@@ -498,13 +498,25 @@ function splCorrLineHtml(date) {
 }
 
 // ------------------------------------------------------------------ step 2: the files → rows
+/** Full session or drills file: its name (S75_Full / S75_Drills), else its rows. A full export can have a "Drill Title"
+ * column too ("Entire Session - Live", one row per player — S75); a drills export has the drills' own titles. */
+function splFileKind(name, text) {
+  if (/drill/i.test(name)) return 'drills';
+  if (/full/i.test(name)) return 'full';
+  const rows = spParseCsv(text);
+  if (!rows.length || !('Drill Title' in rows[0])) return 'full';
+  const per = {};
+  rows.forEach((r) => { per[r['Player First Name']] = (per[r['Player First Name']] || 0) + 1; });
+  return Object.values(per).some((n) => n > 1) || rows.some((r) => !/^entire session/i.test(String(r['Drill Title'] || '').trim())) ? 'drills' : 'full';
+}
 async function splReadFiles(list) {
   for (const f of list) {
     const text = await f.text();
     const head = text.replace(/^﻿/, '').split(/\r?\n/)[0] || '';
     if (!/Player First Name/.test(head)) { SPL.state = `${f.name}: not a StatSports export`; continue; }
-    SPL.files[/Drill Title/.test(head) ? 'drills' : 'full'] = { name: f.name, text };
+    SPL.files[splFileKind(f.name, text)] = { name: f.name, text };
   }
+  if (!SPL.files.full && SPL.files.drills) SPL.state = 'Drills file read — drop the Full file too (S##_Full.csv)';
   if (SPL.files.full) { SPL.view = 'import'; SPL.state = ''; }
   splDraw();
 }
