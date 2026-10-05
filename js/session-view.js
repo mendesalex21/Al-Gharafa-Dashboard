@@ -252,8 +252,9 @@ const svGroupTxt = (s) => (s.kind === 'match' ? 'whole-game players' : s.group =
 function svTable(rows, cols, o = {}) {
   const ref = rows.some((r) => r.pro) ? rows.filter((r) => r.pro) : rows;
   const teamMax = (k) => Math.max(0, ...ref.map((r) => r[k] || 0)), scaleMax = (k) => Math.max(teamMax(k), ...rows.map((r) => r[k] || 0));
-  const lo = (k) => Math.min(...rows.map((r) => r[k] ?? 0)), hi = (k) => Math.max(...rows.map((r) => r[k] ?? 0));
-  const t01 = (k, v) => (hi(k) > lo(k) ? ((v ?? 0) - lo(k)) / (hi(k) - lo(k)) : 0);
+  const span = (k) => (k === 'mpm' ? ref : rows); // m/min colours: the players of the team session only (individual / rehab grey)
+  const lo = (k) => Math.min(...span(k).map((r) => r[k] ?? 0)), hi = (k) => Math.max(...span(k).map((r) => r[k] ?? 0));
+  const t01 = (k, v) => (hi(k) > lo(k) ? Math.max(0, Math.min(1, ((v ?? 0) - lo(k)) / (hi(k) - lo(k)))) : 0);
   const tpl = '170px ' + cols.map((k) => SV_W[k] || '44px').join(' ');
   const fmt = (k, v) => (k === 'rpe' && v != null && !Number.isInteger(v) ? v.toFixed(1) : rpFmt(k, v));
   const chip = (bg, v, fg = '') => `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg}${fg ? `;color:${fg}` : ''}">${v}</span></div>`;
@@ -266,7 +267,7 @@ function svTable(rows, cols, o = {}) {
       return `<div class="rp-c"><span class="rp-v">${fmt(k, isTeam ? Math.round(v) : v)}</span><div class="rp-bar"><i class="rp-trk" style="width:${trk}"></i><i style="width:${rpPct(v, m)};background:${col}"></i></div></div>`;
     }
     if (isTeam) return `<div class="rp-c rp-txt"><span class="rp-v">${k === 'pmax' ? fmt(k, v) : k === 'rpe' ? v.toFixed(1) : fmt(k, Math.round(v))}</span></div>`;
-    if (k === 'mpm') return chip(`rgb(${rpLerp([235, 244, 253], [110, 175, 240], t01(k, v))})`, fmt(k, v));
+    if (k === 'mpm') return !r.pro && rows.some((y) => y.pro) ? chip('#eef0f4', fmt(k, v), '#8a8f9e') : chip(`rgb(${rpLerp([235, 244, 253], [110, 175, 240], t01(k, v))})`, fmt(k, v));
     if (k === 'hacc' || k === 'hdec') return chip(`rgb(${rpLerp([238, 249, 232], [140, 214, 104], t01(k, v))})`, fmt(k, v));
     if (k === 'sprints') { const [bg, fg] = rpSprintColor(t01(k, v)); return chip(bg, fmt(k, v), fg); }
     if (k === 'days') { const [bg, fg] = rpDaysColor(v); return chip(bg, fmt(k, v), fg); }

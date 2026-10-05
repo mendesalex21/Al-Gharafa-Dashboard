@@ -27,7 +27,8 @@ function rpStaffCtx(D, S) {
   return { X, px, z: (name, k) => { const p = px(name); return p ? p.z[ki(k)] : null; },
     ac: (name, k) => { const p = px(name); return p ? p.ac[ki(k)] : null; },
     mc: (name, k) => { const p = px(name); return p ? p.mc[ki(k)] : null; },
-    wk: (name, k) => { const p = px(name); return p ? p.wk[wi(k)] : null; } };
+    wk: (name, k) => { const p = px(name); return p ? p.wk[wi(k)] : null; },
+    wv: (name, k) => { const p = px(name); return p && p.wv ? p.wv[wi(k)] : null; } };
 }
 
 // ---------------------------------------------------------------- page 1: team strip above the table
@@ -43,8 +44,8 @@ function rsTeamStrip(C, md) {
 // ---------------------------------------------------------------- pages 2–3: bar colour = his z vs his usual MD, z printed when not green
 function rsChart(D, C, key, title, legend) {
   const rows = [...D.fullSession].sort((a, b) => (b[key] || 0) - (a[key] || 0) || a.name.localeCompare(b.name));
-  const m = Math.max(1, ...rows.map((r) => r[key] || 0));
-  const avg = rows.reduce((t, r) => t + (r[key] || 0), 0) / Math.max(1, rows.length);
+  const m = Math.max(1, ...rows.map((r) => r[key] || 0)), team = rows.some((r) => r.pro !== 0) ? rows.filter((r) => r.pro !== 0) : rows;
+  const avg = team.reduce((t, r) => t + (r[key] || 0), 0) / Math.max(1, team.length); // individual / rehab left out
   const h = (v) => (Math.max(0, v || 0) / m * 80).toFixed(1) + '%';
   const gm = Object.entries(D.gameAvg[key] || {}).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   const lg = legend ? Object.entries({ below: 'Below usual', on: 'Usual', above: 'Above', high: 'Well above' }).map(([k, l]) => `<span><b style="width:10px;height:10px;border-radius:2px;background:${STZ[k]}"></b>${l}</span>`).join('')
@@ -78,27 +79,32 @@ function rsAcPanel(D, C, key, title) {
 
 // ---------------------------------------------------------------- page 6: team, microcycle so far — dot = this week, grey bar = usual range of that MD
 function rsProfile(C, k, title, unit) {
-  const days = C.X.profile, W = 600, H = 255, padL = 10, padB = 36, padT = 24; // a compensatory day: vs the usual compensatory session
-  const slots = [...days.map((d) => d.md), 'MD'];
+  const days = [...C.X.profile, ...(C.X.plan || [])], W = 600, H = 255, padL = 10, padB = 36, padT = 24; // done days, then planned
+  const slots = [...days.map((d) => d.md), 'MD'], bw = Math.max(30, Math.min(52, (W - padL) / slots.length - 12)), hw = bw / 2;
   const pts = days.map((d) => d[k] && d[k][0] != null ? d[k] : null);
-  const max = Math.max(1, ...pts.filter(Boolean).map((p) => Math.max(p[0], p[3] || 0))) * 1.12;
+  const max = Math.max(1, ...days.map((d) => (d[k] ? Math.max(d[k][0] || 0, d[k][3] || 0) : 0))) * 1.12;
   const x = (i) => padL + (i + 0.5) * ((W - padL) / slots.length), y = (v) => padT + (1 - v / max) * (H - padT - padB);
   let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">`;
   slots.forEach((md, i) => {
-    const d = days[i], p = pts[i];
+    const d = days[i], p = d && d[k];
     if (d) {
-      if (p && p[2] != null && p[3] != null) svg += `<rect x="${x(i) - 26}" y="${y(p[3])}" width="52" height="${Math.max(3, y(p[2]) - y(p[3]))}" rx="7" fill="#e9ebf1"/>`;
-      if (p && p[1] != null) svg += `<line x1="${x(i) - 26}" x2="${x(i) + 26}" y1="${y(p[1])}" y2="${y(p[1])}" stroke="#b8bcc8" stroke-width="2"/>`;
-      svg += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="10.5" fill="#8a8f9e">${stDay(d.date, { weekday: 'short', day: 'numeric' })}${d.comp ? ' · comp.' : ''}</text>`;
+      if (p && p[2] != null && p[3] != null) svg += `<rect x="${x(i) - hw}" y="${y(p[3])}" width="${bw}" height="${Math.max(3, y(p[2]) - y(p[3]))}" rx="7" fill="${d.fut ? '#f1f2f6' : '#e9ebf1'}"${d.fut ? ' stroke="#d5d8e0" stroke-dasharray="3 3"' : ''}/>`;
+      if (p && p[1] != null) svg += `<line x1="${x(i) - hw}" x2="${x(i) + hw}" y1="${y(p[1])}" y2="${y(p[1])}" stroke="#b8bcc8" stroke-width="2"/>`;
+      svg += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="10.5" fill="#8a8f9e">${stDay(d.date, { weekday: 'short', day: 'numeric' })}${d.comp ? ' · comp.' : d.fut && !d.planned ? ' · no plan' : ''}</text>`;
     } else {
-      svg += `<rect x="${x(i) - 26}" y="${padT}" width="52" height="${H - padT - padB}" rx="7" fill="none" stroke="#c9ccd6" stroke-dasharray="4 4"/><text x="${x(i)}" y="${(padT + H - padB) / 2}" text-anchor="middle" font-size="11" fill="#8a8f9e" font-weight="700">match</text>`;
+      svg += `<rect x="${x(i) - hw}" y="${padT}" width="${bw}" height="${H - padT - padB}" rx="7" fill="none" stroke="#c9ccd6" stroke-dasharray="4 4"/><text x="${x(i)}" y="${(padT + H - padB) / 2}" text-anchor="middle" font-size="11" fill="#8a8f9e" font-weight="700">match</text>`;
     }
-    svg += `<text x="${x(i)}" y="${H - 20}" text-anchor="middle" font-size="12" font-weight="800" fill="#16269e">${rpEsc(md)}</text>`;
+    svg += `<text x="${x(i)}" y="${H - 20}" text-anchor="middle" font-size="12" font-weight="800" fill="${d && d.fut ? '#7d86b8' : '#16269e'}">${rpEsc(md)}</text>`;
   });
-  const line = pts.map((p, i) => p ? `${x(i)},${y(p[0])}` : null).filter(Boolean);
-  if (line.length > 1) svg += `<polyline points="${line.join(' ')}" fill="none" stroke="#16269e" stroke-width="2" stroke-opacity=".5"/>`;
+  const done = pts.map((p, i) => (p && !days[i].fut ? i : -1)).filter((i) => i >= 0), plan = pts.map((p, i) => (p && days[i].fut ? i : -1)).filter((i) => i >= 0);
+  const line = (ix, dash) => (ix.length > 1 ? `<polyline points="${ix.map((i) => `${x(i)},${y(pts[i][0])}`).join(' ')}" fill="none" stroke="#16269e" stroke-width="2" stroke-opacity="${dash ? '.35' : '.5'}"${dash ? ' stroke-dasharray="5 4"' : ''}/>` : '');
+  svg += line(done, false) + line([...done.slice(-1), ...plan], true);
   pts.forEach((p, i) => {
     if (!p) return;
+    if (days[i].fut) { // planned in the Session Plan: a hollow dot, its forecast written above
+      svg += `<circle cx="${x(i)}" cy="${y(p[0])}" r="7" fill="#fff" stroke="#16269e" stroke-width="2.5"/><text x="${x(i)}" y="${y(p[0]) - 13}" text-anchor="middle" font-size="12" font-weight="700" fill="#5a63a8">${stK(p[0])}</text>`;
+      return;
+    }
     const [v, , , , z] = p, c = ST_DOT[stMz(z)] || '#8a8f9e';
     svg += `<circle cx="${x(i)}" cy="${y(v)}" r="8" fill="${c}" stroke="#fff" stroke-width="2.5"/><text x="${x(i)}" y="${y(v) - 14}" text-anchor="middle" font-size="12.5" font-weight="800" fill="#111">${stK(v)}</text>`;
     if (z != null && stMz(z) !== 'ok') svg += `<text x="${x(i) + 13}" y="${y(v) + 4}" font-size="10.5" font-weight="800" fill="${c}">${stSigned(z)}</text>`;
@@ -109,22 +115,23 @@ function rsMicro(C, s) {
   const n = C.X.next, ac = C.X.team_ac || {};
   const dd = n ? Math.round((new Date(n.date + 'T12:00:00Z') - new Date(s.date + 'T12:00:00Z')) / 864e5) : null;
   const next = n ? `<span class="rs-next">${typeof crestHtml === 'function' ? crestHtml(n.opponent, 22) : ''} Next: <b>${rpEsc([n.competition, n.round].filter(Boolean).join(' '))} · ${rpEsc(n.opponent || '')}</b> · ${dd === 1 ? 'tomorrow' : dd === 0 ? 'today' : 'in ' + dd + ' days'} ${rpEsc(n.time || '')}</span>` : '';
-  const body = C.X.profile.length
+  const body = C.X.profile.length || (C.X.plan || []).length
     ? `<div class="rs-profs">${rsProfile(C, 'td', 'TOTAL DISTANCE', 'm')}${rsProfile(C, 'hit', 'DISTANCE > 20 km/h', 'm')}${rsProfile(C, 'acc_dec', 'HIGH ACC + DEC', '')}${rsProfile(C, 'srpe', 'SESSION × RPE', 'AU')}</div>`
     : '<div class="rs-profs"><span class="rp-empty">No usual reference for these days yet</span></div>';
   const comp = C.X.profile.some((d) => d.comp) ? ' · comp. = compensatory session (the players who did not play), vs the usual compensatory session' : '';
-  return `<div class="rs-intro"><span>Team · each dot = this week · grey bar = the team's usual range for that MD (p25–p75) in a ${rpEsc(C.X.cycle || '')} microcycle · line = usual average · z shown when not usual${comp}</span>${next}</div>
+  const planned = (C.X.plan || []).length ? ' · hollow dot = planned in the Session Plan (its forecast; sRPE is not forecast) · dashed bar = a day still to come' : '';
+  return `<div class="rs-intro"><span>Team · each dot = this week${planned} · grey bar = the team's usual range for that MD (p25–p75) in a ${rpEsc(C.X.cycle || '')} microcycle · line = usual average · z shown when not usual${comp}</span>${next}</div>
     ${body}
     <div class="rs-acrow"><span class="rs-acl">Team A:C 7:28 today</span>${[['td', 'Total distance'], ['hit', 'HIT > 20'], ['acc_dec', 'Acc + Dec'], ['srpe', 'sRPE']].map(([k, l]) => `<div class="rs-act"><i style="background:${stAcCol(ac[k])}"></i>${l}<b>${ac[k] != null ? ac[k].toFixed(2) : '–'}</b></div>`).join('')}</div>`;
 }
 
 // ---------------------------------------------------------------- page 7: players, microcycle so far + week so far (z chips) + speed
 function rsCycle(D, C, s) {
-  const mc = [['td', 'TD'], ['hit', '> 20'], ['acc_dec', 'Acc+Dec'], ['spr_n', 'Sprints']], wk = [['td', 'TD'], ['hit', '> 20'], ['acc_dec', 'Acc+Dec'], ['srpe', 'sRPE']];
-  const tpl = '170px repeat(4, minmax(0,1fr)) 16px repeat(4, minmax(0,1fr)) 16px 70px 90px';
+  const mc = [['td', 'TD'], ['hit', '> 20'], ['acc_dec', 'Acc+Dec'], ['spr_n', 'Sprints']], wk = [['td', 'TD'], ['hit', '> 20'], ['acc_dec', 'Acc+Dec'], ['spr_n', 'Sprints']];
+  const tpl = '160px repeat(4, minmax(0,0.68fr)) 14px repeat(4, minmax(0,1.5fr)) 14px 60px 84px';
   const from = (C.X.micro && C.X.micro.md[0]) || '';
   const rowH = rpRowH(D, D.fullSession, RP_TABLE_H - 41, 25);
-  let html = `<div class="rs-tbl${rowH < 21 ? ' rp-tight' : ''}"><div class="rs-tr rs-gh" style="grid-template-columns:${tpl}"><span></span><span style="grid-column:span 4">MICROCYCLE SO FAR · ${rpEsc(from)}${from && from !== s.md ? ' → ' + rpEsc(s.md) : ''} vs his usual</span><span></span><span style="grid-column:span 4">WEEK SO FAR · Sun → today vs his weeks</span><span></span><span style="grid-column:span 2">MAX SPEED</span></div>
+  let html = `<div class="rs-tbl${rowH < 21 ? ' rp-tight' : ''}"><div class="rs-tr rs-gh" style="grid-template-columns:${tpl}"><span></span><span style="grid-column:span 4">MICROCYCLE SO FAR · ${rpEsc(from)}${from && from !== s.md ? ' → ' + rpEsc(s.md) : ''} vs his usual</span><span></span><span style="grid-column:span 4">WEEK SO FAR · Sun → today · value, bar = z vs his weeks</span><span></span><span style="grid-column:span 2">MAX SPEED</span></div>
     <div class="rs-tr rs-th" style="grid-template-columns:${tpl}"><span>Players</span>${mc.map(([, l]) => `<span>${l}</span>`).join('')}<span></span>${wk.map(([, l]) => `<span>${l}</span>`).join('')}<span></span><span>Days</span><span>This week</span></div>`;
   for (const p of D.positions.order) {
     const g = D.fullSession.filter((r) => D.players[r.name] === p).sort((a, b) => a.name.localeCompare(b.name));
@@ -132,11 +139,19 @@ function rsCycle(D, C, s) {
     html += `<div class="rp-grp">${p}<small>${rpEsc(D.positions.labels[p])}</small></div>`;
     html += g.map((r) => {
       const x = C.px(r.name) || {}, [dbg, dfg] = rpDaysColor(r.days);
-      return `<div class="rs-tr rs-row" style="grid-template-columns:${tpl};height:${rowH}px"><span class="rp-nm">${rpFace(D, r.name)}${rpEsc(r.name)}</span>${mc.map(([k]) => `<span>${stChip(C.mc(r.name, k))}</span>`).join('')}<span></span>${wk.map(([k]) => `<span>${stChip(C.wk(r.name, k))}</span>`).join('')}<span></span>
+      return `<div class="rs-tr rs-row" style="grid-template-columns:${tpl};height:${rowH}px"><span class="rp-nm">${rpFace(D, r.name)}${rpEsc(r.name)}</span>${mc.map(([k]) => `<span>${stChip(C.mc(r.name, k))}</span>`).join('')}<span></span>${wk.map(([k]) => `<span>${rsWeekCell(C.wv(r.name, k), C.wk(r.name, k))}</span>`).join('')}<span></span>
         <span><span class="mz" style="background:${dbg};color:${dfg}">${r.days ?? '–'}</span></span><span class="rs-v">${x.vmax != null ? x.vmax.toFixed(1) + ' km/h' : '–'}</span></div>`;
     }).join('');
   }
-  return html + `</div><div class="rp-legend">${ST_LEG5}<span>Days = days since his last run ≥ 90 % of max speed</span></div>`;
+  return html + `</div><div class="rp-legend">${ST_LEG5}<span>Week so far: value · bar and number = z vs the same days of his previous weeks</span><span>Days = days since his last run ≥ 90 % of max speed</span></div>`;
+}
+/** A week-so-far cell: his value, a bar from the middle (right = above his usual, left = below; full width = 3 SD) and z. */
+function rsWeekCell(v, z) {
+  if (v == null) return '<div class="rs-wc"><span class="v">–</span></div>';
+  const val = Math.round(v).toLocaleString('en-US');
+  if (z == null) return `<div class="rs-wc"><span class="v">${val}</span><span class="rs-zb"><i class="mid"></i></span><span class="z"></span></div>`;
+  const w = Math.min(Math.abs(z), 3) / 3 * 50;
+  return `<div class="rs-wc"><span class="v">${val}</span><span class="rs-zb"><i class="mid"></i><i style="${z < 0 ? 'right:50%' : 'left:50%'};width:${w.toFixed(1)}%;background:${stZCol(z)}"></i></span><span class="z" style="color:${stZCol(z)}">${stSigned(z)}</span></div>`;
 }
 
 /** The staff report pages (same 1290 × 790 pages and PDF as the players' report). */
@@ -161,7 +176,10 @@ function rpStaffPages(D, S) {
   const drills = (D.drills || []).filter((d) => d.rows.length), cols = rpDrillColumns(drills);
   for (let k = 0; k < cols.length; k += 4) pages.push(rpHeader('DRILLS SUMMARY', title, [['WEEK', s.week], ['MD', s.md], ['DRILLS', drills.length], ['N SESSION', s.id]]) + rpDrillBoards(D, cols.slice(k, k + 4)));
   const from = X.micro ? X.micro.from : s.date;
-  pages.push(rpHeader('TEAM · MICROCYCLE SO FAR', `${from !== s.date ? short(from) + ' – ' : ''}${short(s.date)} · up to ${s.md}`, [['MICROCYCLE', cycle], ['WEEK', s.week], ['SESSIONS', String(X.micro ? X.micro.md.length : X.profile.length)]]) + rsMicro(C, s));
+  const planDays = X.plan || [], toMatch = X.next ? X.next.date : null;
+  pages.push(rpHeader(planDays.length ? 'TEAM · MICROCYCLE · DONE AND PLANNED' : 'TEAM · MICROCYCLE SO FAR',
+    `${from !== s.date ? short(from) + ' – ' : ''}${short(s.date)} · up to ${s.md}${planDays.length && toMatch ? ` · then planned until the match (${short(toMatch)})` : ''}`,
+    [['MICROCYCLE', cycle], ['WEEK', s.week], ['SESSIONS', String(X.micro ? X.micro.md.length : X.profile.length)]]) + rsMicro(C, s));
   pages.push(rpHeader('MICROCYCLE & WEEK · PLAYER BY PLAYER', title, [['MD', s.md], ['MICROCYCLE', cycle], ['PLAYERS', String(D.fullSession.length)]]) + rsCycle(D, C, s));
   return pages.map((p) => `<div class="rp-page rp-staff">${p}</div>`).join('');
 }

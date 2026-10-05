@@ -101,8 +101,10 @@ function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H) {
   const teamMax = (k) => Math.max(0, ...ref.map((r) => r[k] || 0));
   // scale = everyone (an individual session may go past the grey track); grey track = team max
   const scaleMax = (k) => Math.max(teamMax(k), ...rows.map((r) => r[k] || 0));
-  const lo = (k) => Math.min(...rows.map((r) => r[k] ?? 0)), hi = (k) => Math.max(...rows.map((r) => r[k] ?? 0));
-  const t01 = (k, v) => hi(k) > lo(k) ? ((v ?? 0) - lo(k)) / (hi(k) - lo(k)) : 0;
+  // m/min colour scale: the players of the team session only — an individual / rehab session is not compared (grey)
+  const span = (k) => (k === 'mpm' ? ref : rows);
+  const lo = (k) => Math.min(...span(k).map((r) => r[k] ?? 0)), hi = (k) => Math.max(...span(k).map((r) => r[k] ?? 0));
+  const t01 = (k, v) => hi(k) > lo(k) ? Math.max(0, Math.min(1, ((v ?? 0) - lo(k)) / (hi(k) - lo(k)))) : 0;
   const tpl = '150px ' + cols.map((k) => RP_WIDTHS[k] || '44px').join(' ');
   const rowH = rpRowH(D, rows, budget - 32, rows.length > 17 ? 23 : 25);
   const cell = (r, k) => {
@@ -112,7 +114,8 @@ function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H) {
       if (k === 'vmax') return `<div class="rp-c"><div class="rp-bar rp-mid"><i class="rp-trk" style="width:${trk}"></i><i style="width:${rpPct(v, m)};background:${RP_COLORS[k]}"></i><em>${rpFmt(k, v)}</em></div></div>`;
       return `<div class="rp-c"><span class="rp-v">${rpFmt(k, v)}</span><div class="rp-bar"><i class="rp-trk" style="width:${trk}"></i><i style="width:${rpPct(v, m)};background:${RP_COLORS[k]}"></i></div></div>`;
     }
-    if (k === 'mpm') return `<div class="rp-c rp-chip"><span class="rp-v" style="background:rgb(${rpLerp([235, 244, 253], [110, 175, 240], t01(k, v))})">${rpFmt(k, v)}</span></div>`;
+    if (k === 'mpm') return !r.pro && rows.some((x) => x.pro) ? `<div class="rp-c rp-chip"><span class="rp-v rp-off" title="individual / rehab session: not in the team average">${rpFmt(k, v)}</span></div>`
+      : `<div class="rp-c rp-chip"><span class="rp-v" style="background:rgb(${rpLerp([235, 244, 253], [110, 175, 240], t01(k, v))})">${rpFmt(k, v)}</span></div>`;
     if (k === 'sprints') { const [bg, fg] = rpSprintColor(t01(k, v)); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${rpFmt(k, v)}</span></div>`; }
     if (k === 'days') { const [bg, fg] = rpDaysColor(v); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${rpFmt(k, v)}</span></div>`; }
     return `<div class="rp-c rp-txt"><span class="rp-v">${rpFmt(k, v)}</span></div>`;
@@ -147,7 +150,8 @@ function rpGmList(gm) {
 
 function rpChart(D, key, title, legend, gmKey) {
   const rows = [...D.fullSession].sort((a, b) => (b[key] || 0) - (a[key] || 0) || a.name.localeCompare(b.name));
-  const m = Math.max(0, ...rows.map((r) => r[key] || 0)), avg = rows.length ? rows.reduce((s, r) => s + (r[key] || 0), 0) / rows.length : 0;
+  const team = rows.some((r) => r.pro) ? rows.filter((r) => r.pro) : rows; // team average: the players of the team session (not individual / rehab)
+  const m = Math.max(0, ...rows.map((r) => r[key] || 0)), avg = team.length ? team.reduce((s, r) => s + (r[key] || 0), 0) / team.length : 0;
   const h = (v) => m ? ((v || 0) / m * 85).toFixed(1) + '%' : '0%';
   const gm = Object.entries(D.gameAvg[gmKey] || {}).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   return `<div class="rp-blk"><div class="rp-ch">
@@ -166,12 +170,13 @@ function rpPages(D) {
   pages.push(rpHeader(kicker, title, meta) + rpTable(D, D.fullSession, ['time', 'mpm', 'td', 'd15', 'd20', 'vmax', 'pmax', 'days', 'sprints', 'accdec']));
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'td', 'TOTAL DISTANCE', 'TOTAL DISTANCE', 'td') + rpChart(D, 'd20', 'DISTANCE >20kmh', 'DISTANCE >20kmh', 'd20'));
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'accdec', 'Acceleration + Deceleration', 'HI Acc+Dec', 'accdec') + rpChart(D, 'sprints', 'Number of Sprints >25kmh', 'SPRINTS', 'sprints'));
-  if (D.weekLoad && D.weekLoad.rows.length) pages.push(rpHeader('TOTAL WEEK LOAD', D.weekLoad.label, [['WEEK', s.week], ['FROM', D.weekLoad.from], ['TO', D.weekLoad.to]]) + rpTable(D, D.weekLoad.rows, ['min', 'td', 'd15', 'd20', 'vmax', 'pmax', 'sprints', 'accdec']));
   // drills: rankings by m/min (+ High Acc+Dec), up to 4 drills per page — high-speed running is rare in drills
   const drills = (D.drills || []).filter((d) => d.rows.length), cols = rpDrillColumns(drills);
   for (let k = 0; k < cols.length; k += 4) {
     pages.push(rpHeader('DRILLS SUMMARY', title, [['WEEK', s.week], ['MD', s.md], ['DRILLS', drills.length], ['N SESSION', s.id]]) + rpDrillBoards(D, cols.slice(k, k + 4)));
   }
+  // the total week load is the last page (the user's order)
+  if (D.weekLoad && D.weekLoad.rows.length) pages.push(rpHeader('TOTAL WEEK LOAD', D.weekLoad.label, [['WEEK', s.week], ['FROM', D.weekLoad.from], ['TO', D.weekLoad.to]]) + rpTable(D, D.weekLoad.rows, ['min', 'td', 'd15', 'd20', 'vmax', 'pmax', 'sprints', 'accdec']));
   return pages.map((p) => `<div class="rp-page">${p}</div>`).join('');
 }
 
@@ -194,7 +199,8 @@ function rpDrillBoards(D, cols) {
   const card = (d) => {
     const rows = [...d.rows].sort((x, y) => (y.mpm || 0) - (x.mpm || 0) || x.name.localeCompare(y.name));
     const max = Math.max(1, ...rows.map((r) => r.mpm || 0));
-    const avg = rows.reduce((t, r) => t + (r.mpm || 0), 0) / rows.length, at = rpPct(avg, max);
+    const team = rows.some((r) => r.pro) ? rows.filter((r) => r.pro) : rows; // individual / rehab players left out of the average
+    const avg = team.reduce((t, r) => t + (r.mpm || 0), 0) / team.length, at = rpPct(avg, max);
     return `<div class="rp-lbc"><div class="rp-lbt"><b>${d.n} · ${rpEsc(d.name)}</b><span>${d.time}'</span><em>${rows.length} player${rows.length > 1 ? 's' : ''}</em></div>
       <div class="rp-lbh"><span>#</span><span>Players</span><span>m/min</span><span>Acc+Dec</span></div>
       ${rows.map((r, i) => `<div class="rp-lbr" style="height:${rowH}px"><span class="rp-lbn${i < 3 ? ' r' + (i + 1) : ''}">${i + 1}</span><span class="rp-lbnm">${rpFace(D, r.name)}${rpEsc(r.name)}</span>

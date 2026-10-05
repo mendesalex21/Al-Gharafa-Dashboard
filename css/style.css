@@ -1435,6 +1435,10 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .sp-ctbl .dim, .sp-csum .dim { color: var(--ink-muted); } .sp-ctbl small { color: var(--ink-muted); }
 .sp-csum { margin-top: 12px; background: var(--surface-2); border-radius: 12px; padding: 12px 14px; font-size: 13px; } .sp-csum ul { margin: 6px 0 0; padding-left: 18px; } .sp-csum li { margin: 3px 0; }
 .sh-corr { margin-top: 6px; padding-left: 0; }
+.rp-v.rp-off { background: #f3f4f7 !important; color: #8a8f9e !important; box-shadow: inset 0 0 0 1px #e1e3ea; }
+.rs-wc { display: flex; align-items: center; gap: 6px; height: 100%; padding-right: 4px; } .rs-wc .v { flex: 0 0 46px; text-align: right; font-weight: 700; font-size: 12px; }
+.rs-wc .z { flex: 0 0 30px; font-size: 10.5px; font-weight: 700; } .rs-zb { flex: 1; position: relative; height: 9px; background: #f3f4f8; border-radius: 2px; }
+.rs-zb i { position: absolute; top: 0; bottom: 0; border-radius: 2px; } .rs-zb i.mid { left: 50%; width: 1px; background: #b8bcc8; }
 .sp-norpe { border: 1px solid var(--hairline); border-radius: 16px; padding: 12px 14px 6px; margin: 0 0 14px; } .sp-norpe .sp-h3 { margin-top: 0; }
 .sp-norpe .sp-rpe { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); } .sp-rpe label small { color: var(--ink-muted); font-weight: 500; margin-right: auto; padding-left: 4px; }
 /* checks before publishing */
