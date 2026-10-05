@@ -210,16 +210,19 @@ function svBigTxt(p, big) {
   const part = big.slice(0, 2).map((x) => { const [l, u] = SV_BIG[x.k]; return `${fmtN(p[x.k])}${u ? ' ' + u : ''} ${l} (usual ${fmtN(svUsual(p, x.k))})`; }).join(' and ');
   return `${big[0].z > 0 ? 'Much more' : 'Much less'} ${hs ? 'high-speed running' : 'load'} than usual today${where}: ${part}.`;
 }
-/** Available players with no GPS in the session (individual work…): their A:C, wellness and week still count (as in the e-mail). */
-function svOffGps(s) {
-  const st = {};
-  ((TR.workload && TR.workload.players) || []).forEach((p) => { st[p.id] = p.status; });
-  return (s.absent || []).filter((a) => st[a.id] === 'available');
+const SV_OUT = ['x', 'r', 's', 'n', 'a']; // injured, rehab, sick, national team, absent that day: not available (the workload's rule)
+/** Players available that day with no GPS (recovery, individual work…): their A:C, wellness, week and speed still count (as in the e-mail). */
+function svOffGps(s) { return (s.absent || []).filter((a) => !SV_OUT.includes(a.cat)); }
+/** Goalkeepers (no GPS) who answered the questionnaire that morning: only the wellness rules apply to them. */
+function svKeepers(s) {
+  const wday = TR.whist && TR.whist.days ? TR.whist.days.find((d) => d.date === s.date) : null, ro = (TR.sessions && TR.sessions.roster) || {};
+  const seen = new Set([...svFlat(s), ...svOffGps(s)].map((p) => p.id));
+  return wday && wday.byId ? Object.keys(wday.byId).filter((id) => (ro[id] || {}).pos === 'GK' && !seen.has(id)).map((id) => ({ id, gk: true })) : [];
 }
 function svAttention(s) {
   const out = [], wday = TR.whist && TR.whist.days ? TR.whist.days.find((d) => d.date === s.date) : null; // wellness of that morning
   const st = TR.staff && TR.staff.days ? TR.staff.days[s.date] : null, wkeys = (TR.staff && TR.staff.week_keys) || [], drops = svWellDrops(TR.whist, s.date);
-  [...svFlat(s), ...svOffGps(s)].forEach((p) => {
+  [...svFlat(s), ...svOffGps(s), ...svKeepers(s)].forEach((p) => {
     const partial = (s.kind === 'match' || p.cat === 'b') && (p.min || 0) < 75; // under 75 min a game is scaled: not flagged
     const ser = TR.workload && TR.workload.series ? TR.workload.series[p.id] : null, i = ser && ser.a7 ? daysBetween(ser.start, s.date) : -1;
     const ov = i >= 0 ? SV_AC.map(([k]) => ({ k, a: ser.a7[k] ? ser.a7[k][i] : null, b: ser.a14[k] ? ser.a14[k][i] : null }))
@@ -240,7 +243,7 @@ function svAttention(s) {
   return out.sort((a, b) => b.sev - a.sev);
 }
 function svAttentionHtml(s) {
-  const at = svAttention(s), n = svFlat(s).length + svOffGps(s).length, nOver = at.filter((a) => a.over).length, nWell = at.filter((a) => a.well).length, nDrop = at.filter((a) => a.wdrop).length, nBig = at.filter((a) => a.big || a.week).length;
+  const at = svAttention(s), n = svFlat(s).length + svOffGps(s).length + svKeepers(s).length, nOver = at.filter((a) => a.over).length, nWell = at.filter((a) => a.well).length, nDrop = at.filter((a) => a.wdrop).length, nBig = at.filter((a) => a.big || a.week).length;
   const mc = svMicrocycle(s), left = mc && mc.started ? mc.days.filter((d) => d.date > mc.today) : [], next = left.map((d) => d.md).join(' / ');
   const jok = [], top = new Map();
   if (left.length) {
@@ -250,7 +253,7 @@ function svAttentionHtml(s) {
       if (rd.topup) top.set(p.id, { p, short: true, t: [`${SV_LBL[rd.kTop]} ${fmtN(plan[rd.kTop].done)} / ${fmtN(plan[rd.kTop].target)} m`] });
     });
   }
-  svFlat(s).filter((p) => p.days_hsv >= 10).sort((a, b) => b.days_hsv - a.days_hsv).forEach((p) => { // no run at 90 % of his max speed for 10 days or more
+  [...svFlat(s), ...svOffGps(s)].filter((p) => p.days_hsv >= 10).sort((a, b) => b.days_hsv - a.days_hsv).forEach((p) => { // no run at 90 % of his max speed for 10 days or more (with or without GPS that day)
     const x = top.get(p.id) || { p, t: [] };
     x.t.push(`${p.days_hsv} days`);
     top.set(p.id, x);
@@ -262,7 +265,7 @@ function svAttentionHtml(s) {
       ${left.length ? `<div class="sv-plan on"><h4>Joker candidates · ${next}</h4><p>High-speed target of his microcycle already reached (distance > 20 or > 25 km/h).</p><div>${chips(jok)}</div></div>` : ''}
       <div class="sv-plan below"><h4>Need a speed top-up${next ? ' · ' + next : ''}</h4><p>No run at 90 % of his max speed for 10 days or more (days since)${left.length ? ', or too far behind his high-speed target of the microcycle (done / target)' : ''}.</p>${shortN > 6 ? `<p class="sv-plan-hint"><b>${shortN} of ${n} players</b> are short of high-speed running — consider a speed-exposure block for everyone on ${next}.</p>` : ''}<div>${chips(tops)}</div></div>
     </div>` : '';
-  const rows = at.map((a) => `<button type="button" class="sv-al" data-id="${a.p.id}">${avatarHtml(a.p.id, playerName(a.p.id), 30)}<b>${escapeHtml(playerName(a.p.id))}<small>${escapeHtml(svSub(a.p) || '')}</small></b>
+  const rows = at.map((a) => `<button type="button" class="sv-al" data-id="${a.p.id}"${a.p.gk ? ' data-gk="1"' : ''}>${avatarHtml(a.p.id, playerName(a.p.id), 30)}<b>${escapeHtml(playerName(a.p.id))}<small>${escapeHtml(svSub(a.p) || '')}</small></b>
       <span class="sv-al-c">${a.over ? '<i class="sv-ch red">2 weeks overload</i>' : ''}${a.well ? '<i class="sv-ch red">wellness</i>' : ''}${a.wdrop ? '<i class="sv-ch orange">wellness down</i>' : ''}${a.big ? '<i class="sv-ch orange">big change today</i>' : ''}${a.week ? '<i class="sv-ch orange">week load</i>' : ''}</span>
       <span class="sv-al-t">${escapeHtml([a.over, a.well, a.wdrop, a.big, a.week].filter(Boolean).join(' '))}</span><i class="sv-al-go">›</i></button>`).join('');
   return `<section class="panel">
@@ -271,7 +274,7 @@ function svAttentionHtml(s) {
         .filter((x) => x[0]).map(([v, c, l]) => `<i style="background:${c}"></i>${v} ${l}`).join('')}` : '✓ No alert today'}</span></div>
     ${at.length ? `<div class="sv-als">${rows}</div>` : ''}
     ${plans}
-    <p class="panel-foot">Alerts only for: A:C above ${SV_OVER} two weeks in a row (distance, HI Acc+Dec, > 20 km/h, sprints) · wellness in the red that morning (< 50 %), or 10 % below his average (his last 28 check-ins) two mornings in a row · a load far from his usual today (z ≥ 2, or ≤ −2 in a full session) or this week so far (z ≥ 2 or ≤ −2 vs his usual weeks) · click a player for his full session. Speed exposure is in “Need a speed top-up”. Same rules as the staff e-mail.</p>
+    <p class="panel-foot">Alerts only for: A:C above ${SV_OVER} two weeks in a row (distance, HI Acc+Dec, > 20 km/h, sprints) · wellness in the red that morning (< 50 %), or 10 % below his average (his last 28 check-ins) two mornings in a row — goalkeepers included · a load far from his usual today (z ≥ 2, or ≤ −2 in a full session) or this week so far (z ≥ 2 or ≤ −2 vs his usual weeks) · click a player for his full session. Speed exposure is in “Need a speed top-up”. Same rules as the staff e-mail.</p>
   </section>`;
 }
 // ------------------------------------------------------------------ session table: the report's page design (Reports → PDF page 1)
@@ -398,7 +401,9 @@ function svMount(s) {
   svScrollbarVar();
   document.getElementById('sv-attention').innerHTML = svAttentionHtml(s);
   document.querySelectorAll('#sv-attention [data-id]').forEach((r) => r.addEventListener('click', () => { // no GPS today: his player page
-    if (svFlat(s).some((x) => x.id === r.dataset.id)) svOpen(s, r.dataset.id); else switchView('player', { player: r.dataset.id });
+    if (svFlat(s).some((x) => x.id === r.dataset.id)) svOpen(s, r.dataset.id);
+    else if (r.dataset.gk) { LG.player = r.dataset.id; switchView('longitudinal'); } // a goalkeeper: his wellness trends
+    else switchView('player', { player: r.dataset.id });
   }));
   document.querySelectorAll('#sv-attention [data-more]').forEach((b) => b.addEventListener('click', () => { b.closest('.sv-plan').classList.add('all'); b.remove(); }));
   document.querySelectorAll('#sv-attention [data-allcards]').forEach((b) => b.addEventListener('click', () => { b.previousElementSibling.classList.add('all'); b.remove(); }));
