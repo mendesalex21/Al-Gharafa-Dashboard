@@ -173,12 +173,29 @@ function svInsights(s, plan, rd, left) {
 }
 
 // ------------------------------------------------------------------ Attention today
-// Real alerts only (the user's rules, 2026-10-05): A:C above 1.5 two weeks in a row, wellness in the red that morning, a
-// load far from his usual today (the MD) or this week so far (z ≥ 2 or ≤ −2). Speed exposure (no run at 90 % of his max
+// Real alerts only (the user's rules, 2026-10-05): A:C above 1.5 two weeks in a row, wellness in the red that morning or
+// 10 % below his average two mornings in a row, a load far from his usual today (the MD) or this week so far (z ≥ 2 or ≤ −2). Speed exposure (no run at 90 % of his max
 // speed for 10 days or more) goes to "Need a speed top-up", beside the jokers. Same rules as the staff e-mail.
 const SV_OVER = 1.5; // A:C 7:28 above this this week and last week (the "14:35")
 const SV_AC_L = { td: 'distance', acc_dec: 'HI Acc+Dec', hit: '> 20 km/h', spr_n: 'sprints' };
 const SV_BIG = { td: ['distance', 'm'], d15: ['> 15 km/h', 'm'], hit: ['> 20 km/h', 'm'], spr: ['> 25 km/h', 'm'], spr_n: ['sprints', ''], acc_dec: ['Acc+Dec', ''], srpe: ['sRPE', 'AU'] };
+const SV_WDROP = { pct: 0.10, n: 28, min: 10, gap: 4 }; // 10 % below his average (last 28 answers, ≥ 10), 2 check-ins ≤ 4 days apart
+/** Players whose last two check-ins (that morning's and his previous one, ≤ 4 days before) are both 10 % or more below
+ * his average (his last 28 answers before each, at least 10). → { id: { prev, now, avg } } — as staff_email.well_drops. */
+function svWellDrops(hist, date) {
+  const out = {}, h = {};
+  if (!hist || !hist.days) return out;
+  hist.days.filter((d) => d.date <= date).sort((a, b) => (a.date < b.date ? -1 : 1)).forEach((d) => {
+    Object.entries(d.byId || {}).forEach(([id, v]) => { if (v != null) (h[id] = h[id] || []).push([d.date, v]); });
+  });
+  Object.entries(h).forEach(([id, x]) => {
+    const n = x.length - 1;
+    if (n < 1 || x[n][0] !== date || daysBetween(x[n - 1][0], date) > SV_WDROP.gap) return;
+    const avg = [n - 1, n].map((i) => { const b = x.slice(Math.max(0, i - SV_WDROP.n), i).map((y) => y[1]); return b.length >= SV_WDROP.min ? b.reduce((a, c) => a + c, 0) / b.length : null; });
+    if (avg.every((a, j) => a != null && (a - x[n - 1 + j][1]) / a >= SV_WDROP.pct)) out[id] = { prev: x[n - 1][1], now: x[n][1], avg: Math.round(avg[1]) };
+  });
+  return out;
+}
 function svWeekTxt(wk) {
   const part = wk.slice(0, 2).map((x) => { const [l, u] = SV_BIG[x.k] || [x.k, '']; return `${fmtN(x.v)}${u ? ' ' + u : ''} ${l} (z ${fmtSigned(x.z)})`; }).join(' and ');
   return `Week so far ${wk[0].z > 0 ? 'well above' : 'well below'} his usual weeks: ${part}.`;
@@ -201,7 +218,7 @@ function svOffGps(s) {
 }
 function svAttention(s) {
   const out = [], wday = TR.whist && TR.whist.days ? TR.whist.days.find((d) => d.date === s.date) : null; // wellness of that morning
-  const st = TR.staff && TR.staff.days ? TR.staff.days[s.date] : null, wkeys = (TR.staff && TR.staff.week_keys) || [];
+  const st = TR.staff && TR.staff.days ? TR.staff.days[s.date] : null, wkeys = (TR.staff && TR.staff.week_keys) || [], drops = svWellDrops(TR.whist, s.date);
   [...svFlat(s), ...svOffGps(s)].forEach((p) => {
     const partial = (s.kind === 'match' || p.cat === 'b') && (p.min || 0) < 75; // under 75 min a game is scaled: not flagged
     const ser = TR.workload && TR.workload.series ? TR.workload.series[p.id] : null, i = ser && ser.a7 ? daysBetween(ser.start, s.date) : -1;
@@ -210,17 +227,20 @@ function svAttention(s) {
     const big = partial ? [] : Object.keys(SV_BIG).map((k) => ({ k, z: svZ(p, k) }))
       .filter((x) => x.z != null && (x.z >= 2 || (x.z <= -2 && p.cat === 't'))).sort((x, y) => Math.abs(y.z) - Math.abs(x.z));
     const w = wday && wday.byId ? wday.byId[p.id] : null, well = w != null && w < 50 ? `Wellness ${w} % that morning — in the red.` : null;
+    const dr = well ? null : drops[p.id], wdrop = dr ? `Wellness below his average two mornings in a row: ${dr.prev} % then ${dr.now} % (his average ${dr.avg} %).` : null;
     const sx = st && st.players ? st.players[p.id] : null;
     const wk = sx && sx.wk ? wkeys.map((k, j) => ({ k, z: sx.wk[j], v: (sx.wv || [])[j] })).filter((x) => x.z != null && Math.abs(x.z) >= 2).sort((a, b) => Math.abs(b.z) - Math.abs(a.z)) : [];
-    if (ov.length || big.length || well || wk.length) {
-      out.push({ p, over: ov.length ? svOverTxt(ov) : null, well, big: big.length ? svBigTxt(p, big) : null, week: wk.length ? svWeekTxt(wk) : null,
-        sev: (ov.length ? 20 + ov.length : 0) + (well ? 15 : 0) + (big.length ? 5 : 0) + (wk.length ? 4 : 0) });
+    // ranked as the e-mail: the most serious reason (100 overload · 90 wellness red · 80 wellness down · 70 today · 60 week), + 3 per red, + 1 per orange
+    const its = [[ov.length, 100, 3], [well, 90, 3], [wdrop, 80, 1], [big.length, 70, 1], [wk.length, 60, 1]].filter((x) => x[0]);
+    if (its.length) {
+      out.push({ p, over: ov.length ? svOverTxt(ov) : null, well, wdrop, big: big.length ? svBigTxt(p, big) : null, week: wk.length ? svWeekTxt(wk) : null,
+        sev: Math.max(...its.map((x) => x[1])) + its.reduce((a, x) => a + x[2], 0) });
     }
   });
   return out.sort((a, b) => b.sev - a.sev);
 }
 function svAttentionHtml(s) {
-  const at = svAttention(s), n = svFlat(s).length + svOffGps(s).length, nOver = at.filter((a) => a.over).length, nWell = at.filter((a) => a.well).length, nBig = at.filter((a) => a.big || a.week).length;
+  const at = svAttention(s), n = svFlat(s).length + svOffGps(s).length, nOver = at.filter((a) => a.over).length, nWell = at.filter((a) => a.well).length, nDrop = at.filter((a) => a.wdrop).length, nBig = at.filter((a) => a.big || a.week).length;
   const mc = svMicrocycle(s), left = mc && mc.started ? mc.days.filter((d) => d.date > mc.today) : [], next = left.map((d) => d.md).join(' / ');
   const jok = [], top = new Map();
   if (left.length) {
@@ -243,14 +263,15 @@ function svAttentionHtml(s) {
       <div class="sv-plan below"><h4>Need a speed top-up${next ? ' · ' + next : ''}</h4><p>No run at 90 % of his max speed for 10 days or more (days since)${left.length ? ', or too far behind his high-speed target of the microcycle (done / target)' : ''}.</p>${shortN > 6 ? `<p class="sv-plan-hint"><b>${shortN} of ${n} players</b> are short of high-speed running — consider a speed-exposure block for everyone on ${next}.</p>` : ''}<div>${chips(tops)}</div></div>
     </div>` : '';
   const rows = at.map((a) => `<button type="button" class="sv-al" data-id="${a.p.id}">${avatarHtml(a.p.id, playerName(a.p.id), 30)}<b>${escapeHtml(playerName(a.p.id))}<small>${escapeHtml(svSub(a.p) || '')}</small></b>
-      <span class="sv-al-c">${a.over ? '<i class="sv-ch red">2 weeks overload</i>' : ''}${a.well ? '<i class="sv-ch red">wellness</i>' : ''}${a.big ? '<i class="sv-ch orange">big change today</i>' : ''}${a.week ? '<i class="sv-ch orange">week load</i>' : ''}</span>
-      <span class="sv-al-t">${escapeHtml([a.over, a.well, a.big, a.week].filter(Boolean).join(' '))}</span><i class="sv-al-go">›</i></button>`).join('');
+      <span class="sv-al-c">${a.over ? '<i class="sv-ch red">2 weeks overload</i>' : ''}${a.well ? '<i class="sv-ch red">wellness</i>' : ''}${a.wdrop ? '<i class="sv-ch orange">wellness down</i>' : ''}${a.big ? '<i class="sv-ch orange">big change today</i>' : ''}${a.week ? '<i class="sv-ch orange">week load</i>' : ''}</span>
+      <span class="sv-al-t">${escapeHtml([a.over, a.well, a.wdrop, a.big, a.week].filter(Boolean).join(' '))}</span><i class="sv-al-go">›</i></button>`).join('');
   return `<section class="panel">
     <div class="panel-head"><h2 class="panel-title small">Attention today</h2>
-      <span class="sv-sum">${at.length ? `<b>${at.length}</b> of ${n} players to look at<span class="sep"></span><i style="background:${Z_COL.high}"></i>${nOver} two weeks overload<i style="background:${Z_COL.high}"></i>${nWell} wellness in the red<i style="background:${Z_COL.above}"></i>${nBig} big change (today or week)` : '✓ No alert today'}</span></div>
+      <span class="sv-sum">${at.length ? `<b>${at.length}</b> of ${n} players to look at<span class="sep"></span>${[[nOver, Z_COL.high, 'two weeks overload'], [nWell, Z_COL.high, 'wellness in the red'], [nDrop, Z_COL.above, 'wellness down'], [nBig, Z_COL.above, 'big change (today or week)']]
+        .filter((x) => x[0]).map(([v, c, l]) => `<i style="background:${c}"></i>${v} ${l}`).join('')}` : '✓ No alert today'}</span></div>
     ${at.length ? `<div class="sv-als">${rows}</div>` : ''}
     ${plans}
-    <p class="panel-foot">Alerts only for: A:C above ${SV_OVER} two weeks in a row (distance, HI Acc+Dec, > 20 km/h, sprints) · wellness in the red that morning (< 50 %) · a load far from his usual today (z ≥ 2, or ≤ −2 in a full session) or this week so far (z ≥ 2 or ≤ −2 vs his usual weeks) · click a player for his full session. Speed exposure is in “Need a speed top-up”. Same rules as the staff e-mail.</p>
+    <p class="panel-foot">Alerts only for: A:C above ${SV_OVER} two weeks in a row (distance, HI Acc+Dec, > 20 km/h, sprints) · wellness in the red that morning (< 50 %), or 10 % below his average (his last 28 check-ins) two mornings in a row · a load far from his usual today (z ≥ 2, or ≤ −2 in a full session) or this week so far (z ≥ 2 or ≤ −2 vs his usual weeks) · click a player for his full session. Speed exposure is in “Need a speed top-up”. Same rules as the staff e-mail.</p>
   </section>`;
 }
 // ------------------------------------------------------------------ session table: the report's page design (Reports → PDF page 1)
