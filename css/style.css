@@ -1005,6 +1005,7 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .rp-v { flex: 0 0 38px; text-align: right; font-weight: 700; }
 .rp-txt .rp-v, .rp-chip .rp-v { flex: 1; text-align: center; }
 .rp-chip .rp-v { border-radius: 3px; padding: 2px 0; }
+.rp-rec { font-style: normal; color: #b07800; margin-left: 2px; font-size: .92em; } /* ★ a new max-speed record */
 .rp-bar { flex: 1; position: relative; height: 11px; }
 .rp-bar i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 2px; }
 .rp-bar i.rp-trk { background: var(--rp-track); }

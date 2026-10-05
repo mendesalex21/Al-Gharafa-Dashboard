@@ -317,6 +317,7 @@ function svTable(rows, cols, o = {}) {
     if (k === 'hacc' || k === 'hdec') return chip(`rgb(${rpLerp([238, 249, 232], [140, 214, 104], t01(k, v))})`, fmt(k, v));
     if (k === 'sprints') { const [bg, fg] = rpSprintColor(t01(k, v)); return chip(bg, fmt(k, v), fg); }
     if (k === 'days') { const [bg, fg] = rpDaysColor(v); return chip(bg, fmt(k, v), fg); }
+    if (k === 'pmax') return v >= 0.9 - 1e-9 ? chip(RP_GREEN[0], fmt(k, v) + rpRec(r), RP_GREEN[1]) : `<div class="rp-c rp-txt"><span class="rp-v">${fmt(k, v)}${rpRec(r)}</span></div>`; // ≥ 90 %: green · ★ record
     if (k === 'time' && o.full && r.pro && v < o.full * 0.9) return `<div class="rp-c rp-txt"><span class="rp-v sv-partial">${fmt(k, v)}</span></div>`;
     return `<div class="rp-c rp-txt"><span class="rp-v">${fmt(k, v)}</span></div>`;
   };
@@ -341,12 +342,12 @@ function svAvgRow(rows, cols, core) {
 function svTableHtml(s) {
   const full = s.minutes || Math.max(0, ...s.players.map((p) => p.min || 0));
   const rows = s.players.filter((p) => p.min > 0).map((p) => ({ id: p.id, type: p.type, pro: svPro(s, p.cat), time: p.min, rpe: p.rpe, mpm: p.mpm, td: p.td, d15: p.d15, d20: p.hit, d25: p.spr,
-    vmax: p.vmax, pmax: p.vmax_pct != null ? p.vmax_pct / 100 : null, days: p.days_hsv, sprints: p.spr_n, hacc: p.acc, hdec: p.dec, accdec: p.acc_dec }));
+    vmax: p.vmax, pmax: p.vmax_pct != null ? p.vmax_pct / 100 : null, rec: !!p.rec, days: p.days_hsv, sprints: p.spr_n, hacc: p.acc, hdec: p.dec, accdec: p.acc_dec }));
   const core = new Set(rtCore(s).map((p) => p.id));
   const team = svAvgRow(rows, SV_COLS, (r) => core.has(r.id));
   team.time = s.minutes;
   return svTable(rows, SV_COLS, { sort: SV.sort, team, full })
-    + `<div class="rt-leg"><span><i class="sv-lg-b" style="background:#6fb0ee"></i>player value</span><span><i class="sv-lg-b sv-lg-t"></i>team max (players of the ${s.group === 'compensatory' ? 'compensatory session' : 'team session'})</span><span><b class="rt-or">Orange time</b> = partial session</span><span>HIT Acc / Dec: lighter → darker = fewer → more</span><span>Days = since his last run ≥ 90 % of his max speed</span><span>Team avg = ${svGroupTxt(s)} only</span></div>`;
+    + `<div class="rt-leg"><span><i class="sv-lg-b" style="background:#6fb0ee"></i>player value</span><span><i class="sv-lg-b sv-lg-t"></i>team max (players of the ${s.group === 'compensatory' ? 'compensatory session' : 'team session'})</span><span><b class="rt-or">Orange time</b> = partial session</span><span>HIT Acc / Dec: lighter → darker = fewer → more</span><span>% Max Speed green = ≥ 90 % of his max speed · <i class="rp-rec">★</i> new max speed record</span><span>Days = since his last run ≥ 90 % of his max speed</span><span>Team avg = ${svGroupTxt(s)} only</span></div>`;
 }
 const svDrillName = (d) => String(d.name || 'Drill').replace(/^Game_/, '').replace(/(\d)(st|nd|rd|th)Half/i, '$1$2 half');
 function svDrillsHtml(s) {
@@ -472,7 +473,7 @@ function svSheetHtml(s, p, nav) {
   const per90 = p.mdref && p.mdref.per90;
   const unit = (k) => (SV_UNIT[k] ? `<small> ${SV_UNIT[k]}</small>` : '');
   const kp = (l, v, sub, warn) => `<div class="sv-k ${warn ? 'warn' : ''}"><span>${l}</span><b>${v}</b>${sub ? `<em>${sub}</em>` : ''}</div>`;
-  const kpis = `<div class="sv-kstrip">${kp('Time', `${fmtN(p.min)}<small> min</small>`, `session ${fmtN(s.minutes)}`)}${kp('RPE', fmtN(p.rpe), `sRPE ${fmtN(p.srpe)} AU`)}${kp('Intensity', `${fmtN(p.mpm)}<small> m/min</small>`, `team ${fmtN(s.team.mpm)}`)}${kp('Max speed', `${fmtN(p.vmax, 1)}<small> km/h</small>`, p.vmax_pct != null ? `${p.vmax_pct}% of max` : '')}${kp('Last ≥ 90% Vmax', p.days_hsv == null ? '—' : `${p.days_hsv}<small> ${p.days_hsv === 1 ? 'day' : 'days'}</small>`, p.days_hsv >= 10 ? 'exposure needed' : 'ago', p.days_hsv >= 10)}</div>`;
+  const kpis = `<div class="sv-kstrip">${kp('Time', `${fmtN(p.min)}<small> min</small>`, `session ${fmtN(s.minutes)}`)}${kp('RPE', fmtN(p.rpe), `sRPE ${fmtN(p.srpe)} AU`)}${kp('Intensity', `${fmtN(p.mpm)}<small> m/min</small>`, `team ${fmtN(s.team.mpm)}`)}${kp('Max speed', `${fmtN(p.vmax, 1)}<small> km/h</small>`, p.vmax_pct != null ? `${p.vmax_pct}% of max${p.rec ? ' · ★ new record' : ''}` : '')}${kp('Last ≥ 90% Vmax', p.days_hsv == null ? '—' : `${p.days_hsv}<small> ${p.days_hsv === 1 ? 'day' : 'days'}</small>`, p.days_hsv >= 10 ? 'exposure needed' : 'ago', p.days_hsv >= 10)}</div>`;
   const rows = SV_M.map(([key, l]) => {
     const v = p[key];
     if (v == null) return '';

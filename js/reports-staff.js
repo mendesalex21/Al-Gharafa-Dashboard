@@ -141,7 +141,7 @@ function rsCycle(D, C, s) {
   const mc = [['td', 'TD'], ['hit', '> 20'], ['acc_dec', 'Acc+Dec'], ['spr_n', 'Sprints']], wk = [['td', 'TD'], ['hit', '> 20'], ['acc_dec', 'Acc+Dec'], ['spr_n', 'Sprints']];
   const tpl = '160px repeat(4, minmax(0,0.68fr)) 14px repeat(4, minmax(0,1.5fr)) 14px 60px 84px';
   const from = (C.X.micro && C.X.micro.md[0]) || '';
-  const rowH = rpRowH(D, D.fullSession, RP_TABLE_H - 41, 25);
+  const rowH = rpRowH(D, D.fullSession, RP_TABLE_H - 41, 25), wkRec = new Set(((D.weekLoad && D.weekLoad.rows) || []).filter((w) => w.rec).map((w) => w.name));
   let html = `<div class="rs-tbl${rowH < 21 ? ' rp-tight' : ''}"><div class="rs-tr rs-gh" style="grid-template-columns:${tpl}"><span></span><span style="grid-column:span 4">MICROCYCLE SO FAR · ${rpEsc(from)}${from && from !== s.md ? ' → ' + rpEsc(s.md) : ''} vs his usual</span><span></span><span style="grid-column:span 4">WEEK SO FAR · Sun → today · value, bar = z vs his weeks</span><span></span><span style="grid-column:span 2">MAX SPEED</span></div>
     <div class="rs-tr rs-th" style="grid-template-columns:${tpl}"><span>Players</span>${mc.map(([, l]) => `<span>${l}</span>`).join('')}<span></span>${wk.map(([, l]) => `<span>${l}</span>`).join('')}<span></span><span>Days</span><span>This week</span></div>`;
   for (const p of D.positions.order) {
@@ -149,12 +149,12 @@ function rsCycle(D, C, s) {
     if (!g.length) continue;
     html += `<div class="rp-grp">${p}<small>${rpEsc(D.positions.labels[p])}</small></div>`;
     html += g.map((r) => {
-      const x = C.px(r.name) || {}, [dbg, dfg] = rpDaysColor(r.days);
+      const x = C.px(r.name) || {}, [dbg, dfg] = rpDaysColor(r.days), wrec = wkRec.has(r.name); // ★ a new max-speed record this week
       return `<div class="rs-tr rs-row" style="grid-template-columns:${tpl};height:${rowH}px"><span class="rp-nm">${rpFace(D, r.name)}${rpEsc(r.name)}</span>${mc.map(([k]) => `<span>${stChip(C.mc(r.name, k))}</span>`).join('')}<span></span>${wk.map(([k]) => `<span>${rsWeekCell(C.wv(r.name, k), C.wk(r.name, k))}</span>`).join('')}<span></span>
-        <span><span class="mz" style="background:${dbg};color:${dfg}">${r.days ?? '–'}</span></span><span class="rs-v">${x.vmax != null ? x.vmax.toFixed(1) + ' km/h' : '–'}</span></div>`;
+        <span><span class="mz" style="background:${dbg};color:${dfg}">${r.days ?? '–'}</span></span><span class="rs-v">${x.vmax != null ? x.vmax.toFixed(1) + ' km/h' : '–'}${wrec ? rpRec({ rec: true }) : ''}</span></div>`;
     }).join('');
   }
-  return html + `</div><div class="rp-legend">${ST_LEG5}<span>Week so far: value · bar and number = z vs the same days of his previous weeks</span><span>Days = days since his last run ≥ 90 % of max speed</span></div>`;
+  return html + `</div><div class="rp-legend">${ST_LEG5}<span>Week so far: value · bar and number = z vs the same days of his previous weeks</span><span>Days = days since his last run ≥ 90 % of max speed</span>${wkRec.size ? '<span><i class="rp-rec">★</i> new max speed record this week</span>' : ''}</div>`;
 }
 /** A week-so-far cell: his value, a bar from the middle (right = above his usual, left = below; full width = 3 SD) and z. */
 function rsWeekCell(v, z) {

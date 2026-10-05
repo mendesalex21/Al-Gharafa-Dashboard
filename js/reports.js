@@ -23,6 +23,8 @@ const RP_PHOTO_CACHE = 'rp-photos-v1'; // a replaced photo in Drive: bump the ve
 const RP_JS = ['https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'];
 const rpLerp = (a, b, t) => a.map((x, i) => Math.round(x + (b[i] - x) * t));
 // Days since the last exposure ≥ 90 % of max speed (thresholds from the handoff — to confirm with the staff)
+const RP_GREEN = ['#d5f2d5', '#1c6b1c']; // % max speed ≥ 90 % (the "Days" green)
+const rpRec = (r) => (r.rec ? '<i class="rp-rec" title="New max speed record">★</i>' : ''); // a new max-speed record
 const rpDaysColor = (d) => d == null ? ['#f0f1f5', '#6a6f80'] : d <= 5 ? ['#d5f2d5', '#1c6b1c'] : d <= 10 ? ['#fbd9c6', '#8a3b12'] : ['#f6c4c4', '#9b1c1c'];
 // light red: many sprints is not "bad", just highlighted (staff request); the number stays black
 const rpSprintColor = (t) => [`rgb(${rpLerp([254, 242, 242], [244, 172, 172], t)})`, '#111'];
@@ -44,8 +46,8 @@ function rpDoc(data, i, part = 'all') {
   const known = (n) => order.includes(data.pos[n]);
   // part: 'all' players · 't' the team session only · 'b' the B-team game only (days when both happened)
   const inPart = (r) => part === 'all' || (part === 'b') === (r[12] === 1);
-  const fullSession = s.full.filter((r) => known(r[0]) && inPart(r)).map(([name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro]) =>
-    ({ name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro: part === 'b' ? 1 : pro }));
+  const fullSession = s.full.filter((r) => known(r[0]) && inPart(r)).map(([name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro, , rec]) =>
+    ({ name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro: part === 'b' ? 1 : pro, rec: rec === 1 }));
   const pm = (s.parts && s.parts[part]) || {};
   const gameAvg = {};
   for (const k of ['td', 'd20', 'accdec', 'sprints']) {
@@ -57,13 +59,14 @@ function rpDoc(data, i, part = 'all') {
   for (let j = 0; j <= i; j++) {
     const x = data.sessions[j];
     if (x.date < from) continue;
-    for (const [name, time, , td, d15, d20, vmax, pmax, , sprints, accdec, pro] of x.full) {
+    for (const [name, time, , td, d15, d20, vmax, pmax, , sprints, accdec, pro, , rec] of x.full) {
       if (!known(name)) continue;
       const a = acc[name] || (acc[name] = { name, min: 0, td: 0, d15: 0, d20: 0, vmax: null, pmax: null, sprints: 0, accdec: 0, pro: 1 });
       a.pro = a.pro && pro; // an individual / adapted day this week keeps him out of the team max
       a.min += time || 0; a.td += td || 0; a.d15 += d15 || 0; a.d20 += d20 || 0; a.sprints += sprints || 0; a.accdec += accdec || 0;
       if (vmax != null && (a.vmax == null || vmax > a.vmax)) a.vmax = vmax;
       if (pmax != null && (a.pmax == null || pmax > a.pmax)) a.pmax = pmax;
+      if (rec === 1) a.rec = true; // a new max-speed record this week
     }
   }
   return {
@@ -118,6 +121,8 @@ function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H) {
       : `<div class="rp-c rp-chip"><span class="rp-v" style="background:rgb(${rpLerp([235, 244, 253], [110, 175, 240], t01(k, v))})">${rpFmt(k, v)}</span></div>`;
     if (k === 'sprints') { const [bg, fg] = rpSprintColor(t01(k, v)); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${rpFmt(k, v)}</span></div>`; }
     if (k === 'days') { const [bg, fg] = rpDaysColor(v); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${rpFmt(k, v)}</span></div>`; }
+    if (k === 'pmax' && v != null && v >= 0.9 - 1e-9) return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${RP_GREEN[0]};color:${RP_GREEN[1]}">${rpFmt(k, v)}${rpRec(r)}</span></div>`;
+    if (k === 'pmax') return `<div class="rp-c rp-txt"><span class="rp-v">${rpFmt(k, v)}${rpRec(r)}</span></div>`;
     return `<div class="rp-c rp-txt"><span class="rp-v">${rpFmt(k, v)}</span></div>`;
   };
   let html = `<div class="rp-tbl${rowH < 21 ? ' rp-tight' : ''}"><div class="rp-tr rp-th" style="grid-template-columns:${tpl}"><span>Players</span>${cols.map((k) => `<span>${RP_LABELS[k]}</span>`).join('')}</div>`;
@@ -128,7 +133,7 @@ function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H) {
     html += g.map((r) => `<div class="rp-tr rp-row" style="grid-template-columns:${tpl};height:${rowH}px"><span class="rp-nm">${rpFace(D, r.name)}${rpEsc(r.name)}</span>${cols.map((k) => cell(r, k)).join('')}</div>`).join('');
   }
   return html + `</div>
-  <div class="rp-legend"><span><b style="background:#6fb0ee"></b>player value</span><span><b style="background:#e6e8ee"></b>team max</span></div>`;
+  <div class="rp-legend"><span><b style="background:#6fb0ee"></b>player value</span><span><b style="background:#e6e8ee"></b>team max</span>${cols.includes('pmax') ? `<span><b style="background:${RP_GREEN[0]}"></b>≥ 90 % of his max speed</span>${rows.some((r) => r.rec) ? '<span><i class="rp-rec">★</i> new max speed record</span>' : ''}` : ''}</div>`;
 }
 
 /** Row height for a player table grouped by position: `space` px for the rows and group bands, at most `max`. */
