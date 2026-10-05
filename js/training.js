@@ -118,6 +118,7 @@ function renderSessions(opts) {
   withData('objectives', (d) => { TR.obj = d; drawSessions(); }, () => {});
   withData('workload', (d) => { TR.workload = d; drawSessions(); svRefresh(); }, () => {}); // A:C ratios (sheet + attention)
   withData('staff_report', (d) => { TR.staff = d; drawSessions(); }, () => {}); // the week until the match (its objectives)
+  withData('wellness_history', (d) => { TR.whist = d; drawSessions(); }, () => {}); // wellness of the session's morning (alerts)
   withData('wellness', (d) => { TR.wellness = d; svRefresh(); }, () => {}); // today's wellness ring of the player sheet
 }
 

@@ -173,11 +173,16 @@ function svInsights(s, plan, rd, left) {
 }
 
 // ------------------------------------------------------------------ Attention today
-// Real alerts only (the user's rules, 2026-10-05): A:C above 1.5 two weeks in a row, a load far from his usual today.
-// Speed exposure (no run at 90 % of his max speed for 10 days or more) goes to "Need a speed top-up", beside the jokers.
+// Real alerts only (the user's rules, 2026-10-05): A:C above 1.5 two weeks in a row, wellness in the red that morning, a
+// load far from his usual today (the MD) or this week so far (z ≥ 2 or ≤ −2). Speed exposure (no run at 90 % of his max
+// speed for 10 days or more) goes to "Need a speed top-up", beside the jokers. Same rules as the staff e-mail.
 const SV_OVER = 1.5; // A:C 7:28 above this this week and last week (the "14:35")
 const SV_AC_L = { td: 'distance', acc_dec: 'HI Acc+Dec', hit: '> 20 km/h', spr_n: 'sprints' };
 const SV_BIG = { td: ['distance', 'm'], d15: ['> 15 km/h', 'm'], hit: ['> 20 km/h', 'm'], spr: ['> 25 km/h', 'm'], spr_n: ['sprints', ''], acc_dec: ['Acc+Dec', ''], srpe: ['sRPE', 'AU'] };
+function svWeekTxt(wk) {
+  const part = wk.slice(0, 2).map((x) => { const [l, u] = SV_BIG[x.k] || [x.k, '']; return `${fmtN(x.v)}${u ? ' ' + u : ''} ${l} (z ${fmtSigned(x.z)})`; }).join(' and ');
+  return `Week so far ${wk[0].z > 0 ? 'well above' : 'well below'} his usual weeks: ${part}.`;
+}
 function svOverTxt(ov) {
   const f = (x) => `${x.b.toFixed(2)} → ${x.a.toFixed(2)}`;
   if (ov.length === 1) return `Overload two weeks in a row on ${SV_AC_L[ov[0].k]}: A:C ${f(ov[0])}.`;
@@ -186,23 +191,36 @@ function svOverTxt(ov) {
 function svBigTxt(p, big) {
   const hs = big.some((x) => ['d15', 'hit', 'spr', 'spr_n'].includes(x.k)), where = p.cat === 'i' ? ' in his individual session' : p.cat === 'c' ? ' in his compensatory session' : '';
   const part = big.slice(0, 2).map((x) => { const [l, u] = SV_BIG[x.k]; return `${fmtN(p[x.k])}${u ? ' ' + u : ''} ${l} (usual ${fmtN(svUsual(p, x.k))})`; }).join(' and ');
-  return `${big[0].z > 0 ? 'Much more' : 'Much less'} ${hs ? 'high-speed running' : 'load'} than usual${where}: ${part}.`;
+  return `${big[0].z > 0 ? 'Much more' : 'Much less'} ${hs ? 'high-speed running' : 'load'} than usual today${where}: ${part}.`;
+}
+/** Available players with no GPS in the session (individual work…): their A:C, wellness and week still count (as in the e-mail). */
+function svOffGps(s) {
+  const st = {};
+  ((TR.workload && TR.workload.players) || []).forEach((p) => { st[p.id] = p.status; });
+  return (s.absent || []).filter((a) => st[a.id] === 'available');
 }
 function svAttention(s) {
-  const out = [];
-  svFlat(s).forEach((p) => {
+  const out = [], wday = TR.whist && TR.whist.days ? TR.whist.days.find((d) => d.date === s.date) : null; // wellness of that morning
+  const st = TR.staff && TR.staff.days ? TR.staff.days[s.date] : null, wkeys = (TR.staff && TR.staff.week_keys) || [];
+  [...svFlat(s), ...svOffGps(s)].forEach((p) => {
     const partial = (s.kind === 'match' || p.cat === 'b') && (p.min || 0) < 75; // under 75 min a game is scaled: not flagged
     const ser = TR.workload && TR.workload.series ? TR.workload.series[p.id] : null, i = ser && ser.a7 ? daysBetween(ser.start, s.date) : -1;
     const ov = i >= 0 ? SV_AC.map(([k]) => ({ k, a: ser.a7[k] ? ser.a7[k][i] : null, b: ser.a14[k] ? ser.a14[k][i] : null }))
       .filter((x) => x.a != null && x.b != null && x.a > SV_OVER && x.b > SV_OVER).sort((x, y) => y.a - x.a) : [];
     const big = partial ? [] : Object.keys(SV_BIG).map((k) => ({ k, z: svZ(p, k) }))
       .filter((x) => x.z != null && (x.z >= 2 || (x.z <= -2 && p.cat === 't'))).sort((x, y) => Math.abs(y.z) - Math.abs(x.z));
-    if (ov.length || big.length) out.push({ p, over: ov.length ? svOverTxt(ov) : null, big: big.length ? svBigTxt(p, big) : null, sev: (ov.length ? 10 + ov.length : 0) + (big.length ? 5 : 0) });
+    const w = wday && wday.byId ? wday.byId[p.id] : null, well = w != null && w < 50 ? `Wellness ${w} % that morning — in the red.` : null;
+    const sx = st && st.players ? st.players[p.id] : null;
+    const wk = sx && sx.wk ? wkeys.map((k, j) => ({ k, z: sx.wk[j], v: (sx.wv || [])[j] })).filter((x) => x.z != null && Math.abs(x.z) >= 2).sort((a, b) => Math.abs(b.z) - Math.abs(a.z)) : [];
+    if (ov.length || big.length || well || wk.length) {
+      out.push({ p, over: ov.length ? svOverTxt(ov) : null, well, big: big.length ? svBigTxt(p, big) : null, week: wk.length ? svWeekTxt(wk) : null,
+        sev: (ov.length ? 20 + ov.length : 0) + (well ? 15 : 0) + (big.length ? 5 : 0) + (wk.length ? 4 : 0) });
+    }
   });
   return out.sort((a, b) => b.sev - a.sev);
 }
 function svAttentionHtml(s) {
-  const at = svAttention(s), n = svFlat(s).length, nOver = at.filter((a) => a.over).length, nBig = at.filter((a) => a.big).length;
+  const at = svAttention(s), n = svFlat(s).length + svOffGps(s).length, nOver = at.filter((a) => a.over).length, nWell = at.filter((a) => a.well).length, nBig = at.filter((a) => a.big || a.week).length;
   const mc = svMicrocycle(s), left = mc && mc.started ? mc.days.filter((d) => d.date > mc.today) : [], next = left.map((d) => d.md).join(' / ');
   const jok = [], top = new Map();
   if (left.length) {
@@ -225,14 +243,14 @@ function svAttentionHtml(s) {
       <div class="sv-plan below"><h4>Need a speed top-up${next ? ' · ' + next : ''}</h4><p>No run at 90 % of his max speed for 10 days or more (days since)${left.length ? ', or too far behind his high-speed target of the microcycle (done / target)' : ''}.</p>${shortN > 6 ? `<p class="sv-plan-hint"><b>${shortN} of ${n} players</b> are short of high-speed running — consider a speed-exposure block for everyone on ${next}.</p>` : ''}<div>${chips(tops)}</div></div>
     </div>` : '';
   const rows = at.map((a) => `<button type="button" class="sv-al" data-id="${a.p.id}">${avatarHtml(a.p.id, playerName(a.p.id), 30)}<b>${escapeHtml(playerName(a.p.id))}<small>${escapeHtml(svSub(a.p) || '')}</small></b>
-      <span class="sv-al-c">${a.over ? '<i class="sv-ch red">2 weeks overload</i>' : ''}${a.big ? '<i class="sv-ch orange">big change today</i>' : ''}</span>
-      <span class="sv-al-t">${escapeHtml([a.over, a.big].filter(Boolean).join(' '))}</span><i class="sv-al-go">›</i></button>`).join('');
+      <span class="sv-al-c">${a.over ? '<i class="sv-ch red">2 weeks overload</i>' : ''}${a.well ? '<i class="sv-ch red">wellness</i>' : ''}${a.big ? '<i class="sv-ch orange">big change today</i>' : ''}${a.week ? '<i class="sv-ch orange">week load</i>' : ''}</span>
+      <span class="sv-al-t">${escapeHtml([a.over, a.well, a.big, a.week].filter(Boolean).join(' '))}</span><i class="sv-al-go">›</i></button>`).join('');
   return `<section class="panel">
     <div class="panel-head"><h2 class="panel-title small">Attention today</h2>
-      <span class="sv-sum">${at.length ? `<b>${at.length}</b> of ${n} players to look at<span class="sep"></span><i style="background:${Z_COL.high}"></i>${nOver} two weeks overload<i style="background:${Z_COL.above}"></i>${nBig} big change today` : '✓ No alert today'}</span></div>
+      <span class="sv-sum">${at.length ? `<b>${at.length}</b> of ${n} players to look at<span class="sep"></span><i style="background:${Z_COL.high}"></i>${nOver} two weeks overload<i style="background:${Z_COL.high}"></i>${nWell} wellness in the red<i style="background:${Z_COL.above}"></i>${nBig} big change (today or week)` : '✓ No alert today'}</span></div>
     ${at.length ? `<div class="sv-als">${rows}</div>` : ''}
     ${plans}
-    <p class="panel-foot">Alerts only for: A:C above ${SV_OVER} two weeks in a row (distance, HI Acc+Dec, > 20 km/h, sprints) · a load far from his usual today (z ≥ 2, or ≤ −2 in a full session) · click a player for his full session. Speed exposure is in “Need a speed top-up”.</p>
+    <p class="panel-foot">Alerts only for: A:C above ${SV_OVER} two weeks in a row (distance, HI Acc+Dec, > 20 km/h, sprints) · wellness in the red that morning (< 50 %) · a load far from his usual today (z ≥ 2, or ≤ −2 in a full session) or this week so far (z ≥ 2 or ≤ −2 vs his usual weeks) · click a player for his full session. Speed exposure is in “Need a speed top-up”. Same rules as the staff e-mail.</p>
   </section>`;
 }
 // ------------------------------------------------------------------ session table: the report's page design (Reports → PDF page 1)
@@ -358,7 +376,9 @@ window.addEventListener('resize', svScrollbarVar);
 function svMount(s) {
   svScrollbarVar();
   document.getElementById('sv-attention').innerHTML = svAttentionHtml(s);
-  document.querySelectorAll('#sv-attention [data-id]').forEach((r) => r.addEventListener('click', () => svOpen(s, r.dataset.id)));
+  document.querySelectorAll('#sv-attention [data-id]').forEach((r) => r.addEventListener('click', () => { // no GPS today: his player page
+    if (svFlat(s).some((x) => x.id === r.dataset.id)) svOpen(s, r.dataset.id); else switchView('player', { player: r.dataset.id });
+  }));
   document.querySelectorAll('#sv-attention [data-more]').forEach((b) => b.addEventListener('click', () => { b.closest('.sv-plan').classList.add('all'); b.remove(); }));
   document.querySelectorAll('#sv-attention [data-allcards]').forEach((b) => b.addEventListener('click', () => { b.previousElementSibling.classList.add('all'); b.remove(); }));
   svBindIndividual(s);
