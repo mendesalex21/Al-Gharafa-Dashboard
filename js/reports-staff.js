@@ -2,7 +2,7 @@
  * Reports — staff version of the training report (mockup "staff3", chosen by the staff on 2026-10-02).
  * Pages: full table + team strip · TD & >20 km/h · Acc+Dec & sprints (bar colour = the player's z vs his usual MD of the
  * same microcycle type; grey = individual / rehab session, not compared) · A:C 7:28 and 14:35 · drills summary ·
- * team microcycle so far · players microcycle & week so far.
+ * team microcycle with the objectives until the match · players microcycle & week so far.
  * Data: the `staff_report` payload (sync/build.py → build_staff_report), one block per training day.
  */
 const STZ = { below: '#2a78d6', on: '#34c759', above: '#ff9f0a', high: '#e5484d' };
@@ -78,51 +78,62 @@ function rsAcPanel(D, C, key, title) {
 }
 
 // ---------------------------------------------------------------- page 6: team, microcycle so far — dot = this week, grey bar = usual range of that MD
-function rsProfile(C, k, title, unit) {
-  const days = [...C.X.profile, ...(C.X.plan || [])], W = 600, H = 255, padL = 10, padB = 36, padT = 24; // done days, then planned
-  const slots = [...days.map((d) => d.md), 'MD'], bw = Math.max(30, Math.min(52, (W - padL) / slots.length - 12)), hw = bw / 2;
-  const pts = days.map((d) => d[k] && d[k][0] != null ? d[k] : null);
-  const max = Math.max(1, ...days.map((d) => (d[k] ? Math.max(d[k][0] || 0, d[k][3] || 0) : 0))) * 1.12;
-  const x = (i) => padL + (i + 0.5) * ((W - padL) / slots.length), y = (v) => padT + (1 - v / max) * (H - padT - padB);
-  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">`;
-  slots.forEach((md, i) => {
-    const d = days[i], p = d && d[k];
-    if (d) {
-      if (p && p[2] != null && p[3] != null) svg += `<rect x="${x(i) - hw}" y="${y(p[3])}" width="${bw}" height="${Math.max(3, y(p[2]) - y(p[3]))}" rx="7" fill="${d.fut ? '#f1f2f6' : '#e9ebf1'}"${d.fut ? ' stroke="#d5d8e0" stroke-dasharray="3 3"' : ''}/>`;
-      if (p && p[1] != null) svg += `<line x1="${x(i) - hw}" x2="${x(i) + hw}" y1="${y(p[1])}" y2="${y(p[1])}" stroke="#b8bcc8" stroke-width="2"/>`;
-      svg += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="10.5" fill="#8a8f9e">${stDay(d.date, { weekday: 'short', day: 'numeric' })}${d.comp ? ' · comp.' : d.fut && !d.planned ? ' · no plan' : ''}</text>`;
-    } else {
-      svg += `<rect x="${x(i) - hw}" y="${padT}" width="${bw}" height="${H - padT - padB}" rx="7" fill="none" stroke="#c9ccd6" stroke-dasharray="4 4"/><text x="${x(i)}" y="${(padT + H - padB) / 2}" text-anchor="middle" font-size="11" fill="#8a8f9e" font-weight="700">match</text>`;
-    }
-    svg += `<text x="${x(i)}" y="${H - 20}" text-anchor="middle" font-size="12" font-weight="800" fill="${d && d.fut ? '#7d86b8' : '#16269e'}">${rpEsc(md)}</text>`;
-  });
-  const done = pts.map((p, i) => (p && !days[i].fut ? i : -1)).filter((i) => i >= 0), plan = pts.map((p, i) => (p && days[i].fut ? i : -1)).filter((i) => i >= 0);
-  const line = (ix, dash) => (ix.length > 1 ? `<polyline points="${ix.map((i) => `${x(i)},${y(pts[i][0])}`).join(' ')}" fill="none" stroke="#16269e" stroke-width="2" stroke-opacity="${dash ? '.35' : '.5'}"${dash ? ' stroke-dasharray="5 4"' : ''}/>` : '');
-  svg += line(done, false) + line([...done.slice(-1), ...plan], true);
-  pts.forEach((p, i) => {
-    if (!p) return;
-    if (days[i].fut) { // planned in the Session Plan: a hollow dot, its forecast written above
-      svg += `<circle cx="${x(i)}" cy="${y(p[0])}" r="7" fill="#fff" stroke="#16269e" stroke-width="2.5"/><text x="${x(i)}" y="${y(p[0]) - 13}" text-anchor="middle" font-size="12" font-weight="700" fill="#5a63a8">${stK(p[0])}</text>`;
-      return;
-    }
-    const [v, , , , z] = p, c = ST_DOT[stMz(z)] || '#8a8f9e';
-    svg += `<circle cx="${x(i)}" cy="${y(v)}" r="8" fill="${c}" stroke="#fff" stroke-width="2.5"/><text x="${x(i)}" y="${y(v) - 14}" text-anchor="middle" font-size="12.5" font-weight="800" fill="#111">${stK(v)}</text>`;
-    if (z != null && stMz(z) !== 'ok') svg += `<text x="${x(i) + 13}" y="${y(v) + 4}" font-size="10.5" font-weight="800" fill="${c}">${stSigned(z)}</text>`;
-  });
-  return `<div class="rs-prof"><div class="rs-proft">${title}<span>${unit}</span></div>${svg}</svg></div>`;
+/** The whole microcycle of one metric, above its chart: done (green, a tick between days), still to do (dashed blue, a
+ * tick and the MD of each day), the team's usual by today (black tick). */
+function rsMicroBar(C, k) {
+  const t = (C.X.tot || {})[k];
+  if (!t) return '';
+  const [target, done, udone, left] = t, days = C.X.profile.filter((d) => d[k]), fut = (C.X.plan || []).filter((d) => d[k]);
+  const W = 250, H = 16, scale = Math.max(target || 0, (done || 0) + (left || 0)) || 1, px = (v) => (v || 0) / scale * W;
+  const md = (x, w, txt, col) => (w > 28 ? `<text x="${x + w / 2}" y="${H - 4.5}" text-anchor="middle" font-size="8.5" font-weight="800" fill="${col}">${rpEsc(txt)}</text>` : '');
+  let x0 = 0, g = `<rect x="0" y="1" width="${W}" height="${H - 2}" rx="5" fill="#f4f5f8"/>`;
+  days.forEach((d) => { const w = px(d[k][0]); g += `<rect x="${x0}" y="1" width="${w}" height="${H - 2}" fill="#34c759"/>${md(x0, w, d.md, '#fff')}`; x0 += w; g += `<line x1="${x0}" x2="${x0}" y1="1" y2="${H - 1}" stroke="#fff" stroke-width="1.5"/>`; });
+  fut.forEach((d) => { const w = px(d[k][0]); g += `<rect x="${x0 + 0.75}" y="1.75" width="${Math.max(0, w - 1.5)}" height="${H - 3.5}" rx="2" fill="rgba(42,120,214,.1)" stroke="#2a78d6" stroke-width="1.2" stroke-dasharray="3 2"/>${md(x0, w, d.md, '#1d5fae')}`; x0 += w; });
+  if (days.length) g += `<line x1="${px(udone)}" x2="${px(udone)}" y1="0" y2="${H}" stroke="#111" stroke-width="2.5"/>`;
+  const vs = days.length && udone ? Math.round((done / udone - 1) * 100) : null, col = vs == null ? '' : Math.abs(vs) < 10 ? '#1f7a37' : Math.abs(vs) < 25 ? '#c27c0e' : '#d64545';
+  return `<div class="rs-mbar"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${g}</svg><span>done <b>${stK(done)}</b>${vs != null ? ` <b style="color:${col}">${vs > 0 ? '+' : vs < 0 ? '−' : ''}${Math.abs(vs)} %</b> vs usual` : ''} · to do <b>${stK(left)}</b> (${fut.length} day${fut.length === 1 ? '' : 's'}) · target <b>${stK(target)}</b></span></div>`;
 }
-function rsMicro(C, s) {
-  const n = C.X.next, ac = C.X.team_ac || {};
-  const dd = n ? Math.round((new Date(n.date + 'T12:00:00Z') - new Date(s.date + 'T12:00:00Z')) / 864e5) : null;
-  const next = n ? `<span class="rs-next">${typeof crestHtml === 'function' ? crestHtml(n.opponent, 22) : ''} Next: <b>${rpEsc([n.competition, n.round].filter(Boolean).join(' '))} · ${rpEsc(n.opponent || '')}</b> · ${dd === 1 ? 'tomorrow' : dd === 0 ? 'today' : 'in ' + dd + ' days'} ${rpEsc(n.time || '')}</span>` : '';
+/** One metric day by day: done = solid bar (colour = z vs usual), each day left = dashed bar up to its objective, black
+ * line = the team's usual for that MD, grey band = usual range (p25–p75), then the match. */
+function rsProfile(C, k, title, unit) {
+  const days = [...C.X.profile.map((d) => ({ ...d, done: 1 })), ...(C.X.plan || [])], W = 600, H = 250, L = 44, R = 8, T = 22, B = 46;
+  const n = days.length + 1, iw = W - L - R, ih = H - T - B, step = iw / n, bw = Math.min(48, step * 0.48);
+  const raw = Math.max(1, ...days.flatMap((d) => (d[k] ? [d[k][0] || 0, d[k][1] || 0, d[k][3] || 0] : [0]))) * 1.14;
+  const e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e, top = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e;
+  const y = (v) => T + ih * (1 - Math.min(v, top) / top), base = y(0);
+  let g = '';
+  [0, top / 2, top].forEach((t) => { g += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="#eceef3"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end" font-size="10" fill="#9aa0ad">${stK(t)}</text>`; });
+  days.forEach((d, i) => {
+    const x = L + step * (i + 0.5), bx = x - bw / 2, p = d[k], lab = [];
+    if (p) {
+      if (p[2] != null && p[3] != null) g += `<rect x="${bx - 8}" y="${y(p[3])}" width="${bw + 16}" height="${Math.max(3, y(p[2]) - y(p[3]))}" rx="6" fill="#eef0f4"/>`;
+      if (d.done && p[0] != null) {
+        const yy = y(p[0]), col = stZCol(p[4]);
+        g += `<rect x="${bx}" y="${yy}" width="${bw}" height="${Math.max(1.5, base - yy)}" rx="5" fill="${col}"/>`;
+        lab.push(`<text x="${x}" y="${Math.max(12, yy - 7)}" text-anchor="middle" font-size="12" font-weight="800" fill="#111" stroke="#fff" stroke-width="3" paint-order="stroke">${stK(p[0])}</text>`);
+        if (p[4] != null && stLvl(p[4]) !== 'on') lab.push(`<text x="${x + bw / 2 + 5}" y="${yy + 12}" font-size="10" font-weight="800" fill="${col}">${stSigned(p[4])}</text>`);
+      } else if (p[0] != null) {
+        const yo = y(p[0]);
+        g += `<rect x="${bx + 1}" y="${yo}" width="${bw - 2}" height="${Math.max(1, base - yo)}" rx="5" fill="rgba(42,120,214,.08)" stroke="#2a78d6" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+        lab.push(`<text x="${x}" y="${Math.max(12, yo - 7)}" text-anchor="middle" font-size="12" font-weight="800" fill="#1d5fae" stroke="#fff" stroke-width="3" paint-order="stroke">${stK(p[0])}</text>`);
+      }
+      if (p[1] != null) g += `<line x1="${bx - 8}" x2="${bx + bw + 8}" y1="${y(p[1])}" y2="${y(p[1])}" stroke="#111" stroke-width="2.5" stroke-linecap="round"/>`;
+    }
+    g += lab.join('') + `<text x="${x}" y="${H - 20}" text-anchor="middle" font-size="11.5" font-weight="800" fill="${d.done ? '#16269e' : '#7d86b8'}">${rpEsc(d.md)}</text><text x="${x}" y="${H - 6}" text-anchor="middle" font-size="10" fill="#8a8f9e">${stDay(d.date, { weekday: 'short', day: 'numeric' })}</text>`;
+  });
+  const xm = L + step * (n - 0.5);
+  g += `<rect x="${xm - bw / 2}" y="${T}" width="${bw}" height="${ih}" rx="8" fill="none" stroke="#c9ccd6" stroke-dasharray="4 4"/><text x="${xm}" y="${T + ih / 2}" text-anchor="middle" font-size="11" font-weight="700" fill="#8a8f9e">match</text>`
+    + `<text x="${xm}" y="${H - 20}" text-anchor="middle" font-size="11.5" font-weight="800" fill="#16269e">MD</text>${C.X.next ? `<text x="${xm}" y="${H - 6}" text-anchor="middle" font-size="10" fill="#8a8f9e">${stDay(C.X.next.date, { weekday: 'short', day: 'numeric' })}</text>` : ''}`;
+  return `<div class="rs-prof"><div class="rs-proft">${title}<span>${unit}</span></div>${rsMicroBar(C, k)}<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">${g}</svg></div>`;
+}
+function rsMicro(C) {
+  const ac = C.X.team_ac || {};
   const body = C.X.profile.length || (C.X.plan || []).length
-    ? `<div class="rs-profs">${rsProfile(C, 'td', 'TOTAL DISTANCE', 'm')}${rsProfile(C, 'hit', 'DISTANCE > 20 km/h', 'm')}${rsProfile(C, 'acc_dec', 'HIGH ACC + DEC', '')}${rsProfile(C, 'srpe', 'SESSION × RPE', 'AU')}</div>`
+    ? `<div class="rs-profs rs-obj">${rsProfile(C, 'td', 'TOTAL DISTANCE', 'm')}${rsProfile(C, 'hit', 'DISTANCE > 20 km/h', 'm')}${rsProfile(C, 'acc_dec', 'HIGH ACC + DEC', '')}${rsProfile(C, 'srpe', 'SESSION × RPE', 'AU')}</div>`
     : '<div class="rs-profs"><span class="rp-empty">No usual reference for these days yet</span></div>';
-  const comp = C.X.profile.some((d) => d.comp) ? ' · comp. = compensatory session (the players who did not play), vs the usual compensatory session' : '';
-  const planned = (C.X.plan || []).length ? ' · hollow dot = planned in the Session Plan (its forecast; sRPE is not forecast) · dashed bar = a day still to come' : '';
-  return `<div class="rs-intro"><span>Team · each dot = this week${planned} · grey bar = the team's usual range for that MD (p25–p75) in a ${rpEsc(C.X.cycle || '')} microcycle · line = usual average · z shown when not usual${comp}</span>${next}</div>
-    ${body}
-    <div class="rs-acrow"><span class="rs-acl">Team A:C 7:28 today</span>${[['td', 'Total distance'], ['hit', 'HIT > 20'], ['acc_dec', 'Acc + Dec'], ['srpe', 'sRPE']].map(([k, l]) => `<div class="rs-act"><i style="background:${stAcCol(ac[k])}"></i>${l}<b>${ac[k] != null ? ac[k].toFixed(2) : '–'}</b></div>`).join('')}</div>`;
+  const lg = '<span class="rs-olg"><i style="background:#34c759"></i>done</span><span class="rs-olg"><i class="ob"></i>objective</span><span class="rs-olg"><i style="height:3px;background:#111"></i>usual</span><span class="rs-olg"><i style="background:#eef0f4"></i>usual range</span><span class="rs-olg"><b>|</b> usual by today</span>';
+  return `${body}
+    <div class="rs-acrow rs-foot"><span class="rs-legs">${lg}</span><span class="rs-acl">Team A:C 7:28 today</span>${[['td', 'Total distance'], ['hit', 'HIT > 20'], ['acc_dec', 'Acc + Dec'], ['srpe', 'sRPE']].map(([k, l]) => `<div class="rs-act"><i style="background:${stAcCol(ac[k])}"></i>${l}<b>${ac[k] != null ? ac[k].toFixed(2) : '–'}</b></div>`).join('')}</div>`;
 }
 
 // ---------------------------------------------------------------- page 7: players, microcycle so far + week so far (z chips) + speed
@@ -176,10 +187,10 @@ function rpStaffPages(D, S) {
   const drills = (D.drills || []).filter((d) => d.rows.length), cols = rpDrillColumns(drills);
   for (let k = 0; k < cols.length; k += 4) pages.push(rpHeader('DRILLS SUMMARY', title, [['WEEK', s.week], ['MD', s.md], ['DRILLS', drills.length], ['N SESSION', s.id]]) + rpDrillBoards(D, cols.slice(k, k + 4)));
   const from = X.micro ? X.micro.from : s.date;
-  const planDays = X.plan || [], toMatch = X.next ? X.next.date : null;
-  pages.push(rpHeader(planDays.length ? 'TEAM · MICROCYCLE · DONE AND PLANNED' : 'TEAM · MICROCYCLE SO FAR',
-    `${from !== s.date ? short(from) + ' – ' : ''}${short(s.date)} · up to ${s.md}${planDays.length && toMatch ? ` · then planned until the match (${short(toMatch)})` : ''}`,
-    [['MICROCYCLE', cycle], ['WEEK', s.week], ['SESSIONS', String(X.micro ? X.micro.md.length : X.profile.length)]]) + rsMicro(C, s));
+  const first = (X.profile[0] || (X.plan || [])[0] || {}).date || from, toMatch = X.next ? X.next.date : null;
+  pages.push(rpHeader('TEAM · MICROCYCLE · OBJECTIVES UNTIL THE MATCH',
+    `${short(first)}${toMatch ? ' – ' + short(toMatch) : ''} · ${X.profile.length ? `done up to ${s.md} (${stDay(s.date, { weekday: 'short', day: 'numeric' })})` : 'objectives until the match'}`,
+    [['MICROCYCLE', cycle], ['WEEK', s.week], ['NEXT', X.next ? [X.next.competition, X.next.opponent].filter(Boolean).join(' · ') : '—']]) + rsMicro(C));
   pages.push(rpHeader('MICROCYCLE & WEEK · PLAYER BY PLAYER', title, [['MD', s.md], ['MICROCYCLE', cycle], ['PLAYERS', String(D.fullSession.length)]]) + rsCycle(D, C, s));
   return pages.map((p) => `<div class="rp-page rp-staff">${p}</div>`).join('');
 }
