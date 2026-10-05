@@ -550,6 +550,9 @@ function splBuild() {
   // minutes written in the rows: the planned ones, or the ones set after the session (the drill really lasted longer)
   const plan = p.drills.map((d, i) => ({ i, no: i + 1, name: splName(d.name), planned: Number(d.min) || 0, min: Number(d.act) || Number(d.min) || 0, chk: !!d.chk, own: SPL_NOT_TEAM.test(splName(d.name)) }));
   const titleOfRow = (r) => String(r['Drill Title'] || '').trim();
+  // individual work in the export ("Individual-Training") but none in the plan: an INDIVIDUAL drill after the team drills,
+  // each player's own minutes (his Excel: INDIVIDUAL, or Rehab for a player in rehab, numbered after the team drills)
+  if (!plan.some((d) => d.own) && drillRows.some((r) => /individual|rehab/i.test(titleOfRow(r)))) plan.push({ i: -1, no: plan.length + 1, name: 'INDIVIDUAL', planned: 0, min: 0, chk: false, own: true });
   const seen = [...new Set(drillRows.map(titleOfRow).filter(Boolean))];
   const drills = {}, mapping = [];
   seen.forEach((t) => {
