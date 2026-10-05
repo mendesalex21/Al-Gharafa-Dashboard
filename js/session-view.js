@@ -1,7 +1,8 @@
 /**
  * Training › Sessions — the individual part ("exceptions first, detail on demand"):
- *  · Attention today: players outside their usual range, speed exposure, high RPE — and, for the days left before the
- *    match, joker candidates (high-speed target of the microcycle already reached) and players needing a top-up;
+ *  · Attention today: the real alerts only — A:C above 1.5 two weeks in a row, a load far from his usual today (one line
+ *    per player) — then joker candidates and players needing a speed top-up (no run at 90 % of his max speed for 10
+ *    days, or behind his high-speed target of the microcycle);
  *  · the compact table (bar = value, colour = z vs his usual for this MD tag and microcycle type, tick = his usual)
  *    or the four ranking panels (distance / m·min, high-intensity running, Acc + Dec, sprints);
  *  · the player sheet (drawer): today vs his usual, vs the team and his match, and his microcycle — done so far vs
@@ -172,65 +173,68 @@ function svInsights(s, plan, rd, left) {
 }
 
 // ------------------------------------------------------------------ Attention today
-const SV_A = { td: 'Total distance', d15: '> 15 km/h', hit: '> 20 km/h', spr: '> 25 km/h', acc_dec: 'Acc + Dec', srpe: 'sRPE' };
+// Real alerts only (the user's rules, 2026-10-05): A:C above 1.5 two weeks in a row, a load far from his usual today.
+// Speed exposure (no run at 90 % of his max speed for 10 days or more) goes to "Need a speed top-up", beside the jokers.
+const SV_OVER = 1.5; // A:C 7:28 above this this week and last week (the "14:35")
+const SV_AC_L = { td: 'distance', acc_dec: 'HI Acc+Dec', hit: '> 20 km/h', spr_n: 'sprints' };
+const SV_BIG = { td: ['distance', 'm'], d15: ['> 15 km/h', 'm'], hit: ['> 20 km/h', 'm'], spr: ['> 25 km/h', 'm'], spr_n: ['sprints', ''], acc_dec: ['Acc+Dec', ''], srpe: ['sRPE', 'AU'] };
+function svOverTxt(ov) {
+  const f = (x) => `${x.b.toFixed(2)} → ${x.a.toFixed(2)}`;
+  if (ov.length === 1) return `Overload two weeks in a row on ${SV_AC_L[ov[0].k]}: A:C ${f(ov[0])}.`;
+  return `Overload two weeks in a row on ${ov.length === 4 ? 'all four loads' : ov.map((x) => SV_AC_L[x.k]).join(' and ')} (${ov.slice(0, 2).map((x) => `${SV_AC_L[x.k]} ${f(x)}`).join(', ')}).`;
+}
+function svBigTxt(p, big) {
+  const hs = big.some((x) => ['d15', 'hit', 'spr', 'spr_n'].includes(x.k)), where = p.cat === 'i' ? ' in his individual session' : p.cat === 'c' ? ' in his compensatory session' : '';
+  const part = big.slice(0, 2).map((x) => { const [l, u] = SV_BIG[x.k]; return `${fmtN(p[x.k])}${u ? ' ' + u : ''} ${l} (usual ${fmtN(svUsual(p, x.k))})`; }).join(' and ');
+  return `${big[0].z > 0 ? 'Much more' : 'Much less'} ${hs ? 'high-speed running' : 'load'} than usual${where}: ${part}.`;
+}
 function svAttention(s) {
   const out = [];
-  let calm = 0;
   svFlat(s).forEach((p) => {
-    const game = s.kind === 'match' || p.cat === 'b', r = [], partial = game && (p.min || 0) < 75; // under 75 min his game values are scaled: in his sheet, not flagged
-    Object.keys(SV_A).forEach((k) => {
-      const z = partial ? null : svZ(p, k);
-      if (z == null) return;
-      const d = `${fmtN(p[k])} vs ${fmtN(svUsual(p, k))} · z ${fmtSigned(z)}`;
-      if (z >= 2) r.push({ lv: 'high', sev: 3, t: `${SV_A[k]} well above his usual`, d });
-      else if (z >= 1) r.push({ lv: 'above', sev: 1, t: `${SV_A[k]} slightly above his usual`, d });
-      else if (z <= -1 && ['td', 'd15', 'hit'].includes(k) && p.cat === 't') r.push({ lv: 'below', sev: 2, t: `${SV_A[k]} below his usual`, d });
-    });
-    if (p.days_hsv >= 10) r.push({ lv: 'high', sev: 3, t: `${p.days_hsv} days without ≥ 90 % of his Vmax`, d: `today ${fmtN(p.vmax, 1)} km/h${p.vmax_pct != null ? ' · ' + p.vmax_pct + '%' : ''}` });
-    if (p.rpe >= 8) r.push({ lv: 'above', sev: 1, t: `RPE ${fmtN(p.rpe)}`, d: `sRPE ${fmtN(p.srpe)} AU` });
-    const ser = TR.workload && TR.workload.series ? TR.workload.series[p.id] : null;
-    const two = ser ? svAc2(ser, daysBetween(ser.start, s.date)) : [];
-    const ov = two.filter((x) => x.over), un = two.filter((x) => !x.over);
-    if (ov.length) r.push({ lv: 'high', sev: 3, t: `2 weeks in a row of overload (A:C > 1.37)`, d: ov.map((x) => `${x.l} ${x.b.toFixed(2)} → ${x.a.toFixed(2)}`).join(' · ') });
-    if (un.length) r.push({ lv: 'below', sev: 2, t: `2 weeks in a row of underload (A:C < 0.78)`, d: un.map((x) => `${x.l} ${x.b.toFixed(2)} → ${x.a.toFixed(2)}`).join(' · ') });
-    if (r.length) out.push({ p, r: r.sort((a, b) => b.sev - a.sev), sev: Math.max(...r.map((x) => x.sev)) * 10 + r.length });
-    else calm++;
+    const partial = (s.kind === 'match' || p.cat === 'b') && (p.min || 0) < 75; // under 75 min a game is scaled: not flagged
+    const ser = TR.workload && TR.workload.series ? TR.workload.series[p.id] : null, i = ser && ser.a7 ? daysBetween(ser.start, s.date) : -1;
+    const ov = i >= 0 ? SV_AC.map(([k]) => ({ k, a: ser.a7[k] ? ser.a7[k][i] : null, b: ser.a14[k] ? ser.a14[k][i] : null }))
+      .filter((x) => x.a != null && x.b != null && x.a > SV_OVER && x.b > SV_OVER).sort((x, y) => y.a - x.a) : [];
+    const big = partial ? [] : Object.keys(SV_BIG).map((k) => ({ k, z: svZ(p, k) }))
+      .filter((x) => x.z != null && (x.z >= 2 || (x.z <= -2 && p.cat === 't'))).sort((x, y) => Math.abs(y.z) - Math.abs(x.z));
+    if (ov.length || big.length) out.push({ p, over: ov.length ? svOverTxt(ov) : null, big: big.length ? svBigTxt(p, big) : null, sev: (ov.length ? 10 + ov.length : 0) + (big.length ? 5 : 0) });
   });
-  return { list: out.sort((a, b) => b.sev - a.sev), calm };
+  return out.sort((a, b) => b.sev - a.sev);
 }
 function svAttentionHtml(s) {
-  const at = svAttention(s), n = svFlat(s).length;
-  const cnt = (lv) => at.list.filter((a) => a.r.some((x) => x.lv === lv)).length;
-  const mc = svMicrocycle(s);
-  let plans = '';
-  if (mc && mc.started && mc.days.some((d) => d.date > mc.today)) {
-    const next = mc.days.filter((d) => d.date > mc.today).map((d) => d.md).join(' / ');
-    const jok = [], top = [];
+  const at = svAttention(s), n = svFlat(s).length, nOver = at.filter((a) => a.over).length, nBig = at.filter((a) => a.big).length;
+  const mc = svMicrocycle(s), left = mc && mc.started ? mc.days.filter((d) => d.date > mc.today) : [], next = left.map((d) => d.md).join(' / ');
+  const jok = [], top = new Map();
+  if (left.length) {
     svFlat(s).forEach((p) => {
       const plan = svPlan(p, mc), rd = svReading(plan);
       if (rd.joker) jok.push({ p, t: rd.reached.filter((k) => k === 'hit' || k === 'spr').map((k) => `${SV_LBL[k]} ${Math.round(plan[k].done / plan[k].target * 100)}%`).join(' · ') });
-      if (rd.topup) top.push({ p, t: `${SV_LBL[rd.kTop]} ${fmtN(plan[rd.kTop].done)} / ${fmtN(plan[rd.kTop].target)} m` });
+      if (rd.topup) top.set(p.id, { p, short: true, t: [`${SV_LBL[rd.kTop]} ${fmtN(plan[rd.kTop].done)} / ${fmtN(plan[rd.kTop].target)} m`] });
     });
-    const chip = (x, i) => `<button type="button" class="sv-pchip ${i >= 6 ? 'extra' : ''}" data-id="${x.p.id}">${avatarHtml(x.p.id, playerName(x.p.id), 22)}<b>${escapeHtml(playerName(x.p.id))}</b><small>${x.t}</small></button>`;
-    const chips = (xs) => (xs.length ? xs.map(chip).join('') + (xs.length > 6 ? `<button type="button" class="sv-more-btn" data-more>+ ${xs.length - 6} more</button>` : '') : '<span class="muted">None</span>');
-    const team = top.length > 6 ? `<p class="sv-plan-hint"><b>${top.length} of ${svFlat(s).length} players</b> are short — the group missed its high-speed dose: consider a speed-exposure block for everyone on ${next}.</p>` : '';
-    plans = `<div class="sv-plans">
-      <div class="sv-plan on"><h4>Joker candidates · ${next}</h4><p>High-speed target of his microcycle already reached (distance > 20 or > 25 km/h).</p><div>${chips(jok)}</div></div>
-      <div class="sv-plan below"><h4>Need a high-speed top-up · ${next}</h4><p>Too far behind at > 20 or > 25 km/h to reach his microcycle target within his usual sessions (done / target).</p>${team}<div>${chips(top)}</div></div>
-    </div>`;
   }
-  const card = (a, i) => `<button type="button" class="sv-card ${i >= 10 ? 'extra' : ''}" data-id="${a.p.id}">
-      <span class="sv-card-head">${avatarHtml(a.p.id, playerName(a.p.id), 34)}<span><b>${escapeHtml(playerName(a.p.id))}</b><small>${escapeHtml(svSub(a.p) || '')} · ${fmtN(a.p.min)} min · RPE ${fmtN(a.p.rpe)}</small></span><i>›</i></span>
-      ${a.r.slice(0, 3).map((x) => `<span class="sv-reason"><i style="background:${Z_COL[x.lv]}"></i><span>${x.t}<small>${x.d}</small></span></span>`).join('')}${a.r.length > 3 ? `<span class="sv-more">+${a.r.length - 3} more</span>` : ''}</button>`;
+  svFlat(s).filter((p) => p.days_hsv >= 10).sort((a, b) => b.days_hsv - a.days_hsv).forEach((p) => { // no run at 90 % of his max speed for 10 days or more
+    const x = top.get(p.id) || { p, t: [] };
+    x.t.push(`${p.days_hsv} days`);
+    top.set(p.id, x);
+  });
+  const tops = [...top.values()].map((x) => ({ p: x.p, t: x.t.join(' · ') })), shortN = [...top.values()].filter((x) => x.short).length;
+  const chip = (x, i) => `<button type="button" class="sv-pchip ${i >= 10 ? 'extra' : ''}" data-id="${x.p.id}">${avatarHtml(x.p.id, playerName(x.p.id), 22)}<b>${escapeHtml(playerName(x.p.id))}</b><small>${x.t}</small></button>`;
+  const chips = (xs) => (xs.length ? xs.map(chip).join('') + (xs.length > 10 ? `<button type="button" class="sv-more-btn" data-more>+ ${xs.length - 10} more</button>` : '') : '<span class="muted">None</span>');
+  const plans = left.length || tops.length ? `<div class="sv-plans">
+      ${left.length ? `<div class="sv-plan on"><h4>Joker candidates · ${next}</h4><p>High-speed target of his microcycle already reached (distance > 20 or > 25 km/h).</p><div>${chips(jok)}</div></div>` : ''}
+      <div class="sv-plan below"><h4>Need a speed top-up${next ? ' · ' + next : ''}</h4><p>No run at 90 % of his max speed for 10 days or more (days since)${left.length ? ', or too far behind his high-speed target of the microcycle (done / target)' : ''}.</p>${shortN > 6 ? `<p class="sv-plan-hint"><b>${shortN} of ${n} players</b> are short of high-speed running — consider a speed-exposure block for everyone on ${next}.</p>` : ''}<div>${chips(tops)}</div></div>
+    </div>` : '';
+  const rows = at.map((a) => `<button type="button" class="sv-al" data-id="${a.p.id}">${avatarHtml(a.p.id, playerName(a.p.id), 30)}<b>${escapeHtml(playerName(a.p.id))}<small>${escapeHtml(svSub(a.p) || '')}</small></b>
+      <span class="sv-al-c">${a.over ? '<i class="sv-ch red">2 weeks overload</i>' : ''}${a.big ? '<i class="sv-ch orange">big change today</i>' : ''}</span>
+      <span class="sv-al-t">${escapeHtml([a.over, a.big].filter(Boolean).join(' '))}</span><i class="sv-al-go">›</i></button>`).join('');
   return `<section class="panel">
     <div class="panel-head"><h2 class="panel-title small">Attention today</h2>
-      <span class="sv-sum"><b>${at.calm}</b> of ${n} players within their usual range<span class="sep"></span><i style="background:${Z_COL.high}"></i>${cnt('high')} well above / speed exposure<i style="background:${Z_COL.below}"></i>${cnt('below')} below<i style="background:${Z_COL.above}"></i>${cnt('above')} slightly above</span></div>
+      <span class="sv-sum">${at.length ? `<b>${at.length}</b> of ${n} players to look at<span class="sep"></span><i style="background:${Z_COL.high}"></i>${nOver} two weeks overload<i style="background:${Z_COL.above}"></i>${nBig} big change today` : '✓ No alert today'}</span></div>
+    ${at.length ? `<div class="sv-als">${rows}</div>` : ''}
     ${plans}
-    ${at.list.length ? `<div class="sv-cards">${at.list.map(card).join('')}</div>${at.list.length > 10 ? `<button type="button" class="sv-more-btn" data-allcards>Show all ${at.list.length} players ›</button>` : ''}` : '<p class="note">Every player is within his usual range for this day ✓</p>'}
-    <p class="panel-foot">Automatic — vs each player's ${s.group === 'compensatory' ? 'usual compensatory session' : `usual ${s.md || 'day'}${s.cycle.type ? ` of ${TYPE_LABEL[s.cycle.type].toLowerCase()} microcycles` : ''}${s.players.some((p) => p.mdref && p.mdref.kind === 'comp') ? ' (compensatory players: their usual compensatory session)' : ''}`} (z-score) · speed exposure = no sprint ≥ 90 % of his max speed for 10 days or more · 2 weeks in a row = A:C 7:28 above 1.37 (or under 0.78) this week and last week on TD, HI Acc+Dec, HIT > 20 or sprints · click a player for his full session.</p>
+    <p class="panel-foot">Alerts only for: A:C above ${SV_OVER} two weeks in a row (distance, HI Acc+Dec, > 20 km/h, sprints) · a load far from his usual today (z ≥ 2, or ≤ −2 in a full session) · click a player for his full session. Speed exposure is in “Need a speed top-up”.</p>
   </section>`;
 }
-
 // ------------------------------------------------------------------ session table: the report's page design (Reports → PDF page 1)
 // Full session: + distance > 25 km/h and HIT Acc / HIT Dec. Drills: the same table for one drill (chips), ranked by m/min.
 const SV_COLS = ['time', 'rpe', 'mpm', 'td', 'd15', 'd20', 'd25', 'vmax', 'pmax', 'days', 'sprints', 'hacc', 'hdec', 'accdec'];

@@ -49,6 +49,63 @@ function objectivesPanel(s) {
     <p class="panel-foot">Green = usual ± 1 SD (on target, |z| &lt; 1) · blue below · orange 1–2 SD above · red more than 2 SD above. Dark tick = usual. Same z-scores as the calendar and the planner.</p></section>`;
 }
 
+// ------------------------------------------------------------------ the week until the match, beside today's objectives
+const WK_M = [['td', 'Total distance', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE load', 'AU']];
+const wkFmt = (k, v) => (v == null ? '—' : k === 'td' && v >= 1000 ? (v / 1000).toFixed(1) + 'k' : fmtN(v));
+/** Today's objectives and, beside them, the week until the match (staff report data: done, objectives of the days left). */
+function sePanels(s) {
+  const wk = weekPanel(s);
+  return wk ? `<div class="se-top two">${objectivesPanel(s)}${wk}</div>` : objectivesPanel(s);
+}
+/** The microcycle of one metric: done (green, a tick between days), still to do (dashed blue, a tick and the MD of each
+ * day), the team's usual by today (black tick). */
+function wkBar(X, k) {
+  const t = (X.tot || {})[k];
+  if (!t) return '';
+  const [target, done, udone, left] = t, days = X.profile.filter((d) => d[k]), fut = (X.plan || []).filter((d) => d[k]);
+  const W = 230, scale = Math.max(target || 0, (done || 0) + (left || 0)) || 1, px = (v) => (v || 0) / scale * W;
+  const md = (x, w, txt, fill) => (w > 26 ? `<text x="${x + w / 2}" y="10.5" text-anchor="middle" font-size="8" font-weight="800" style="fill:${fill}">${txt}</text>` : '');
+  let x0 = 0, g = `<rect x="0" y="1" width="${W}" height="12" rx="4" style="fill:var(--surface-2)"/>`;
+  days.forEach((d) => { const w = px(d[k][0]); g += `<rect x="${x0}" y="1" width="${w}" height="12" fill="#34c759"/>${md(x0, w, d.md, '#fff')}`; x0 += w; g += `<line x1="${x0}" x2="${x0}" y1="1" y2="13" style="stroke:var(--surface)" stroke-width="1.5"/>`; });
+  fut.forEach((d) => { const w = px(d[k][0]); g += `<rect x="${x0 + 0.6}" y="1.6" width="${Math.max(0, w - 1.2)}" height="10.8" rx="2" fill="rgba(42,120,214,.1)" stroke="#2a78d6" stroke-width="1" stroke-dasharray="3 2"/>${md(x0, w, d.md, '#2a78d6')}`; x0 += w; });
+  if (days.length) g += `<line x1="${px(udone)}" x2="${px(udone)}" y1="0" y2="14" style="stroke:var(--ink)" stroke-width="2"/>`;
+  const vs = days.length && udone ? Math.round((done / udone - 1) * 100) : null, cls = vs == null ? '' : Math.abs(vs) < 10 ? 'ok' : Math.abs(vs) < 25 ? 'warn' : 'bad';
+  return `<div class="wk-mb"><svg width="${W}" height="14" viewBox="0 0 ${W} 14" role="img" aria-label="microcycle: done and still to do">${g}</svg><span>done <b>${wkFmt(k, done)}</b>${vs != null ? ` <b class="wk-vs ${cls}">${vs > 0 ? '+' : vs < 0 ? '−' : ''}${Math.abs(vs)} %</b>` : ''} · to do <b>${wkFmt(k, left)}</b> · target <b>${wkFmt(k, target)}</b></span></div>`;
+}
+/** One metric day by day until the match: done = solid bar (colour = z), each day left = dashed bar up to its objective,
+ * black line = the team's usual for that MD, grey band = usual range. */
+function wkChart(X, k) {
+  const days = [...X.profile.map((d) => ({ ...d, done: 1 })), ...(X.plan || [])], W = 300, H = 150, L = 6, R = 6, T = 18, B = 30;
+  const n = days.length + 1, step = (W - L - R) / n, ih = H - T - B, bw = Math.min(34, step * 0.5);
+  const top = Math.max(1, ...days.filter((d) => d[k]).map((d) => Math.max(d[k][0] || 0, d[k][1] || 0, d[k][3] || 0))) * 1.12;
+  const y = (v) => T + ih * (1 - Math.min(v, top) / top), base = y(0);
+  const lab = (x, yy, v, fill) => `<text x="${x}" y="${Math.max(10, yy - 5)}" text-anchor="middle" font-size="10.5" font-weight="800" style="fill:${fill};stroke:var(--surface);stroke-width:3px;paint-order:stroke">${wkFmt(k, v)}</text>`;
+  let g = '';
+  days.forEach((d, i) => {
+    const p = d[k], x = L + step * (i + 0.5), bx = x - bw / 2;
+    let t = '';
+    if (p) {
+      if (p[2] != null && p[3] != null) g += `<rect x="${bx - 5}" y="${y(p[3])}" width="${bw + 10}" height="${Math.max(2, y(p[2]) - y(p[3]))}" rx="4" style="fill:var(--surface-2)"/>`;
+      if (d.done && p[0] != null) { const lv = zLevel(p[4]); g += `<rect x="${bx}" y="${y(p[0])}" width="${bw}" height="${Math.max(1, base - y(p[0]))}" rx="4" fill="${lv ? Z_COL[lv] : '#aeaeb2'}"/>`; t = lab(x, y(p[0]), p[0], 'var(--ink)'); }
+      else if (p[0] != null) { g += `<rect x="${bx + 0.7}" y="${y(p[0])}" width="${bw - 1.4}" height="${Math.max(1, base - y(p[0]))}" rx="4" fill="rgba(42,120,214,.08)" stroke="#2a78d6" stroke-width="1.3" stroke-dasharray="3.5 2.5"/>`; t = lab(x, y(p[0]), p[0], '#2a78d6'); }
+      if (p[1] != null) g += `<line x1="${bx - 5}" x2="${bx + bw + 5}" y1="${y(p[1])}" y2="${y(p[1])}" style="stroke:var(--ink)" stroke-width="2" stroke-linecap="round"/>`;
+    }
+    g += t + `<text x="${x}" y="${H - 16}" text-anchor="middle" font-size="10" font-weight="800" style="fill:${d.done ? 'var(--ink)' : '#2a78d6'}">${d.md}</text><text x="${x}" y="${H - 4}" text-anchor="middle" font-size="9" style="fill:var(--ink-muted)">${fmtDay(d.date, { weekday: 'short', day: 'numeric' })}</text>`;
+  });
+  const xm = L + step * (n - 0.5);
+  g += `<rect x="${xm - bw / 2}" y="${T}" width="${bw}" height="${ih}" rx="6" fill="none" style="stroke:var(--hairline)" stroke-dasharray="3 3"/><text x="${xm}" y="${T + ih / 2 + 3}" text-anchor="middle" font-size="9" font-weight="700" style="fill:var(--ink-muted)">match</text>`
+    + `<text x="${xm}" y="${H - 16}" text-anchor="middle" font-size="10" font-weight="800" style="fill:var(--ink)">MD</text>${X.next ? `<text x="${xm}" y="${H - 4}" text-anchor="middle" font-size="9" style="fill:var(--ink-muted)">${fmtDay(X.next.date, { weekday: 'short', day: 'numeric' })}</text>` : ''}`;
+  return `<svg class="wk-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="day by day until the match">${g}</svg>`;
+}
+function weekPanel(s) {
+  const X = TR.staff && TR.staff.days ? TR.staff.days[s.date] : null;
+  if (!X || s.kind !== 'training' || !(X.profile.length || (X.plan || []).length)) return '';
+  const nx = X.next;
+  return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">The week · objectives until the match</h2>${nx ? `<span class="panel-note">→ ${escapeHtml([nx.competition, nx.opponent].filter(Boolean).join(' · '))} · ${fmtDay(nx.date, { weekday: 'short', day: 'numeric', month: 'short' })}</span>` : ''}</div>
+    <div class="wk-grid">${WK_M.map(([k, l, u]) => `<div class="wk-cell"><div class="wk-t">${l}<span>${u}</span></div>${wkBar(X, k)}${wkChart(X, k)}</div>`).join('')}</div>
+    <p class="panel-foot">Solid = done (colour = z vs usual) · dashed = objective of the day: the team's usual of MD-4 → MD-1 added up, minus what is done, shared over the days left · black line = usual · grey band = usual range · bar = the microcycle (done · still to do · | usual by today).</p></section>`;
+}
+
 // ------------------------------------------------------------------ Sessions
 function renderSessions(opts) {
   if (opts && opts.date) TR.date = opts.date;
@@ -60,6 +117,7 @@ function renderSessions(opts) {
   withData('sessions', (d) => { TR.sessions = d; drawSessions(); }, (err) => { root.innerHTML = loadError(err); });
   withData('objectives', (d) => { TR.obj = d; drawSessions(); }, () => {});
   withData('workload', (d) => { TR.workload = d; drawSessions(); svRefresh(); }, () => {}); // A:C ratios (sheet + attention)
+  withData('staff_report', (d) => { TR.staff = d; drawSessions(); }, () => {}); // the week until the match (its objectives)
   withData('wellness', (d) => { TR.wellness = d; svRefresh(); }, () => {}); // today's wellness ring of the player sheet
 }
 
@@ -116,7 +174,7 @@ function drawSessions(opts) {
       ${s.kind === 'match' ? '' : `<div class="sh-meta">${s.group === 'compensatory' ? 'The players who did not play the match did a compensatory session; the others recovered. ' : ''}${escapeHtml(sessComposition(s))}</div>`}
       ${daysBetween(s.date, todayIso()) <= 30 ? `<button type="button" class="linkbtn sh-corr" data-correct="${s.date}">✎ Correct this session</button>` : ''}
     </section>
-    ${objectivesPanel(s)}
+    ${sePanels(s)}
     <div id="sv-attention"></div>
     ${svIndividualHtml(s)}
     <section class="panel">
