@@ -500,10 +500,10 @@ function splCorrLineHtml(date) {
 }
 
 /** After a change on this page: the online calculation rebuilds the dashboard (and sends the staff e-mail) on its own. */
-function splRebuilt() {
+function splRebuilt(started) {
   if (typeof cfRebuild !== 'function') return;
   const st = SPL.state;
-  cfRebuild().then((ok) => {
+  (started || cfRebuild()).then((ok) => {
     if (!ok || SPL.state !== st) return;
     SPL.state = st.replace(/ — [^—]*next update.*$/, '') + ' — the dashboard updates itself in a few minutes';
     splStateLine();
@@ -835,12 +835,18 @@ async function splPublish() {
   const date = SPL.date, p = splEnsure(date), b = splBuild(), sid = p.sid || splSid(date);
   const body = { date, sid, cols_full: SP_FULL_COLS, full: b.full.map((r) => SP_FULL_COLS.map((c) => r[c])), cols_drills: SP_DRILL_COLS, drills: b.drills.map((r) => SP_DRILL_COLS.map((c) => r[c])) };
   SPL.state = 'Publishing…'; splStateLine();
+  let saved = false, started = null;
   try {
     if (AUTH.demo) { SPL.saved.published[`${date}_${sid}`] = { date, sid, rows: `${body.full.length} full · ${body.drills.length} drills`, by: 'demo', at: new Date().toISOString() }; splDemoStore(); }
-    else { await callApi('session_publish', null, body); await splLoadSaved(); }
+    else {
+      await callApi('session_publish', null, body);
+      saved = true; started = typeof cfRebuild === 'function' ? cfRebuild() : null; // the rows are saved: the online calculation starts now
+      SPL.state = 'Published ✓ — saving the plan…'; splStateLine();
+      await splLoadSaved();
+    }
     p.sid = sid; await splSavePlan(date);
-    SPL.state = 'Published ✓ — in the dashboard at the next update'; SPL.view = 'plan'; SPL.files = {}; splDraw(); splRebuilt();
-  } catch (err) { SPL.state = 'Not published — ' + (err.message || err); splStateLine(); }
+    SPL.state = 'Published ✓ — in the dashboard at the next update'; SPL.view = 'plan'; SPL.files = {}; splDraw(); splRebuilt(started);
+  } catch (err) { SPL.state = (saved ? 'Published ✓ — but the plan was not refreshed: ' : 'Not published — ') + (err.message || err); splStateLine(); }
 }
 async function splXlsx() {
   const date = SPL.date, p = splEnsure(date), b = splBuild(), sid = p.sid || splSid(date);
