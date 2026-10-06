@@ -6,6 +6,32 @@ function cacheSet(action, data) {
   try { localStorage.setItem('cache_' + action, JSON.stringify(data)); } catch (err) { /* storage full/disabled: skip caching, not fatal */ }
 }
 
+/** The Cloudflare server (same address as the site): the data from storage in a fraction of a second, with the staff
+ * session. Anything failing there → the Google script, as before. */
+const CF_DATA = ['home', 'wellness', 'wellness_history', 'workload', 'sessions', 'objectives', 'calendar', 'tests', 'reports', 'staff_report', 'plan_lib', 'squad_stats'];
+const CF_FRESH = ['home', 'wellness', 'wellness_history']; // computed by the Google script from the check-ins: re-read when a page opens
+function cfOn() { return !AUTH.demo && !!AUTH.session && /\.workers\.dev$/.test(location.hostname); }
+function cfHeaders() { return { Authorization: 'Bearer ' + AUTH.session }; }
+async function cfData(action) {
+  const r = await fetch(`/api/data/${action}`, { headers: cfHeaders() });
+  if (r.status === 401) cfRefresh(true); // e.g. just added to the Staff list: the server's copy catches up
+  if (!r.ok) throw new Error(`cloud ${r.status}`);
+  const u = r.headers.get('X-User');
+  if (u) { try { AUTH.user = JSON.parse(decodeURIComponent(u)); } catch (e) { /* keep the last one */ } }
+  return r.json();
+}
+let CF_REFRESH = null;
+/** The server re-reads the wellness, the staff list and the calendar edits from the Google script (once per page load;
+ * it also does it every 10 minutes) → the names that changed. */
+function cfRefresh(force = false) {
+  if (!cfOn()) return Promise.resolve([]);
+  if (!CF_REFRESH || force) {
+    CF_REFRESH = fetch(`/api/refresh${force ? '?force=1' : ''}`, { method: 'POST', headers: cfHeaders() })
+      .then((r) => r.json()).then((j) => j.changed || []).catch(() => []);
+  }
+  return CF_REFRESH;
+}
+
 /**
  * Apps Script API call. In demo mode, returns the sample data directly.
  * Retries once on a bad (non-JSON) response — Apps Script's Web App occasionally returns an HTML
@@ -23,6 +49,9 @@ async function callApi(action, mockData, extra = null) {
   }
   if (AUTH.demo) return Promise.resolve(structuredClone(mockData));
   if (tokenExpired()) { renewSignIn(); throw new Error('Signing you back in…'); }
+  if (!extra && CF_DATA.includes(action) && cfOn()) {
+    try { const data = await cfData(action); cacheSet(action, data); return data; } catch (err) { /* the Google script below */ }
+  }
   let json;
   const delays = [600, 1500, 3000]; // backoff between attempts (cold start can take a few seconds)
   for (let attempt = 0; attempt <= delays.length; attempt++) {
@@ -41,7 +70,7 @@ async function callApi(action, mockData, extra = null) {
   }
   if (!json.ok) {
     if (json.error === 'forbidden') throw new Error('This Google account isn’t authorized on this site.');
-    if (json.error === 'unauthenticated' || json.error === 'invalid_token') { sessionStorage.removeItem('id_token'); location.reload(); }
+    if (json.error === 'unauthenticated' || json.error === 'invalid_token') { forgetSignIn(); location.reload(); }
     throw new Error(json.error || 'Unknown error');
   }
   AUTH.user = json.user;
@@ -156,5 +185,6 @@ async function saveCalendarEdit(id, data) {
   });
   const json = await resp.json();
   if (!json.ok) throw new Error(json.error === 'forbidden' ? 'This Google account isn’t authorized to edit.' : json.error || 'Save failed');
+  cfRefresh(true); // the Cloudflare server's copy of the edits
   return json.edits;
 }

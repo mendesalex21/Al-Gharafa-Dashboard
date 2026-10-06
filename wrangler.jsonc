@@ -1,6 +1,12 @@
 {
-  // Al-Gharafa staff dashboard on Cloudflare (Workers static assets): `npx wrangler deploy` from this folder
+  // Al-Gharafa staff dashboard on Cloudflare: the static site (this folder) + the server part (worker/index.js) for
+  // /api/* — the data from KV, the ready PDFs, the 30-day staff session. Deploy: `npx wrangler deploy` in this folder.
   "name": "al-gharafa",
+  "main": "worker/index.js",
   "compatibility_date": "2026-10-01",
-  "assets": { "directory": "." }
+  "assets": { "directory": ".", "run_worker_first": ["/api/*"] },
+  "kv_namespaces": [{ "binding": "DATA", "id": "c90fdcadf3634911877561ac317836ef" }],
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "vars": { "API_URL": "https://script.google.com/macros/s/AKfycbxkuo3LpDI5eBBkWNZUyy7ZBOc600Xcu3cD_R5BDLzYqGZTpKxeIGuWqaMVjXgkJgpA/exec" },
+  "observability": { "enabled": true }
 }

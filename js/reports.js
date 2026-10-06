@@ -490,6 +490,19 @@ function rpImageSizes(photos) {
 }
 
 /** Builds the PDF in the browser (one landscape page per report page) and downloads it: no print dialog. */
+/** The PDF prepared by Update dashboard on the Cloudflare server (sharp text, instant), when there is one. */
+async function rpReadyPdf(file) {
+  if (typeof cfOn !== 'function' || !cfOn()) return false;
+  try {
+    const r = await fetch('/api/pdf/' + encodeURIComponent(file), { headers: cfHeaders() });
+    if (!r.ok) return false;
+    const url = URL.createObjectURL(await r.blob()), a = document.createElement('a');
+    a.href = url; a.download = file;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return true;
+  } catch (e) { return false; }
+}
 async function rpPrint() {
   if (!RP.data || RP.busy) return;
   const btn = document.getElementById('rp-pdf'), label = btn.textContent;
@@ -497,8 +510,10 @@ async function rpPrint() {
   RP.busy = true; btn.disabled = true; btn.textContent = 'Preparing PDF…';
   let host = null;
   try {
-    await Promise.all(RP_JS.map(rpScript));
     const D = rpDoc(RP.data, RP.idx, RP.part);
+    const file = `${D.session.id}_${D.session.date}${D.session.part ? '_' + D.session.part.replace(/\s+/g, '') : ''}_${RP.version === 'staff' ? 'Staff' : 'Training'}_report.pdf`;
+    if (!D.session.part && await rpReadyPdf(file)) return; // ready on the server: no picture of each page to take
+    await Promise.all(RP_JS.map(rpScript));
     btn.textContent = 'Loading photos…';
     const photos = await rpPhotos(D), dims = await rpImageSizes(photos);
     D.noPhotos = true; // the page picture is taken without them: a 21-px photo inside a picture gets blurred
@@ -532,7 +547,7 @@ async function rpPrint() {
         pdf.restoreGraphicsState();
       }
     }
-    pdf.save(`${D.session.id}_${D.session.date}${D.session.part ? '_' + D.session.part.replace(/\s+/g, '') : ''}_${RP.version === 'staff' ? 'Staff' : 'Training'}_report.pdf`);
+    pdf.save(file);
   } catch (err) {
     alert('Could not create the PDF: ' + (err.message || err));
   } finally {

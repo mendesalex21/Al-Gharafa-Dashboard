@@ -173,6 +173,13 @@ async function withData(action, onData, onError) {
   if (cached) onData(cached, true);
   try {
     onData(await loadData(action), false);
+    if (CF_FRESH.includes(action) && cfOn()) { // the wellness of this morning: new check-ins since the server's last re-read?
+      cfRefresh().then((changed) => {
+        if (!changed.includes(action)) return;
+        delete DATA_PROMISES[action];
+        loadData(action).then((d) => onData(d, false)).catch(() => { /* keep what is on screen */ });
+      });
+    }
   } catch (err) {
     if (!cached) onError(err);
   }
