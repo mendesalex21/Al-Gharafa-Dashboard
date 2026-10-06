@@ -294,7 +294,7 @@ function splPlanHtml() {
   const sugg = lib.filter((x) => x.md.includes(tag) && !p.drills.some((d) => splName(d.name) === splName(x.name))).slice(0, 4);
   const line = team.map((d) => `<i style="flex:${d.min || 1};background:${splColor(d.name)}" title="${escapeHtml(d.name)}"><b>${d.min || ''}'</b></i>`).join('');
   return `${splHead(date, inData || pub ? 2 : 0)}
-    ${inData ? `<p class="sp-banner ok">This session is already in the data (${r.sid}, from the Excel files). Nothing to import.</p>` : pub ? `<p class="sp-banner ok">Published ✓ ${escapeHtml(pub.rows || '')} · by ${escapeHtml(String(pub.by || '').split('@')[0])} — ${live ? 'in the dashboard' : 'added to the dashboard at the next update'}. To correct it, drop the files again and publish: the new version replaces it at the next update. <button type="button" class="linkbtn" data-unpub="${escapeHtml(date + '_' + pub.sid)}">Unpublish</button></p>` : live ? `<p class="sp-banner warn">Unpublished — ${escapeHtml(r.sid)} leaves the dashboard at the next update.</p>` : ''}
+    ${inData ? `<p class="sp-banner ok">This session is already in the data (${r.sid}, from the Excel files). Nothing to import.</p>` : pub ? `<p class="sp-banner ok">Published ✓ ${escapeHtml(pub.rows || '')} · by ${escapeHtml(String(pub.by || '').split('@')[0])} — ${live ? 'in the dashboard' : 'added to the dashboard in a few minutes'}. To correct it, drop the files again and publish: the new version replaces it a few minutes later. <button type="button" class="linkbtn" data-unpub="${escapeHtml(date + '_' + pub.sid)}">Unpublish</button></p>` : live ? `<p class="sp-banner warn">Unpublished — ${escapeHtml(r.sid)} leaves the dashboard at the next update.</p>` : ''}
     ${inData || live ? splCorrLineHtml(date) : ''}
     ${splNoRpeHtml(date)}
     <div class="sp-two"><div class="sp-col">
@@ -317,10 +317,10 @@ function splNoRpeHtml(date) {
   const val = (id) => { const a = day[id]; return a && a.length ? a[a.length - 1][0] : null; };
   const ready = ids.filter((id) => val(id) != null).length;
   const cells = ids.map((id) => { const v = val(id), st = (r.types || {})[id];
-    return `<label class="${v != null ? 'k' : 'miss'}" title="${v != null ? 'Ready: added at the next update' : 'No RPE yet'}">${escapeHtml(name(id))}${st && st !== 'ProTraining' ? ` <small>${escapeHtml(st)}</small>` : ''}<input type="number" min="0" max="10" step="0.5" value="${v ?? ''}" data-norpe="${escapeHtml(id)}" aria-label="RPE of ${escapeHtml(name(id))}"></label>`; }).join('');
-  return `<div class="sp-norpe"><div class="sp-h3">RPE missing <small id="spl-norpe-n">${ids.length} player${ids.length > 1 ? 's' : ''} without an RPE in the data${ready ? ` · ${ready} ready, added at the next update` : ''}</small></div>
+    return `<label class="${v != null ? 'k' : 'miss'}" title="${v != null ? 'Ready: added in a few minutes' : 'No RPE yet'}">${escapeHtml(name(id))}${st && st !== 'ProTraining' ? ` <small>${escapeHtml(st)}</small>` : ''}<input type="number" min="0" max="10" step="0.5" value="${v ?? ''}" data-norpe="${escapeHtml(id)}" aria-label="RPE of ${escapeHtml(name(id))}"></label>`; }).join('');
+  return `<div class="sp-norpe"><div class="sp-h3">RPE missing <small id="spl-norpe-n">${ids.length} player${ids.length > 1 ? 's' : ''} without an RPE in the data${ready ? ` · ${ready} ready, added in a few minutes` : ''}</small></div>
     <div class="sp-rpe">${cells}</div>
-    <p class="sp-note"><span class="sp-key k"></span>answered since on the RPE page, or typed here · <span class="sp-key miss"></span>still missing. Type a value and leave the box: it is saved like the player's answer and added to the data at the next update (a value already in the data is never replaced).</p></div>`;
+    <p class="sp-note"><span class="sp-key k"></span>answered since on the RPE page, or typed here · <span class="sp-key miss"></span>still missing. Type a value and leave the box: it is saved like the player's answer and added to the data a few minutes later (a value already in the data is never replaced).</p></div>`;
 }
 async function splSaveNoRpe(date, id, input) {
   const v = input.value === '' ? null : Number(input.value), l = input.closest('label');
@@ -331,9 +331,9 @@ async function splSaveNoRpe(date, id, input) {
     if (AUTH.demo) splDemoStore(); else await callApi('rpe_add', null, { date, player_id: id, player_name: name, rpe: v });
     const rp = SPL.saved.rpe || (SPL.saved.rpe = {}); (rp[date] || (rp[date] = {}))[id] = [[v, '']];
     if (AUTH.demo) splDemoStore();
-    if (l) { l.classList.remove('miss'); l.classList.add('k'); l.title = 'Ready: added at the next update'; }
+    if (l) { l.classList.remove('miss'); l.classList.add('k'); l.title = 'Ready: added in a few minutes'; }
     const ids = (SPL.lib.recent[date] || {}).norpe || [], ready = ids.filter((x) => ((rp[date] || {})[x] || []).length).length, el = document.getElementById('spl-norpe-n');
-    if (el) el.textContent = `${ids.length} player${ids.length > 1 ? 's' : ''} without an RPE in the data · ${ready} ready, added at the next update`;
+    if (el) el.textContent = `${ids.length} player${ids.length > 1 ? 's' : ''} without an RPE in the data · ${ready} ready, added in a few minutes`;
     SPL.state = `RPE of ${name}: ${v} saved ✓ — added to the data at the next update`;
     splStateLine(); splRebuilt(); return;
   } catch (err) { SPL.state = 'RPE not saved — ' + (err.message || err); }
@@ -571,7 +571,7 @@ function splNtHtml() {
     }).join('');
     body = `<div class="sp-nt-prev">${blocks}</div>
       <div class="sp-card-a"><button type="button" class="btn-primary" data-nt-publish ${total ? '' : 'disabled'}>Publish ${days.length} NT day${days.length > 1 ? 's' : ''}</button><button type="button" class="btn-light" data-nt-cancel>Cancel</button>
-        <em class="sp-card-msg">Written as in your Excel: session “/”, Type NT, his own minutes, his RPE if typed (Carga RPE = RPE × time), one “NT” drill. They replace his NT rows of that day in the Excel at the next update.</em></div>`;
+        <em class="sp-card-msg">Written as in your Excel: session “/”, Type NT, his own minutes, his RPE if typed (Carga RPE = RPE × time), one “NT” drill. They replace his NT rows of that day in the Excel a few minutes after publishing.</em></div>`;
   }
   return `<section class="sp-nt" id="spl-nt"><div class="sp-h3">National team (NT) <small>the Qatar NT export from Sonra — one or several dates</small></div>
     ${body || `<label class="sp-drop small"><input type="file" accept=".csv,text/csv" multiple hidden data-ntfiles>Drop the NT export here, or click to choose</label>`}
@@ -822,13 +822,13 @@ function splImportHtml() {
         <p class="sp-note">Added from the plan, without GPS:</p><div class="sp-ngs">${b.full.filter((r) => !r.Time && r.DT == null).map((r) => `<span class="sp-ng">${escapeHtml(r.Players)}<small>${escapeHtml(r.Type)}</small></span>`).join('') || '<span class="sp-note">nobody</span>'}</div>
         <label class="sp-time">Session time <input type="number" min="1" max="200" value="${b.sessionTime}" data-f="time"> min <small>for the team-session players (the GPS's usual time)</small></label></div>
       <div class="sp-chk"><div class="sp-h3"><i class="n">3</i>RPE <small>${nRpe} / ${gpsRows.length} · Carga RPE = RPE × time</small><button type="button" class="linkbtn sp-rpe-ref" data-rpe-refresh>↻ Kiosk</button></div><div class="sp-rpe">${rpeGrid}</div>
-        <p class="sp-note">${nKiosk ? `<span class="sp-key k"></span>${nKiosk} from the players' kiosk answers` : 'No kiosk answer yet for this session'}${nRpe < gpsRows.length ? ` · <span class="sp-key miss"></span>${gpsRows.length - nRpe} missing: you can publish now — answers given later on the RPE page are added at the next updates (or type them)` : ''} · type a value to correct it.</p></div>
+        <p class="sp-note">${nKiosk ? `<span class="sp-key k"></span>${nKiosk} from the players' kiosk answers` : 'No kiosk answer yet for this session'}${nRpe < gpsRows.length ? ` · <span class="sp-key miss"></span>${gpsRows.length - nRpe} missing: you can publish now — answers given later on the RPE page are added overnight (or type them: added a few minutes later)` : ''} · type a value to correct it.</p></div>
     </div>
     <div class="sp-h3">Preview <span class="seg sp-show"><button type="button" data-show="full" class="${SPL.show === 'full' ? 'active' : ''}">Data_Full · ${b.full.length}</button><button type="button" data-show="drills" class="${SPL.show === 'drills' ? 'active' : ''}">Data_Drills · ${b.drills.length}</button></span><small>same columns and order as your Excel · blue = from the plan</small></div>
     <div class="sp-tw"><table class="sp-tbl"><thead><tr>${cols.map((c) => `<th class="${auto.has(c) ? 'a' : ''}">${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${cols.map((c) => `<td class="${auto.has(c) ? 'a' : ''}">${fmtv(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
     ${b.issues.length ? `<p class="sp-note warn">${b.issues.map(escapeHtml).join(' · ')}</p>` : ''}
     <div class="sp-actions"><button type="button" class="btn-primary" data-publish ${ready ? '' : 'disabled'}>Publish ${escapeHtml(p.sid || splSid(date))}</button><button type="button" class="btn-light" data-xlsx>Download Excel · Full + Drills</button><button type="button" class="btn-light" data-back>Back to the plan</button>
-      <span>${ready ? (b.checks.left ? `${b.checks.left} time${b.checks.left > 1 ? 's' : ''} not checked above — you can still publish: the preview shows what is written.` : 'Publishing adds the rows to the season: the dashboard and the staff e-mail follow at the next update.') : unmapped.length ? 'Name every drill first.' : 'The files are not from this day.'}</span></div>`;
+      <span>${ready ? (b.checks.left ? `${b.checks.left} time${b.checks.left > 1 ? 's' : ''} not checked above — you can still publish: the preview shows what is written.` : 'Publishing adds the rows to the season: the dashboard, the PDF reports and the staff e-mail (with the players’ report) follow on their own, a few minutes later.') : unmapped.length ? 'Name every drill first.' : 'The files are not from this day.'}</span></div>`;
 }
 
 async function splPublish() {
@@ -862,7 +862,7 @@ function splClick(e) {
   if (t.dataset.corrOpen != null) { splOpenCorrection(date); return; }
   if (t.dataset.corrCancel != null) { SPL.view = 'plan'; SPL.corr = null; splDraw(); return; }
   if (t.dataset.corrPub != null) { splCorrPublish(false); return; }
-  if (t.dataset.corrDel != null) { if (confirm('Remove the correction of this session? The Excel values come back at the next update.')) splCorrPublish(true); return; }
+  if (t.dataset.corrDel != null) { if (confirm('Remove the correction of this session? The Excel values come back a few minutes later.')) splCorrPublish(true); return; }
   // checks before publishing (the chosen fix again = undone)
   if (t.dataset.fixT != null || t.dataset.fixC != null) {
     const kind = t.dataset.fixT != null ? 't' : 'c', b = splBuild(), x = kind === 't' ? b.checks.time[Number(t.dataset.fixT)] : b.checks.cut[Number(t.dataset.fixC)];
@@ -905,7 +905,7 @@ function splClick(e) {
   if (t.dataset.ntPublish != null) { splNtPublish(); return; }
   if (t.dataset.ntCancel != null) { SPL.nt = null; splDraw(); return; }
   if (t.dataset.xlsx != null) { splXlsx().catch((err) => alert('Excel not created: ' + (err.message || err))); return; }
-  if (t.dataset.unpub) { if (confirm('Remove this published session? The rows leave the dashboard at the next update.')) splUnpublish(t.dataset.unpub); }
+  if (t.dataset.unpub) { if (confirm('Remove this published session? The rows leave the dashboard a few minutes later.')) splUnpublish(t.dataset.unpub); }
 }
 async function splUnpublish(key) {
   try { if (AUTH.demo) { delete SPL.saved.published[key]; splDemoStore(); } else { await callApi('session_unpublish', null, { key }); await splLoadSaved(); } SPL.state = 'Unpublished — out of the dashboard at the next update'; splDraw(); splRebuilt(); }

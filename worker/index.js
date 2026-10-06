@@ -27,6 +27,9 @@ export default {
     try {
       if (path === '/api/upload' && req.method === 'POST') return await upload(req, env);
       if ((path === '/api/snapshot' || path === '/api/payload') && req.method === 'GET') return await keyRead(req, path, env);
+      if (path === '/api/rebuild' && req.method === 'POST' && req.headers.get('X-Upload-Key')) { // the PC (tests); the site uses its staff session below
+        return env.UPLOAD_KEY && same(req.headers.get('X-Upload-Key'), env.UPLOAD_KEY) ? await rebuild(env) : json({ ok: false, error: 'forbidden' }, 403);
+      }
       const user = await sessionUser(req, env);
       if (user === 'down') return json({ ok: false, error: 'unavailable' }, 503);
       if (!user) return json({ ok: false, error: 'unauthenticated' }, 401);
