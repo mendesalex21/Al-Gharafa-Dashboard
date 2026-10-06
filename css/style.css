@@ -1409,6 +1409,7 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .sp-nt .sp-h3 { margin: 0; } .sp-nt-prev { display: flex; flex-direction: column; gap: 8px; }
 .sp-nt-d { border-top: 1px solid var(--hairline); padding-top: 6px; } .sp-nt-h { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 4px; } .sp-nt-h small { font-weight: 500; color: var(--ink-muted); }
 .sp-nt-r { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; padding: 2px 0; } .sp-nt-r select { font: inherit; font-size: 12.5px; }
+.sp-nt-rpe { font-size: 12.5px; color: var(--ink-muted); display: inline-flex; align-items: center; gap: 5px; } .sp-nt-rpe input { width: 58px; font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var(--hairline); border-radius: 7px; background: var(--surface); color: var(--ink); }
 .sp-nt-done { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--ink-muted); } .sp-nt-done span { white-space: nowrap; }
 .sp-after { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; margin-top: 16px; } .sp-after .sp-drop.mini { margin-top: 0; flex: 1 1 320px; }
 .sp-api { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 10px 18px; border-radius: 16px; font-size: 14px; }

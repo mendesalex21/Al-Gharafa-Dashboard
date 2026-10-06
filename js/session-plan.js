@@ -529,8 +529,9 @@ function splNtRows(date, rows) {
   const players = {}, mine = rows.filter((r) => splNtPlayer(spName(r['Player First Name'])));
   mine.forEach((r) => { const pn = spName(r['Player First Name']), q = splNtPlayer(pn); players[pn] = { name: q.gps, pos: q.pos, type: 'NT' }; });
   const titles = Object.fromEntries([...new Set(mine.map((r) => String(r['Drill Title'] || '').trim()))].map((t) => [t, { no: 1, name: 'NT', min: 0, own: true }]));
-  const csv = spToCsv(mine);
-  return spBuildRows(csv, csv, { date, sid: '/', week: splWeekNo(date), label: '/', md: '/', ampm: 'PM', players, extra: [], rpe: {}, drills: titles, drillName: () => 'NT' });
+  const csv = spToCsv(mine), typed = (SPL.nt && SPL.nt.rpe) || {}, rpe = {};
+  mine.forEach((r) => { const pn = spName(r['Player First Name']), v = typed[date + '|' + pn]; if (v != null && v !== '') rpe[pn] = Number(v); }); // his RPE, typed in the box
+  return spBuildRows(csv, csv, { date, sid: '/', week: splWeekNo(date), label: '/', md: '/', ampm: 'PM', players, extra: [], rpe, drills: titles, drillName: () => 'NT' });
 }
 function splNtMap(pn, gps) {
   SPL.saved.titles = { ...(SPL.saved.titles || {}), ['NT:' + pn]: gps };
@@ -552,13 +553,14 @@ function splNtHtml() {
       const lines = rows.map((r) => {
         const pn = spName(r['Player First Name']), q = splNtPlayer(pn), x = q ? byName[q.gps] : null;
         return `<div class="sp-nt-r">${q ? `<b>${escapeHtml(q.name)}</b>` : `<span class="sp-warn">${escapeHtml(pn)}</span> <select data-ntmap="${escapeHtml(pn)}">${opts('')}</select>`}
-          ${x ? `<span>${x.Time}′ · ${n(x.DT)} m · > 20 km/h ${n(x['HIT DT'])} m · max ${x['Speed Max (km.h)'] != null ? Number(x['Speed Max (km.h)']).toFixed(1) : '–'} km/h</span>` : '<span class="muted">not in the squad list — choose the player</span>'}</div>`;
+          ${x ? `<span>${x.Time}′ · ${n(x.DT)} m · > 20 km/h ${n(x['HIT DT'])} m · max ${x['Speed Max (km.h)'] != null ? Number(x['Speed Max (km.h)']).toFixed(1) : '–'} km/h</span>
+            <label class="sp-nt-rpe">RPE <input type="number" min="0" max="10" step="0.5" data-ntrpe="${escapeHtml(d + '|' + pn)}" value="${escapeHtml(((SPL.nt.rpe || {})[d + '|' + pn]) ?? '')}" aria-label="RPE"></label>` : '<span class="muted">not in the squad list — choose the player</span>'}</div>`;
       }).join('');
       return `<div class="sp-nt-d"><div class="sp-nt-h">${day(d)}${Object.values(SPL.saved.published || {}).some((x) => x.sid === 'NT' && x.date === d) ? ' <small>· published already: replaced</small>' : ''}</div>${lines}</div>`;
     }).join('');
     body = `<div class="sp-nt-prev">${blocks}</div>
       <div class="sp-card-a"><button type="button" class="btn-primary" data-nt-publish ${total ? '' : 'disabled'}>Publish ${days.length} NT day${days.length > 1 ? 's' : ''}</button><button type="button" class="btn-light" data-nt-cancel>Cancel</button>
-        <em class="sp-card-msg">Written as in your Excel: session “/”, Type NT, his own minutes, one “NT” drill. They replace his NT rows of that day in the Excel at the next update.</em></div>`;
+        <em class="sp-card-msg">Written as in your Excel: session “/”, Type NT, his own minutes, his RPE if typed (Carga RPE = RPE × time), one “NT” drill. They replace his NT rows of that day in the Excel at the next update.</em></div>`;
   }
   return `<section class="sp-nt" id="spl-nt"><div class="sp-h3">National team (NT) <small>the Qatar NT export from Sonra — one or several dates</small></div>
     ${body || `<label class="sp-drop small"><input type="file" accept=".csv,text/csv" multiple hidden data-ntfiles>Drop the NT export here, or click to choose</label>`}
@@ -855,6 +857,7 @@ function splChange(e) {
   if (t.dataset.files != null) { splReadFiles([...t.files]); return; }
   if (t.dataset.ntfiles != null) { splReadNtFiles([...t.files]); return; }
   if (t.dataset.ntmap) { splNtMap(t.dataset.ntmap, t.value); return; }
+  if (t.dataset.ntrpe && SPL.nt) { SPL.nt.rpe = { ...(SPL.nt.rpe || {}), [t.dataset.ntrpe]: t.value }; return; } // used at Publish (RPE × time)
   if (t.dataset.norpe) { splSaveNoRpe(date, t.dataset.norpe, t); return; } // an RPE typed for a session in the data
   if (t.dataset.cf) { splCorrEdit(t); return; } // the correction table
   const p = splEnsure(date);
