@@ -718,6 +718,7 @@ function splBuild() {
   checks.left = checks.time.filter((x) => !x.fix).length + checks.drill.filter((x) => !x.done).length + checks.cut.filter((x) => !x.fix).length;
   const ownTime = new Set(Object.keys(fixT).filter((g) => fixT[g] === 'own')), cutOwn = new Set(Object.keys(fixC).filter((k) => fixC[k] === 'own'));
   let fullText = SPL.files.full.text, drillText = SPL.files.drills ? SPL.files.drills.text : '';
+  const halfInfo = {}; // a match: the halves' minutes written (shown in the drills column)
   if (skipped.size) drillText = spToCsv(drillRows.filter((r) => !skipped.has(titleOfRow(r))));
   if (match) {
     // each player who played: his two halves added up (the match total), Type Game, his own minutes; a player who did not
@@ -733,12 +734,22 @@ function splBuild() {
       players[g] = { ...pl, type: played[g] ? 'Game' : SP_SESSION_TYPES.has(pl.type) ? 'INDIVIDUAL' : pl.type };
     });
     fullText = spToCsv(rows);
+    // the halves' minutes written, as for a training drill: the GPS by default (46.26 → 46), or his choice (45); a player
+    // who came on or went off during the half (2′ or more under the full half) keeps his own minutes
+    Object.entries(drills).forEach(([t, d]) => {
+      if (!/^Game_(1st|2nd)Half$/.test(d.name)) return;
+      const m = mapping.find((x) => x.title === t), top = Math.max(0, ...m.times.map((x) => x.t)), gps = Math.floor(top + 1e-9);
+      const written = Number((p.half || {})[d.name]) || gps, subs = m.times.filter((x) => x.t < top - 2);
+      subs.forEach((x) => cutOwn.add(t + '\u0001' + x.g));
+      drills[t] = { ...d, own: false, min: written, planned: gps };
+      halfInfo[t] = { name: d.name, written, gps: top, n: m.times.length, subs: subs.length };
+    });
   }
   const out = spBuildRows(fullText, drillText, {
     date, sid: p.sid || splSid(date), week: splWeekNo(date), label: p.label || splLabel(date), md: splTag(date) || '/', ampm: p.ampm || 'PM', sessionTime, players, extra, rpe, drills, ownTime, cutOwn,
     drillName: (pn, d) => (SPL_NOT_TEAM.test(d.name) && players[pn] && players[pn].type === 'Rehab' ? 'Rehab' : d.name),
   });
-  return { ...out, fileDate, missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk, checks, match };
+  return { ...out, fileDate, missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk, checks, match, halfInfo };
 }
 /** The checks above the three columns: each flagged time with its one-click fixes (the chosen one stays highlighted). */
 function splChecksHtml(b) {
@@ -774,7 +785,8 @@ function splImportHtml() {
   const date = SPL.date, p = splEnsure(date), b = splBuild();
   const gpsRows = b.full.filter((r) => r.Time > 0 || r.DT != null), unmapped = b.mapping.filter((m) => !m.d && !m.skip);
   const drillOpts = (t, cur, skip) => `<select data-map="${escapeHtml(t)}"><option value="">Which drill of the plan?</option>${b.plan.map((d) => `<option value="${escapeHtml(d.name)}" ${cur && cur.name === d.name ? 'selected' : ''}>${d.no} · ${escapeHtml(d.name)}</option>`).join('')}<option value="__skip" ${skip ? 'selected' : ''}>— not used —</option></select>`;
-  const mapRows = b.mapping.map((m) => `<div class="sp-mr${m.d || m.skip ? '' : ' warn'}"><code title="${escapeHtml(m.title)}">${escapeHtml(m.title)}</code><span class="arr">→</span><span class="tg">${m.d ? `<b style="--c:${splColor(m.d.name)}">${m.d.no} · ${escapeHtml(m.d.name)}</b><small>${m.d.own ? `each player's own minutes · ${m.n} player${m.n > 1 ? 's' : ''}` : `<input type="number" class="sp-act" min="1" max="120" value="${m.d.min}" data-actmin="${m.d.i}" aria-label="Minutes written">' written · planned ${m.d.planned}' · GPS ${m.med.toFixed(1)}' · ${m.n} player${m.n > 1 ? 's' : ''}`}</small>` : drillOpts(m.title, null, m.skip)}</span><span class="ok">${m.d ? '✓' : m.skip ? '–' : '!'}</span></div>`).join('');
+  const mapRows = b.mapping.map((m) => `<div class="sp-mr${m.d || m.skip ? '' : ' warn'}"><code title="${escapeHtml(m.title)}">${escapeHtml(m.title)}</code><span class="arr">→</span><span class="tg">${m.d ? `<b style="--c:${splColor(m.d.name)}">${m.d.no} · ${escapeHtml(m.d.name)}</b><small>${b.halfInfo[m.title] ? ((h) => `<input type="number" class="sp-act" min="1" max="70" value="${h.written}" data-halfmin="${escapeHtml(h.name)}" aria-label="Minutes written">' written for the whole half · GPS ${h.gps.toFixed(1)}' · ${h.n} player${h.n > 1 ? 's' : ''}${h.subs ? ` · ${h.subs} came on or off: their own minutes` : ''}`)(b.halfInfo[m.title])
+    : m.d.own ? `each player's own minutes · ${m.n} player${m.n > 1 ? 's' : ''}` : `<input type="number" class="sp-act" min="1" max="120" value="${m.d.min}" data-actmin="${m.d.i}" aria-label="Minutes written">' written · planned ${m.d.planned}' · GPS ${m.med.toFixed(1)}' · ${m.n} player${m.n > 1 ? 's' : ''}`}</small>` : drillOpts(m.title, null, m.skip)}</span><span class="ok">${m.d ? '✓' : m.skip ? '–' : '!'}</span></div>`).join('');
   // green = the player's own answer on the kiosk, white = typed here, orange = no RPE yet
   const rpeGrid = gpsRows.map((r) => { const g = spName(r.Players), k = b.fromKiosk.has(g);
     return `<label class="${r.RPE == null ? 'miss' : k ? 'k' : ''}"${k ? ' title="From the kiosk"' : ''}>${escapeHtml(r.Players)}<input type="number" min="0" max="10" step="0.5" value="${r.RPE ?? ''}" data-rpe="${escapeHtml(g)}"></label>`; }).join('');
@@ -910,6 +922,7 @@ function splChange(e) {
     return;
   }
   if (t.dataset.actmin != null) { splDraw(); return; } // minutes written: refresh the checks and the preview when done
+  if (t.dataset.halfmin) { const p = splEnsure(date), v = Math.round(Number(t.value)); p.half = { ...(p.half || {}), [t.dataset.halfmin]: v > 0 ? v : undefined }; splTouch(date); splDraw(); return; }
   if (t.dataset.status) { p.status[t.dataset.status] = t.value; splTouch(date); splDraw(); return; }
   if (t.dataset.map) {
     p.titlemap = { ...(p.titlemap || {}), [t.dataset.map]: t.value };
