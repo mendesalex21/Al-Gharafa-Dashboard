@@ -1,0 +1,6 @@
+{
+  // Al-Gharafa staff dashboard on Cloudflare (Workers static assets): `npx wrangler deploy` from this folder
+  "name": "al-gharafa-dashboard",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "." }
+}
