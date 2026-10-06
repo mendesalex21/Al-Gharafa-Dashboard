@@ -304,7 +304,7 @@ function splPlanHtml() {
       ${splCardHtml()}
       ${splLoadHtml(date, p)}</div>
       ${splPlayersHtml(p)}</div>
-    ${inData ? '' : `<label class="sp-drop mini" id="spl-drop"><input type="file" accept=".csv,text/csv" multiple hidden data-files><b>After the session</b><span>Drop <code>${escapeHtml(p.sid || splSid(date))}_Full.csv</code> and <code>${escapeHtml(p.sid || splSid(date))}_Drills.csv</code> here, or click to choose — the rows are built from this plan</span></label>`}`;
+    ${inData ? '' : `<div class="sp-after">${typeof cfOn === 'function' && cfOn() ? `<button type="button" class="btn-primary sp-api" data-statsports><b>After the session</b>⇣ Get it from StatSports</button>` : ''}<label class="sp-drop mini" id="spl-drop"><input type="file" accept=".csv,text/csv" multiple hidden data-files>${typeof cfOn === 'function' && cfOn() ? '' : '<b>After the session</b>'}<span>${typeof cfOn === 'function' && cfOn() ? 'or drop' : 'Drop'} <code>${escapeHtml(p.sid || splSid(date))}_Full.csv</code> and <code>${escapeHtml(p.sid || splSid(date))}_Drills.csv</code> here, or click to choose — the rows are built from this plan</span></label></div>`}`;
 }
 /** A session in the data: its players still without an RPE — the answers given since on the RPE page, or a value typed
  * here (saved like a player's answer); both are added to the data at the next update, a value there is never replaced. */
@@ -498,6 +498,27 @@ function splCorrLineHtml(date) {
 }
 
 // ------------------------------------------------------------------ step 2: the files → rows
+/** "Get it from StatSports": this day's session from the StatSports API (through the Cloudflare server, which keeps the
+ * key), in the two exports' columns (sp-convert.js spFromStatsports) → the same import screen as the dropped files. */
+async function splFromStatsports(btn) {
+  const date = SPL.date, p = splEnsure(date), label = btn.innerHTML;
+  btn.disabled = true; btn.textContent = 'Getting the session from StatSports… (about 20 s)';
+  try {
+    const r = await fetch(`/api/statsports?date=${date}`, { headers: cfHeaders() });
+    if (!r.ok) throw new Error(r.status === 401 ? 'sign in again' : `StatSports did not answer (${r.status}) — try again, or drop the files`);
+    const out = spFromStatsports(await r.json(), p.ampm || 'PM');
+    if (!out) throw new Error('no session on StatSports for this day yet');
+    const tag = `StatSports · ${out.start.slice(11, 16)} · ${out.players} players`;
+    SPL.files = { full: { name: `${tag} · full session`, text: out.full }, drills: { name: `${tag} · drills`, text: out.drills } };
+    SPL.view = 'import';
+    SPL.state = out.live ? '' : 'No “Entire Session - Live” on StatSports for this day: the whole recording is used — check the times';
+    splDraw();
+  } catch (err) {
+    SPL.state = 'Not fetched: ' + (err.message || err);
+    btn.disabled = false; btn.innerHTML = label;
+    splStateLine();
+  }
+}
 /** Full session or drills file: its name (S75_Full / S75_Drills), else its rows. A full export can have a "Drill Title"
  * column too ("Entire Session - Live", one row per player — S75); a drills export has the drills' own titles. */
 function splFileKind(name, text) {
@@ -731,6 +752,7 @@ function splClick(e) {
   if (t.dataset.back != null) { SPL.view = 'plan'; splDraw(); return; }
   if (t.dataset.goto) { SPL.week = addDays(t.dataset.goto, -new Date(t.dataset.goto + 'T12:00:00Z').getUTCDay()); SPL.date = t.dataset.goto; splDraw(); return; }
   if (t.dataset.publish != null) { splPublish(); return; }
+  if (t.dataset.statsports != null) { splFromStatsports(t); return; }
   if (t.dataset.xlsx != null) { splXlsx().catch((err) => alert('Excel not created: ' + (err.message || err))); return; }
   if (t.dataset.unpub) { if (confirm('Remove this published session? The rows leave the dashboard at the next update.')) splUnpublish(t.dataset.unpub); }
 }

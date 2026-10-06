@@ -49,6 +49,53 @@ const spName = (s) => String(s || '').replace(/\s+/g, ' ').trim().toUpperCase();
 /** "29/09/2026" → "2026-09-29" */
 function spIsoDate(s) { const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(s || '').trim()); return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : ''; }
 
+/** STATSports 3rd Party API (v7) → the columns of the two exports, with the export's units (the API gives seconds and
+ * m/s): the import then works exactly as with the dropped S##_Full.csv / S##_Drills.csv (checked on S75: identical). */
+const SP_API_COLS = [
+  ['Total Time', (k) => k.totalTime / 60], ['Total Distance', 'distanceTotal'],
+  ['Distance Zone 3 - Zone 6 (Absolute)', 'distanceZ3Z6Abs'], ['Distance Zone 4 (Absolute)', 'distanceZ4Abs'],
+  ['Distance Zone 5 (Absolute)', 'distanceZ5Abs'], ['Distance Zone 6 (Absolute)', 'distanceZ6Abs'],
+  ['Distance Zone 5 (Relative)', 'distanceZ5Rel'], ['Distance Zone 6 (Relative)', 'distanceZ6Rel'], ['Distance Zone 5+Zone 6 Relative', 'highSpeedRunningRel'],
+  ['Entries Zone 5 (Absolute)', 'entriesZ5Abs'], ['Entries Zone 6 (Absolute)', 'entriesZ6Abs'], ['Entries Zone 5 (Relative)', 'entriesZ5Rel'], ['Entries Zone 6 (Relative)', 'entriesZ6Rel'],
+  ['Max Speed', (k) => k.maxSpeed * 3.6], ['Average Speed', (k) => k.averageSpeed * 3.6],
+  ['Accelerations Zone 1 (Absolute)', 'accelerationsZ1Abs'], ['Accelerations Zone 2 (Absolute)', 'accelerationsZ2Abs'],
+  ['Accelerations Zone 3 (Absolute)', 'accelerationsZ3Abs'], ['Accelerations Zone 4 - Zone 6 (Absolute)', 'accelerationsZ4Z6Abs'],
+  ['Decelerations Zone 1 (Absolute)', 'decelerationsZ1Abs'], ['Decelerations Zone 2 (Absolute)', 'decelerationsZ2Abs'],
+  ['Decelerations Zone 3 (Absolute)', 'decelerationsZ3Abs'], ['Decelerations Zone 4 - Zone 6 (Absolute)', 'decelerationsZ4Z6Abs'],
+  ['Average Heart Rate', 'averageHeartRate'], ['Max Heart Rate', 'maxHeartrate'],
+  ['Time In Heart Rate Zone 4 - Zone 6 (Absolute)', (k) => k.timeHeartRateZ4Z6Abs / 60],
+  ['Dynamic Stress Load', 'dsl'], ['Total Metabolic Power', 'totalMetabolicPower'], ['Max Acceleration', 'maxAcceleration'], ['Max Deceleration', 'maxDeceleration'],
+];
+/** sessions = getFullSessionsByDateRange's list for one day; ampm picks the session (started before 15:00 = AM). Full
+ * session = the drill "Entire Session - Live" (the export's), else "Entire Session"; drills = the others.
+ * → { full, drills } CSV texts, date (yyyy-mm-dd), start time, players, live (false = no "Live" whole session). */
+function spFromStatsports(sessions, ampm) {
+  const list = (Array.isArray(sessions) ? sessions : [sessions]).filter((s) => s && (s.sessionPlayers || []).length);
+  if (!list.length) return null;
+  const hour = (s) => Number(String((s.sessionDetails || {}).startTime || '').slice(11, 13)) || 0;
+  const s = list.find((x) => (hour(x) < 15 ? 'AM' : 'PM') === (ampm || 'PM')) || list[list.length - 1];
+  const d = String((s.sessionDetails || {}).sessionDate || '').slice(0, 10), date = d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '';
+  const head = ['Player First Name', 'Drill Title', 'Session Date', ...SP_API_COLS.map(([c]) => c)];
+  const cell = (v) => { const t = String(v ?? ''); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const line = (p, dr) => {
+    const k = dr.drillKpi || {};
+    // the export's "Player First Name" is StatSports' first name (SANO's is SEYDOU)
+    return [p.playerDetails.firstName || p.playerDetails.displayName, dr.drillName, date, ...SP_API_COLS.map(([, f]) => {
+      const v = Number(typeof f === 'function' ? f(k) : k[f]);
+      return Number.isFinite(v) ? spRound(v, 2) : '';
+    })].map(cell).join(',');
+  };
+  const full = [], drills = [];
+  let live = true;
+  for (const p of s.sessionPlayers) {
+    const dl = p.drills || [];
+    const ent = dl.find((x) => /^entire session - live$/i.test(x.drillName)) || dl.find((x) => /^entire session$/i.test(x.drillName));
+    if (ent) { full.push(line(p, ent)); if (!/live/i.test(ent.drillName)) live = false; }
+    dl.filter((x) => !/^entire session/i.test(x.drillName)).forEach((x) => drills.push(line(p, x)));
+  }
+  return { full: [head.join(','), ...full].join('\n'), drills: [head.join(','), ...drills].join('\n'), date: d, start: (s.sessionDetails || {}).startTime || '', players: s.sessionPlayers.length, live, sessions: list.length };
+}
+
 /** The metric columns of one StatSports row, for `time` minutes (full session: whole minutes; drill: planned minutes). */
 function spMetrics(r, time) {
   const z4 = spNum(r['Distance Zone 4 (Absolute)']), z5 = spNum(r['Distance Zone 5 (Absolute)']), z6 = spNum(r['Distance Zone 6 (Absolute)']);

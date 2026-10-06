@@ -4,8 +4,9 @@
  *   GET  /api/data/<name>  a payload (staff session)        GET  /api/pdf/<file>  a report prepared by Update dashboard
  *   POST /api/refresh      re-read the wellness, the staff list and the calendar edits from the Google script
  *                          (the site asks when a wellness page opens or after a calendar edit)
+ *   GET  /api/statsports?date=yyyy-mm-dd  that day's sessions from the STATSports API (Session Plan import)
  *   POST /api/upload       Update dashboard (sync/build.py) sends the payloads and the PDFs (upload key)
- *   cron, every 10 min     the same re-read as /api/refresh
+ *   cron, every 15 min     the same re-read as /api/refresh
  * Staff session: "s1.<payload>.<sig>", issued by the Google script after a Google sign-in (30 days, Auth.gs):
  * HMAC-SHA256 with SESSION_SECRET, the same secret on both sides. The e-mail must still be in the Staff list (KV
  * "staff", re-read with the wellness): removing someone there cuts his access within 10 minutes.
@@ -26,6 +27,7 @@ export default {
       if (!user) return json({ ok: false, error: 'unauthenticated' }, 401);
       if (path.startsWith('/api/data/') && req.method === 'GET') return await data(req, path.slice(10), user, env, ctx);
       if (path.startsWith('/api/pdf/') && req.method === 'GET') return await pdf(decodeURIComponent(path.slice(9)), env);
+      if (path === '/api/statsports' && req.method === 'GET') return await statsports(new URL(req.url).searchParams.get('date'), env);
       if (path === '/api/refresh' && req.method === 'POST') { const r = await refresh(env, new URL(req.url).searchParams.get('force') === '1'); return json({ ok: true, changed: r.changed || [] }); }
       return json({ ok: false, error: 'not_found' }, 404);
     } catch (err) {
@@ -93,6 +95,19 @@ async function pdf(file, env) {
   const value = await env.DATA.get('pdf:' + file, { type: 'stream' });
   if (!value) return json({ ok: false, error: 'not_ready' }, 404);
   return new Response(value, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${file}"`, 'Cache-Control': 'private, no-store' } });
+}
+
+/** A day's sessions from the STATSports 3rd Party API (v7), for the Session Plan import. The key (thirdPartyApiId) stays
+ * here, as the secret STATSPORTS_KEY; the site turns the answer into the two exports' columns (sp-convert.js). */
+async function statsports(date, env) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || !env.STATSPORTS_KEY) return json({ ok: false, error: 'bad_request' }, 400);
+  const r = await fetch('https://statsportsproseries.com/thirdpartyapi/api/thirdPartyData/getFullSessionsByDateRange', {
+    method: 'POST',
+    headers: { 'api-version': '7', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ thirdPartyApiId: env.STATSPORTS_KEY, sessionStartDate: `${date}T00:00:00`, sessionEndDate: `${date}T23:59:59` }),
+  });
+  if (!r.ok) return json({ ok: false, error: `statsports ${r.status}` }, 502);
+  return new Response(r.body, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' } });
 }
 
 /** Update dashboard: a payload (?name=workload…) or a PDF (?name=pdf:S75_2026-10-05_Staff_report.pdf, kept 120 days). */
