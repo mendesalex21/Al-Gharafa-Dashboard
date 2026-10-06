@@ -131,7 +131,7 @@ function splDrawWeek() {
   const el = document.getElementById('spl-week');
   el.innerHTML = [...Array(7)].map((_, i) => {
     const d = addDays(SPL.week, i), tag = splTag(d), m = splMatchOn(d), r = SPL.lib.recent[d], p = (SPL.saved.plans || {})[d];
-    const pub = Object.values(SPL.saved.published || {}).some((x) => x.date === d);
+    const pub = Object.values(SPL.saved.published || {}).some((x) => x.date === d && x.sid !== 'NT');
     const corr = r && (SPL.saved.corrections || {})[`${d}_${r.sid}`];
     const badge = r && /^S\d+$/.test(r.sid) ? `<span class="sp-b done">${r.sid} · ${r.pub ? 'published' : 'in the data'} ✓${corr ? ' · ✎' : ''}</span>` : pub ? '<span class="sp-b done">Published ✓</span>'
       : m ? `<span class="sp-b match">${crestHtml(m.e.opponent, 16)}${escapeHtml([m.e.round || m.e.competition, m.e.opponent].filter(Boolean).join(' · '))}</span>`
@@ -276,7 +276,7 @@ async function splCardDelete() {
 function splPlanHtml() {
   const date = SPL.date, p = splPlan(date), lib = SPL.lib.library, tag = splTag(date);
   // in the data from the Excel files: nothing to do. Published from this page: can be published again (it replaces) or removed
-  const r = SPL.lib.recent[date], pub = Object.values(SPL.saved.published || {}).find((x) => x.date === date);
+  const r = SPL.lib.recent[date], pub = Object.values(SPL.saved.published || {}).find((x) => x.date === date && x.sid !== 'NT');
   const inData = !!(r && /^S\d+$/.test(r.sid) && !r.pub), live = !!(r && r.pub);
   const team = p.drills.filter((d) => !SPL_NOT_TEAM.test(splName(d.name))), tot = team.reduce((a, d) => a + (Number(d.min) || 0), 0);
   const titleOf = {}; Object.entries({ ...SPL.lib.titles, ...SPL.saved.titles }).forEach(([t, n]) => { if (!titleOf[splName(n)]) titleOf[splName(n)] = t; });
@@ -304,7 +304,8 @@ function splPlanHtml() {
       ${splCardHtml()}
       ${splLoadHtml(date, p)}</div>
       ${splPlayersHtml(p)}</div>
-    ${inData ? '' : `<div class="sp-after">${typeof cfOn === 'function' && cfOn() ? `<button type="button" class="btn-primary sp-api" data-statsports><b>After the session</b>⇣ Get it from StatSports</button>` : ''}<label class="sp-drop mini" id="spl-drop"><input type="file" accept=".csv,text/csv" multiple hidden data-files>${typeof cfOn === 'function' && cfOn() ? '' : '<b>After the session</b>'}<span>${typeof cfOn === 'function' && cfOn() ? 'or drop' : 'Drop'} <code>${escapeHtml(p.sid || splSid(date))}_Full.csv</code> and <code>${escapeHtml(p.sid || splSid(date))}_Drills.csv</code> here, or click to choose — the rows are built from this plan</span></label></div>`}`;
+    ${inData ? '' : `<div class="sp-after">${typeof cfOn === 'function' && cfOn() ? `<button type="button" class="btn-primary sp-api" data-statsports><b>After the session</b>⇣ Get it from StatSports</button>` : ''}<label class="sp-drop mini" id="spl-drop"><input type="file" accept=".csv,text/csv" multiple hidden data-files>${typeof cfOn === 'function' && cfOn() ? '' : '<b>After the session</b>'}<span>${typeof cfOn === 'function' && cfOn() ? 'or drop' : 'Drop'} <code>${escapeHtml(p.sid || splSid(date))}_Full.csv</code> and <code>${escapeHtml(p.sid || splSid(date))}_Drills.csv</code> here, or click to choose — the rows are built from this plan</span></label></div>`}
+    ${splNtHtml()}`;
 }
 /** A session in the data: its players still without an RPE — the answers given since on the RPE page, or a value typed
  * here (saved like a player's answer); both are added to the data at the next update, a value there is never replaced. */
@@ -495,6 +496,92 @@ function splCorrLineHtml(date) {
   const col = { type: 3, time: 4, rpe: 5 }, n = Object.keys(c.changes || {}).length;
   const applied = Object.entries(c.changes || {}).every(([k, ch]) => { const row = r.rows.find((x) => x[0] === k); return row && Object.entries(ch).every(([f, v]) => row[col[f]] === v); });
   return `<p class="sp-corrline on"><button type="button" class="btn-light" data-corr-open>✎ Edit the correction</button><span>Corrected on the site${c.by ? ' by ' + escapeHtml(String(c.by).split('@')[0]) : ''} · ${n} player${n > 1 ? 's' : ''} · ${applied ? 'in the dashboard ✓' : 'applied at the next update'}</span></p>`;
+}
+
+// ------------------------------------------------------------------ national team (NT): the Qatar NT export from Sonra
+/** The squad player of a name in the NT export: same GPS name, or the one chosen once for it (kept like a drill title). */
+function splNtPlayer(pn) {
+  const gps = (SPL.saved.titles || {})['NT:' + pn] || pn;
+  return SPL.lib.players.find((q) => q.gps === gps) || null;
+}
+/** One or several dates in the file(s): per day and player, the whole-session row ("Entire Session", "session [training]",
+ * else the longest one). */
+async function splReadNtFiles(list) {
+  const byDate = {}, names = [];
+  for (const f of list) {
+    const rows = spParseCsv(await f.text());
+    if (!rows.length || !('Player First Name' in rows[0]) || !('Session Date' in rows[0])) { SPL.state = `${f.name}: not a StatSports export`; continue; }
+    names.push(f.name);
+    rows.forEach((r) => {
+      const date = spIsoDate(r['Session Date']), pn = spName(r['Player First Name']);
+      if (!date || !pn) return;
+      const day = byDate[date] || (byDate[date] = {}), old = day[pn], whole = (x) => /entire session|^session\b/i.test(String(x['Drill Title'] || ''));
+      if (!old || (whole(r) && !whole(old)) || (whole(r) === whole(old) && spNum(r['Total Time']) > spNum(old['Total Time']))) day[pn] = r;
+    });
+  }
+  SPL.nt = Object.keys(byDate).length ? { byDate: Object.fromEntries(Object.entries(byDate).map(([d, o]) => [d, Object.values(o)])), files: names } : null;
+  splDraw();
+  const el = document.getElementById('spl-nt');
+  if (el) el.scrollIntoView({ block: 'nearest' });
+}
+/** A day's NT rows, as typed in the Excel: session "/", MD "/", label "/", Type NT, his own minutes, one "NT" drill row. */
+function splNtRows(date, rows) {
+  const players = {}, mine = rows.filter((r) => splNtPlayer(spName(r['Player First Name'])));
+  mine.forEach((r) => { const pn = spName(r['Player First Name']), q = splNtPlayer(pn); players[pn] = { name: q.gps, pos: q.pos, type: 'NT' }; });
+  const titles = Object.fromEntries([...new Set(mine.map((r) => String(r['Drill Title'] || '').trim()))].map((t) => [t, { no: 1, name: 'NT', min: 0, own: true }]));
+  const csv = spToCsv(mine);
+  return spBuildRows(csv, csv, { date, sid: '/', week: splWeekNo(date), label: '/', md: '/', ampm: 'PM', players, extra: [], rpe: {}, drills: titles, drillName: () => 'NT' });
+}
+function splNtMap(pn, gps) {
+  SPL.saved.titles = { ...(SPL.saved.titles || {}), ['NT:' + pn]: gps };
+  if (AUTH.demo) splDemoStore(); else callApi('title_save', null, { title: 'NT:' + pn, name: gps }).catch(() => { /* asked again next time */ });
+  splDraw();
+}
+function splNtHtml() {
+  const done = Object.values(SPL.saved.published || {}).filter((x) => x.sid === 'NT').sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8);
+  const day = (d) => SPL_DAY(d, { weekday: 'short', day: 'numeric', month: 'short' }), n = (v) => (v == null ? '–' : Math.round(v).toLocaleString('en-US'));
+  let body = '';
+  if (SPL.nt) {
+    const opts = (cur) => '<option value="">Which player?</option>' + SPL.lib.players.slice().sort((a, b) => a.name.localeCompare(b.name))
+      .map((q) => `<option value="${escapeHtml(q.gps)}" ${q.gps === cur ? 'selected' : ''}>${escapeHtml(q.name)}</option>`).join('');
+    const days = Object.entries(SPL.nt.byDate).sort(([a], [b]) => (a < b ? -1 : 1));
+    let total = 0;
+    const blocks = days.map(([d, rows]) => {
+      const b = splNtRows(d, rows), byName = Object.fromEntries(b.full.map((r) => [r.Players, r]));
+      total += b.full.length;
+      const lines = rows.map((r) => {
+        const pn = spName(r['Player First Name']), q = splNtPlayer(pn), x = q ? byName[q.gps] : null;
+        return `<div class="sp-nt-r">${q ? `<b>${escapeHtml(q.name)}</b>` : `<span class="sp-warn">${escapeHtml(pn)}</span> <select data-ntmap="${escapeHtml(pn)}">${opts('')}</select>`}
+          ${x ? `<span>${x.Time}′ · ${n(x.DT)} m · > 20 km/h ${n(x['HIT DT'])} m · max ${x['Speed Max (km.h)'] != null ? Number(x['Speed Max (km.h)']).toFixed(1) : '–'} km/h</span>` : '<span class="muted">not in the squad list — choose the player</span>'}</div>`;
+      }).join('');
+      return `<div class="sp-nt-d"><div class="sp-nt-h">${day(d)}${Object.values(SPL.saved.published || {}).some((x) => x.sid === 'NT' && x.date === d) ? ' <small>· published already: replaced</small>' : ''}</div>${lines}</div>`;
+    }).join('');
+    body = `<div class="sp-nt-prev">${blocks}</div>
+      <div class="sp-card-a"><button type="button" class="btn-primary" data-nt-publish ${total ? '' : 'disabled'}>Publish ${days.length} NT day${days.length > 1 ? 's' : ''}</button><button type="button" class="btn-light" data-nt-cancel>Cancel</button>
+        <em class="sp-card-msg">Written as in your Excel: session “/”, Type NT, his own minutes, one “NT” drill. They replace his NT rows of that day in the Excel at the next update.</em></div>`;
+  }
+  return `<section class="sp-nt" id="spl-nt"><div class="sp-h3">National team (NT) <small>the Qatar NT export from Sonra — one or several dates</small></div>
+    ${body || `<label class="sp-drop small"><input type="file" accept=".csv,text/csv" multiple hidden data-ntfiles>Drop the NT export here, or click to choose</label>`}
+    ${done.length ? `<div class="sp-nt-done">Published: ${done.map((x) => `<span>${day(x.date)} <small>${escapeHtml(x.rows || '')}</small> <button type="button" class="linkbtn" data-unpub="${escapeHtml(x.date + '_NT')}">remove</button></span>`).join('')}</div>` : ''}</section>`;
+}
+async function splNtPublish() {
+  const days = Object.entries((SPL.nt || {}).byDate || {});
+  SPL.state = 'Publishing the NT days…'; splStateLine();
+  try {
+    let n = 0;
+    for (const [date, rows] of days) {
+      const b = splNtRows(date, rows);
+      if (!b.full.length) continue;
+      const body = { date, sid: 'NT', cols_full: SP_FULL_COLS, full: b.full.map((r) => SP_FULL_COLS.map((c) => r[c])), cols_drills: SP_DRILL_COLS, drills: b.drills.map((r) => SP_DRILL_COLS.map((c) => r[c])) };
+      if (AUTH.demo) SPL.saved.published[`${date}_NT`] = { date, sid: 'NT', rows: `${body.full.length} full · ${body.drills.length} drills`, by: 'demo', at: new Date().toISOString() };
+      else await callApi('session_publish', null, body);
+      n++;
+    }
+    if (AUTH.demo) splDemoStore(); else await splLoadSaved();
+    SPL.nt = null;
+    SPL.state = `${n} NT day${n > 1 ? 's' : ''} published ✓ — in the dashboard at the next update`;
+    splDraw();
+  } catch (err) { SPL.state = 'NT not published — ' + (err.message || err); splStateLine(); }
 }
 
 // ------------------------------------------------------------------ step 2: the files → rows
@@ -754,6 +841,8 @@ function splClick(e) {
   if (t.dataset.goto) { SPL.week = addDays(t.dataset.goto, -new Date(t.dataset.goto + 'T12:00:00Z').getUTCDay()); SPL.date = t.dataset.goto; splDraw(); return; }
   if (t.dataset.publish != null) { splPublish(); return; }
   if (t.dataset.statsports != null) { splFromStatsports(t); return; }
+  if (t.dataset.ntPublish != null) { splNtPublish(); return; }
+  if (t.dataset.ntCancel != null) { SPL.nt = null; splDraw(); return; }
   if (t.dataset.xlsx != null) { splXlsx().catch((err) => alert('Excel not created: ' + (err.message || err))); return; }
   if (t.dataset.unpub) { if (confirm('Remove this published session? The rows leave the dashboard at the next update.')) splUnpublish(t.dataset.unpub); }
 }
@@ -764,6 +853,8 @@ async function splUnpublish(key) {
 function splChange(e) {
   const t = e.target, date = SPL.date;
   if (t.dataset.files != null) { splReadFiles([...t.files]); return; }
+  if (t.dataset.ntfiles != null) { splReadNtFiles([...t.files]); return; }
+  if (t.dataset.ntmap) { splNtMap(t.dataset.ntmap, t.value); return; }
   if (t.dataset.norpe) { splSaveNoRpe(date, t.dataset.norpe, t); return; } // an RPE typed for a session in the data
   if (t.dataset.cf) { splCorrEdit(t); return; } // the correction table
   const p = splEnsure(date);
@@ -806,4 +897,8 @@ function splInput(e) {
 }
 document.addEventListener('dragover', (e) => { if (CURRENT_VIEW === 'plan' && e.target.closest && e.target.closest('#spl-main')) { e.preventDefault(); const z = e.target.closest('.sp-drop'); if (z) z.classList.add('over'); } });
 document.addEventListener('dragleave', (e) => { const z = e.target.closest && e.target.closest('.sp-drop'); if (z) z.classList.remove('over'); });
-document.addEventListener('drop', (e) => { if (CURRENT_VIEW === 'plan' && e.target.closest && e.target.closest('#spl-main')) { e.preventDefault(); splReadFiles([...e.dataTransfer.files]); } });
+document.addEventListener('drop', (e) => {
+  if (CURRENT_VIEW !== 'plan' || !e.target.closest || !e.target.closest('#spl-main')) return;
+  e.preventDefault();
+  if (e.target.closest('#spl-nt')) splReadNtFiles([...e.dataTransfer.files]); else splReadFiles([...e.dataTransfer.files]);
+});

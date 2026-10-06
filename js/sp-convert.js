@@ -66,6 +66,12 @@ const SP_API_COLS = [
   ['Time In Heart Rate Zone 4 - Zone 6 (Absolute)', (k) => k.timeHeartRateZ4Z6Abs / 60],
   ['Dynamic Stress Load', 'dsl'], ['Total Metabolic Power', 'totalMetabolicPower'], ['Max Acceleration', 'maxAcceleration'], ['Max Deceleration', 'maxDeceleration'],
 ];
+/** Rows (objects) → CSV text, the columns of the first row (to feed spBuildRows with rows already read). */
+function spToCsv(rows) {
+  if (!rows.length) return '';
+  const cols = Object.keys(rows[0]), cell = (v) => { const t = String(v ?? ''); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  return [cols.map(cell).join(','), ...rows.map((r) => cols.map((c) => cell(r[c])).join(','))].join('\n');
+}
 /** sessions = getFullSessionsByDateRange's list for one day; ampm picks the session (started before 15:00 = AM). Full
  * session = the drill "Entire Session - Live" (the export's), else "Entire Session"; drills = the others.
  * → { full, drills } CSV texts, date (yyyy-mm-dd), start time, players, live (false = no "Live" whole session). */
