@@ -7,6 +7,6 @@
   "assets": { "directory": ".", "run_worker_first": ["/api/*"] },
   "kv_namespaces": [{ "binding": "DATA", "id": "c90fdcadf3634911877561ac317836ef" }],
   "triggers": { "crons": ["*/15 * * * *"] },
-  "vars": { "API_URL": "https://script.google.com/macros/s/AKfycbxkuo3LpDI5eBBkWNZUyy7ZBOc600Xcu3cD_R5BDLzYqGZTpKxeIGuWqaMVjXgkJgpA/exec" },
+  "vars": { "GITHUB_REPO": "mendesalex21/al-gharafa-sync", "API_URL": "https://script.google.com/macros/s/AKfycbxkuo3LpDI5eBBkWNZUyy7ZBOc600Xcu3cD_R5BDLzYqGZTpKxeIGuWqaMVjXgkJgpA/exec" },
   "observability": { "enabled": true }
 }

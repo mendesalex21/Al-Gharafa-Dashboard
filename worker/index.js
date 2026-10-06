@@ -5,7 +5,9 @@
  *   POST /api/refresh      re-read the wellness, the staff list and the calendar edits from the Google script
  *                          (the site asks when a wellness page opens or after a calendar edit)
  *   GET  /api/statsports?date=yyyy-mm-dd  that day's sessions from the STATSports API (Session Plan import)
- *   POST /api/upload       Update dashboard (sync/build.py) sends the payloads and the PDFs (upload key)
+ *   POST /api/upload       Update dashboard (sync/build.py) sends the payloads, the PDFs and the Excel copies (upload key)
+ *   GET  /api/snapshot, /api/payload   the online calculation reads the Excel copies and the payloads it reuses (upload key)
+ *   POST /api/rebuild      starts the online calculation (GitHub workflow) after a change on the site (staff session)
  *   cron, every 15 min     the same re-read as /api/refresh
  * Staff session: "s1.<payload>.<sig>", issued by the Google script after a Google sign-in (30 days, Auth.gs):
  * HMAC-SHA256 with SESSION_SECRET, the same secret on both sides. The e-mail must still be in the Staff list (KV
@@ -15,6 +17,8 @@
 const UPLOADS = ['workload', 'sessions', 'objectives', 'calendar', 'tests', 'reports', 'staff_report', 'plan_lib', 'squad_stats'];
 const FROM_SCRIPT = ['home', 'wellness', 'wellness_history']; // computed by the Google script from the kiosk check-ins
 const DATA = [...FROM_SCRIPT, ...UPLOADS];
+const KEY_ONLY = ['player_photos']; // kept for the online calculation, not served here (the site reads the photos from the script)
+const SNAPS = ['full', 'drills', 'calendar', 'players', 'config', 'gps', 'pdfs']; // Update dashboard's copies (sync/cloud.py SNAPS)
 const enc = new TextEncoder();
 
 export default {
@@ -22,12 +26,14 @@ export default {
     const path = new URL(req.url).pathname;
     try {
       if (path === '/api/upload' && req.method === 'POST') return await upload(req, env);
+      if ((path === '/api/snapshot' || path === '/api/payload') && req.method === 'GET') return await keyRead(req, path, env);
       const user = await sessionUser(req, env);
       if (user === 'down') return json({ ok: false, error: 'unavailable' }, 503);
       if (!user) return json({ ok: false, error: 'unauthenticated' }, 401);
       if (path.startsWith('/api/data/') && req.method === 'GET') return await data(req, path.slice(10), user, env, ctx);
       if (path.startsWith('/api/pdf/') && req.method === 'GET') return await pdf(decodeURIComponent(path.slice(9)), env);
       if (path === '/api/statsports' && req.method === 'GET') return await statsports(new URL(req.url).searchParams.get('date'), env);
+      if (path === '/api/rebuild' && req.method === 'POST') return await rebuild(env);
       if (path === '/api/refresh' && req.method === 'POST') { const r = await refresh(env, new URL(req.url).searchParams.get('force') === '1'); return json({ ok: true, changed: r.changed || [] }); }
       return json({ ok: false, error: 'not_found' }, 404);
     } catch (err) {
@@ -110,12 +116,37 @@ async function statsports(date, env) {
   return new Response(r.body, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' } });
 }
 
+/** The online calculation (upload key): one of Update dashboard's copies (gzip), or a payload it reuses. */
+async function keyRead(req, path, env) {
+  if (!env.UPLOAD_KEY || !same(req.headers.get('X-Upload-Key') || '', env.UPLOAD_KEY)) return json({ ok: false, error: 'forbidden' }, 403);
+  const name = new URL(req.url).searchParams.get('name') || '', snap = path === '/api/snapshot';
+  const key = snap ? (SNAPS.includes(name) ? 'snap:' + name : null) : ([...DATA, ...KEY_ONLY].includes(name) ? 'p:' + name : null);
+  if (!key) return json({ ok: false, error: 'bad_name' }, 400);
+  const v = await env.DATA.get(key, { type: 'stream' });
+  if (!v) return json({ ok: false, error: 'not_found' }, 404);
+  return new Response(v, { headers: { 'Content-Type': snap ? 'application/octet-stream' : 'application/json', 'Cache-Control': 'no-store' } });
+}
+
+/** Starts the online calculation: the workflow build.yml of the private repository GITHUB_REPO (fine-grained token
+ * GITHUB_TOKEN, Actions read/write on that repository only). GitHub keeps one run going and one waiting, so several
+ * changes in a row make one or two runs. */
+async function rebuild(env) {
+  if (!env.GITHUB_TOKEN || !env.GITHUB_REPO) return json({ ok: false, error: 'not_configured' }, 501);
+  const r = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO}/actions/workflows/build.yml/dispatches`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'al-gharafa-dashboard' },
+    body: JSON.stringify({ ref: 'main' }),
+  });
+  return r.status === 204 ? json({ ok: true }) : json({ ok: false, error: `github ${r.status}` }, 502);
+}
+
 /** Update dashboard: a payload (?name=workload…) or a PDF (?name=pdf:S75_2026-10-05_Staff_report.pdf, kept 120 days). */
 async function upload(req, env) {
   if (!env.UPLOAD_KEY || !same(req.headers.get('X-Upload-Key') || '', env.UPLOAD_KEY)) return json({ ok: false, error: 'forbidden' }, 403);
   const name = new URL(req.url).searchParams.get('name') || '';
   const meta = { etag: (req.headers.get('X-Etag') || '').replace(/[^\w-]/g, '').slice(0, 64) || String(Date.now()), at: Date.now() };
-  if (UPLOADS.includes(name)) await env.DATA.put('p:' + name, req.body, { metadata: meta });
+  if (UPLOADS.includes(name) || KEY_ONLY.includes(name)) await env.DATA.put('p:' + name, req.body, { metadata: meta });
+  else if (name.startsWith('snap:') && SNAPS.includes(name.slice(5))) await env.DATA.put(name, req.body, { metadata: meta });
   else if (/^pdf:[\w.-]+\.pdf$/.test(name)) await env.DATA.put(name, req.body, { metadata: meta, expirationTtl: 120 * 86400 });
   else return json({ ok: false, error: 'bad_name' }, 400);
   return json({ ok: true, name });

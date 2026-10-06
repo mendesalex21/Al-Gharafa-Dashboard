@@ -335,6 +335,7 @@ async function splSaveNoRpe(date, id, input) {
     const ids = (SPL.lib.recent[date] || {}).norpe || [], ready = ids.filter((x) => ((rp[date] || {})[x] || []).length).length, el = document.getElementById('spl-norpe-n');
     if (el) el.textContent = `${ids.length} player${ids.length > 1 ? 's' : ''} without an RPE in the data · ${ready} ready, added at the next update`;
     SPL.state = `RPE of ${name}: ${v} saved ✓ — added to the data at the next update`;
+    splStateLine(); splRebuilt(); return;
   } catch (err) { SPL.state = 'RPE not saved — ' + (err.message || err); }
   splStateLine();
 }
@@ -484,7 +485,7 @@ async function splCorrPublish(remove) {
       splDemoStore();
     } else { await callApi('correction_save', null, { date, sid: r.sid, changes: ch }); await splLoadSaved(); }
     SPL.state = n ? `Correction of ${r.sid} published ✓ — applied at the next update` : `Correction of ${r.sid} removed — the Excel values come back at the next update`;
-    SPL.view = 'plan'; SPL.corr = null; splDraw();
+    SPL.view = 'plan'; SPL.corr = null; splDraw(); splRebuilt();
   } catch (err) { SPL.state = 'Not published — ' + (err.message || err); splStateLine(); }
 }
 /** Plan view of a session in the data: "✎ Correct this session", or the state of its correction. */
@@ -498,6 +499,16 @@ function splCorrLineHtml(date) {
   return `<p class="sp-corrline on"><button type="button" class="btn-light" data-corr-open>✎ Edit the correction</button><span>Corrected on the site${c.by ? ' by ' + escapeHtml(String(c.by).split('@')[0]) : ''} · ${n} player${n > 1 ? 's' : ''} · ${applied ? 'in the dashboard ✓' : 'applied at the next update'}</span></p>`;
 }
 
+/** After a change on this page: the online calculation rebuilds the dashboard (and sends the staff e-mail) on its own. */
+function splRebuilt() {
+  if (typeof cfRebuild !== 'function') return;
+  const st = SPL.state;
+  cfRebuild().then((ok) => {
+    if (!ok || SPL.state !== st) return;
+    SPL.state = st.replace(/ — [^—]*next update.*$/, '') + ' — the dashboard updates itself in a few minutes';
+    splStateLine();
+  });
+}
 // ------------------------------------------------------------------ national team (NT): the Qatar NT export from Sonra
 /** The squad player of a name in the NT export: same GPS name, or the one chosen once for it (kept like a drill title). */
 function splNtPlayer(pn) {
@@ -582,7 +593,7 @@ async function splNtPublish() {
     if (AUTH.demo) splDemoStore(); else await splLoadSaved();
     SPL.nt = null;
     SPL.state = `${n} NT day${n > 1 ? 's' : ''} published ✓ — in the dashboard at the next update`;
-    splDraw();
+    splDraw(); splRebuilt();
   } catch (err) { SPL.state = 'NT not published — ' + (err.message || err); splStateLine(); }
 }
 
@@ -828,7 +839,7 @@ async function splPublish() {
     if (AUTH.demo) { SPL.saved.published[`${date}_${sid}`] = { date, sid, rows: `${body.full.length} full · ${body.drills.length} drills`, by: 'demo', at: new Date().toISOString() }; splDemoStore(); }
     else { await callApi('session_publish', null, body); await splLoadSaved(); }
     p.sid = sid; await splSavePlan(date);
-    SPL.state = 'Published ✓'; SPL.view = 'plan'; SPL.files = {}; splDraw();
+    SPL.state = 'Published ✓ — in the dashboard at the next update'; SPL.view = 'plan'; SPL.files = {}; splDraw(); splRebuilt();
   } catch (err) { SPL.state = 'Not published — ' + (err.message || err); splStateLine(); }
 }
 async function splXlsx() {
@@ -897,7 +908,7 @@ function splClick(e) {
   if (t.dataset.unpub) { if (confirm('Remove this published session? The rows leave the dashboard at the next update.')) splUnpublish(t.dataset.unpub); }
 }
 async function splUnpublish(key) {
-  try { if (AUTH.demo) { delete SPL.saved.published[key]; splDemoStore(); } else { await callApi('session_unpublish', null, { key }); await splLoadSaved(); } SPL.state = 'Unpublished'; splDraw(); }
+  try { if (AUTH.demo) { delete SPL.saved.published[key]; splDemoStore(); } else { await callApi('session_unpublish', null, { key }); await splLoadSaved(); } SPL.state = 'Unpublished — out of the dashboard at the next update'; splDraw(); splRebuilt(); }
   catch (err) { alert('Not removed: ' + (err.message || err)); }
 }
 function splChange(e) {

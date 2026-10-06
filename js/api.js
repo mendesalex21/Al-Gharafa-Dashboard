@@ -20,6 +20,12 @@ async function cfData(action) {
   if (u) { try { AUTH.user = JSON.parse(decodeURIComponent(u)); } catch (e) { /* keep the last one */ } }
   return r.json();
 }
+/** The online calculation (GitHub, started by the Cloudflare server): the dashboard rebuilds itself and the staff e-mail
+ * goes, a few minutes after a change made on the site. → true when started. */
+function cfRebuild() {
+  if (!cfOn()) return Promise.resolve(false);
+  return fetch('/api/rebuild', { method: 'POST', headers: cfHeaders() }).then((r) => r.ok).catch(() => false);
+}
 let CF_REFRESH = null;
 /** The server re-reads the wellness, the staff list and the calendar edits from the Google script (once per page load;
  * it also does it every 10 minutes) → the names that changed. */
@@ -152,7 +158,7 @@ async function saveSquadProfile(data) {
     try { localStorage.setItem('demo_squad', JSON.stringify(o)); } catch (err) { /* private mode */ }
     return { saved: pid, profiles: applyDemoSquad((RO.data && RO.data.profiles) || []) };
   }
-  return callApi('squad_save', null, { data });
+  return callApi('squad_save', null, { data }).then((r) => { cfRebuild(); return r; });
 }
 async function uploadPlayerPhoto(pid, dataUri) {
   if (AUTH.demo) return { player_id: pid };
@@ -186,5 +192,6 @@ async function saveCalendarEdit(id, data) {
   const json = await resp.json();
   if (!json.ok) throw new Error(json.error === 'forbidden' ? 'This Google account isn’t authorized to edit.' : json.error || 'Save failed');
   cfRefresh(true); // the Cloudflare server's copy of the edits
+  cfRebuild(); // and the dashboard, rebuilt online
   return json.edits;
 }
