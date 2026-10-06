@@ -72,6 +72,22 @@ function spToCsv(rows) {
   const cols = Object.keys(rows[0]), cell = (v) => { const t = String(v ?? ''); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
   return [cols.map(cell).join(','), ...rows.map((r) => cols.map((c) => cell(r[c])).join(','))].join('\n');
 }
+/** Two export rows of one player added up (a match = his two halves): totals added, maxima kept, averages weighted by
+ * time; text columns kept from the first. */
+const SP_MAX_COLS = new Set(['Max Speed', 'Max Acceleration', 'Max Deceleration', 'Max Heart Rate', 'Max Speed (km/h)']);
+const SP_MIN_COLS = new Set(['Minimum Heartrate']);
+const SP_AVG_COLS = new Set(['Average Heart Rate', 'Average Speed']);
+function spAddRows(a, b) {
+  if (!a) return { ...b, 'Drill Title': 'Match (halves added up)' };
+  const isNum = (v) => v !== '' && v != null && Number.isFinite(parseFloat(v)), ta = spNum(a['Total Time']), tb = spNum(b['Total Time']), out = { ...a };
+  for (const k of Object.keys(b)) {
+    if (k === 'Player First Name' || k === 'Session Date' || k === 'Drill Title' || (!isNum(a[k]) && !isNum(b[k]))) continue;
+    const x = spNum(a[k]), y = spNum(b[k]);
+    out[k] = SP_MAX_COLS.has(k) ? Math.max(x, y) : SP_MIN_COLS.has(k) ? Math.min(x || y, y || x)
+      : SP_AVG_COLS.has(k) ? (ta + tb > 0 ? (x * ta + y * tb) / (ta + tb) : 0) : x + y;
+  }
+  return out;
+}
 /** sessions = getFullSessionsByDateRange's list for one day; ampm picks the session (started before 15:00 = AM). Full
  * session = the drill "Entire Session - Live" (the export's), else "Entire Session"; drills = the others.
  * → { full, drills } CSV texts, date (yyyy-mm-dd), start time, players, live (false = no "Live" whole session). */

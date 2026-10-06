@@ -647,6 +647,16 @@ async function splRefreshRpe() {
   try { const r = await callApi('plans', null, {}); SPL.saved.rpe = r.rpe || {}; SPL.state = 'Kiosk RPE up to date ✓'; splDraw(); }
   catch (err) { SPL.state = 'Kiosk not read — ' + (err.message || err); splStateLine(); }
 }
+/** A match day's drills (his Excel: the halves 1 and 2, the individual work 3), then the 15-minute periods. */
+const SPL_GAME_DRILLS = ['Game_1stHalf', 'Game_2ndHalf', 'INDIVIDUAL', 'Game_0-15', 'Game_15-30', 'Game_30-45', 'Game_45-60', 'Game_60-75', 'Game_75-90'];
+/** A match's StatSports titles: "Match STATSports-1st H" → Game_1stHalf, "15-30" → Game_15-30, "Session-[Training]" → INDIVIDUAL. */
+function splGameTitle(t) {
+  if (/1st\s*h|first\s*half|half\s*1\b/i.test(t)) return 'Game_1stHalf';
+  if (/2nd\s*h|second\s*half|half\s*2\b/i.test(t)) return 'Game_2ndHalf';
+  const m = /(\d{1,3})\s*[-–]\s*(\d{1,3})/.exec(t), per = m ? `Game_${Number(m[1])}-${Number(m[2])}` : '';
+  if (SPL_GAME_DRILLS.includes(per)) return per;
+  return /individual|rehab|session-?\s*\[training\]/i.test(t) ? 'INDIVIDUAL' : '';
+}
 function splBuild() {
   const date = SPL.date, p = splEnsure(date), lib = SPL.lib;
   const fullRows = spParseCsv(SPL.files.full.text), drillRows = SPL.files.drills ? spParseCsv(SPL.files.drills.text) : [];
@@ -661,13 +671,21 @@ function splBuild() {
   // minutes written in the rows: the planned ones, or the ones set after the session (the drill really lasted longer)
   const plan = p.drills.map((d, i) => ({ i, no: i + 1, name: splName(d.name), planned: Number(d.min) || 0, min: Number(d.act) || Number(d.min) || 0, chk: !!d.chk, own: SPL_NOT_TEAM.test(splName(d.name)) }));
   const titleOfRow = (r) => String(r['Drill Title'] || '').trim();
+  const match = !!splMatchOn(date); // a match day (calendar): each player's halves add up to his match, his own minutes
+  if (match) plan.splice(0, plan.length, ...SPL_GAME_DRILLS.map((name, k) => ({ i: -1, no: k + 1, name, planned: 0, min: 0, chk: false, own: true })));
   // individual work in the export ("Individual-Training") but none in the plan: an INDIVIDUAL drill after the team drills,
   // each player's own minutes (his Excel: INDIVIDUAL, or Rehab for a player in rehab, numbered after the team drills)
   if (!plan.some((d) => d.own) && drillRows.some((r) => /individual|rehab/i.test(titleOfRow(r)))) plan.push({ i: -1, no: plan.length + 1, name: 'INDIVIDUAL', planned: 0, min: 0, chk: false, own: true });
   const seen = [...new Set(drillRows.map(titleOfRow).filter(Boolean))];
-  const drills = {}, mapping = [];
+  const drills = {}, mapping = [], skipped = new Set();
   seen.forEach((t) => {
-    const name = splName(map[t] || titles[t] || '');
+    // his choice for this session or a title he named before, then (a match) the match's own titles, then what was learned
+    const name = splName(map[t] || (SPL.saved.titles || {})[t] || (match ? splGameTitle(t) : '') || titles[t] || '');
+    if (name === '__skip') { // a StatSports title not used (e.g. old 10-minute cuts)
+      skipped.add(t);
+      mapping.push({ title: t, d: null, skip: true, n: drillRows.filter((r) => titleOfRow(r) === t).length, times: [], min: 0, med: 0 });
+      return;
+    }
     // a title named once, or written exactly like a drill of the plan, is recognised
     const d = (name && plan.find((x) => x.name === name)) || plan.find((x) => splKey(x.name) === splKey(t)) || (/individual|rehab/i.test(t) && plan.find((x) => SPL_NOT_TEAM.test(x.name))) || null;
     if (d) drills[t] = d;
@@ -699,11 +717,28 @@ function splBuild() {
   }));
   checks.left = checks.time.filter((x) => !x.fix).length + checks.drill.filter((x) => !x.done).length + checks.cut.filter((x) => !x.fix).length;
   const ownTime = new Set(Object.keys(fixT).filter((g) => fixT[g] === 'own')), cutOwn = new Set(Object.keys(fixC).filter((k) => fixC[k] === 'own'));
-  const out = spBuildRows(SPL.files.full.text, SPL.files.drills ? SPL.files.drills.text : '', {
+  let fullText = SPL.files.full.text, drillText = SPL.files.drills ? SPL.files.drills.text : '';
+  if (skipped.size) drillText = spToCsv(drillRows.filter((r) => !skipped.has(titleOfRow(r))));
+  if (match) {
+    // each player who played: his two halves added up (the match total), Type Game, his own minutes; a player who did not
+    // play but worked on his own: that work (Mulla 55′, not the day's 120′), INDIVIDUAL unless his status says otherwise
+    const kind = (want) => new Set(Object.keys(drills).filter((t) => want(drills[t].name)));
+    const halves = kind((n) => /^Game_(1st|2nd)Half$/.test(n)), solo = kind((n) => SPL_NOT_TEAM.test(n));
+    const add = (set) => { const sum = {}; drillRows.filter((r) => set.has(titleOfRow(r))).forEach((r) => { const g = spName(r['Player First Name']); if (g) sum[g] = spAddRows(sum[g], r); }); return sum; };
+    const played = add(halves), alone = add(solo), pick = (g) => played[g] || alone[g];
+    const rows = fullRows.map((r) => pick(spName(r['Player First Name'])) || r);
+    [...Object.keys(played), ...Object.keys(alone)].forEach((g) => {
+      if (!fullRows.some((r) => spName(r['Player First Name']) === g) && !rows.some((r) => spName(r['Player First Name']) === g)) rows.push(pick(g));
+      const q = byGps[g], pl = players[g] || { name: q ? q.gps : g, pos: q ? q.pos : '', type: 'ProTraining' };
+      players[g] = { ...pl, type: played[g] ? 'Game' : SP_SESSION_TYPES.has(pl.type) ? 'INDIVIDUAL' : pl.type };
+    });
+    fullText = spToCsv(rows);
+  }
+  const out = spBuildRows(fullText, drillText, {
     date, sid: p.sid || splSid(date), week: splWeekNo(date), label: p.label || splLabel(date), md: splTag(date) || '/', ampm: p.ampm || 'PM', sessionTime, players, extra, rpe, drills, ownTime, cutOwn,
     drillName: (pn, d) => (SPL_NOT_TEAM.test(d.name) && players[pn] && players[pn].type === 'Rehab' ? 'Rehab' : d.name),
   });
-  return { ...out, fileDate, missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk, checks };
+  return { ...out, fileDate, missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk, checks, match };
 }
 /** The checks above the three columns: each flagged time with its one-click fixes (the chosen one stays highlighted). */
 function splChecksHtml(b) {
@@ -737,9 +772,9 @@ function splChecksHtml(b) {
 }
 function splImportHtml() {
   const date = SPL.date, p = splEnsure(date), b = splBuild();
-  const gpsRows = b.full.filter((r) => r.Time > 0 || r.DT != null), unmapped = b.mapping.filter((m) => !m.d);
-  const drillOpts = (t, cur) => `<select data-map="${escapeHtml(t)}"><option value="">Which drill of the plan?</option>${b.plan.map((d) => `<option value="${escapeHtml(d.name)}" ${cur && cur.name === d.name ? 'selected' : ''}>${d.no} · ${escapeHtml(d.name)}</option>`).join('')}</select>`;
-  const mapRows = b.mapping.map((m) => `<div class="sp-mr${m.d ? '' : ' warn'}"><code title="${escapeHtml(m.title)}">${escapeHtml(m.title)}</code><span class="arr">→</span><span class="tg">${m.d ? `<b style="--c:${splColor(m.d.name)}">${m.d.no} · ${escapeHtml(m.d.name)}</b><small>${m.d.own ? `each player's own minutes · ${m.n} player${m.n > 1 ? 's' : ''}` : `<input type="number" class="sp-act" min="1" max="120" value="${m.d.min}" data-actmin="${m.d.i}" aria-label="Minutes written">' written · planned ${m.d.planned}' · GPS ${m.med.toFixed(1)}' · ${m.n} player${m.n > 1 ? 's' : ''}`}</small>` : drillOpts(m.title, null)}</span><span class="ok">${m.d ? '✓' : '!'}</span></div>`).join('');
+  const gpsRows = b.full.filter((r) => r.Time > 0 || r.DT != null), unmapped = b.mapping.filter((m) => !m.d && !m.skip);
+  const drillOpts = (t, cur, skip) => `<select data-map="${escapeHtml(t)}"><option value="">Which drill of the plan?</option>${b.plan.map((d) => `<option value="${escapeHtml(d.name)}" ${cur && cur.name === d.name ? 'selected' : ''}>${d.no} · ${escapeHtml(d.name)}</option>`).join('')}<option value="__skip" ${skip ? 'selected' : ''}>— not used —</option></select>`;
+  const mapRows = b.mapping.map((m) => `<div class="sp-mr${m.d || m.skip ? '' : ' warn'}"><code title="${escapeHtml(m.title)}">${escapeHtml(m.title)}</code><span class="arr">→</span><span class="tg">${m.d ? `<b style="--c:${splColor(m.d.name)}">${m.d.no} · ${escapeHtml(m.d.name)}</b><small>${m.d.own ? `each player's own minutes · ${m.n} player${m.n > 1 ? 's' : ''}` : `<input type="number" class="sp-act" min="1" max="120" value="${m.d.min}" data-actmin="${m.d.i}" aria-label="Minutes written">' written · planned ${m.d.planned}' · GPS ${m.med.toFixed(1)}' · ${m.n} player${m.n > 1 ? 's' : ''}`}</small>` : drillOpts(m.title, null, m.skip)}</span><span class="ok">${m.d ? '✓' : m.skip ? '–' : '!'}</span></div>`).join('');
   // green = the player's own answer on the kiosk, white = typed here, orange = no RPE yet
   const rpeGrid = gpsRows.map((r) => { const g = spName(r.Players), k = b.fromKiosk.has(g);
     return `<label class="${r.RPE == null ? 'miss' : k ? 'k' : ''}"${k ? ' title="From the kiosk"' : ''}>${escapeHtml(r.Players)}<input type="number" min="0" max="10" step="0.5" value="${r.RPE ?? ''}" data-rpe="${escapeHtml(g)}"></label>`; }).join('');
@@ -749,6 +784,7 @@ function splImportHtml() {
   const fmtv = (v) => (v == null ? '' : typeof v === 'number' ? (Number.isInteger(v) ? v : +v.toFixed(2)) : escapeHtml(v));
   const ready = !unmapped.length && b.fileDate === date;
   return `${splHead(date, 1)}
+    ${b.match ? '<p class="sp-banner ok">Match day: each player who played = his two halves added up, his own minutes, Type “Game” — as in your Excel. Old cuts can be set to “not used”.</p>' : ''}
     ${b.fileDate && b.fileDate !== date ? `<p class="sp-banner warn">These files are from ${SPL_DAY(b.fileDate, { weekday: 'long', day: 'numeric', month: 'long' })}, not from this day. <button type="button" class="linkbtn" data-goto="${b.fileDate}">Open ${SPL_DAY(b.fileDate, { weekday: 'short', day: 'numeric', month: 'short' })}</button></p>` : ''}
     <div class="sp-files"><div class="sp-file ok"><span class="ic">CSV</span><div><b>${escapeHtml(SPL.files.full.name)}</b><small>${gpsRows.length} players · ${b.fileDate ? SPL_DAY(b.fileDate, { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'no date'} · session ${b.sessionTime}'</small></div></div>
       <div class="sp-file ${SPL.files.drills ? 'ok' : 'miss'}"><span class="ic">CSV</span><div><b>${SPL.files.drills ? escapeHtml(SPL.files.drills.name) : 'Drills file missing'}</b><small>${SPL.files.drills ? `${b.mapping.length} drills · ${b.drills.length} rows` : 'drop S##_Drills.csv too'}</small></div></div>
