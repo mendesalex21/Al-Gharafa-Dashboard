@@ -73,7 +73,9 @@ function spFromStatsports(sessions, ampm) {
   const list = (Array.isArray(sessions) ? sessions : [sessions]).filter((s) => s && (s.sessionPlayers || []).length);
   if (!list.length) return null;
   const hour = (s) => Number(String((s.sessionDetails || {}).startTime || '').slice(11, 13)) || 0;
-  const s = list.find((x) => (hour(x) < 15 ? 'AM' : 'PM') === (ampm || 'PM')) || list[list.length - 1];
+  // the team session of that half-day: the one with most players (a 1-player extra session can start later the same day)
+  const half = list.filter((x) => (hour(x) < 15 ? 'AM' : 'PM') === (ampm || 'PM'));
+  const s = (half.length ? half : list).slice().sort((x, y) => y.sessionPlayers.length - x.sessionPlayers.length)[0];
   const d = String((s.sessionDetails || {}).sessionDate || '').slice(0, 10), date = d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '';
   const head = ['Player First Name', 'Drill Title', 'Session Date', ...SP_API_COLS.map(([c]) => c)];
   const cell = (v) => { const t = String(v ?? ''); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
@@ -93,7 +95,8 @@ function spFromStatsports(sessions, ampm) {
     if (ent) { full.push(line(p, ent)); if (!/live/i.test(ent.drillName)) live = false; }
     dl.filter((x) => !/^entire session/i.test(x.drillName)).forEach((x) => drills.push(line(p, x)));
   }
-  return { full: [head.join(','), ...full].join('\n'), drills: [head.join(','), ...drills].join('\n'), date: d, start: (s.sessionDetails || {}).startTime || '', players: s.sessionPlayers.length, live, sessions: list.length };
+  const others = list.filter((x) => x !== s).map((x) => `${String((x.sessionDetails || {}).startTime || '').slice(11, 16)} (${x.sessionPlayers.length} player${x.sessionPlayers.length > 1 ? 's' : ''})`);
+  return { full: [head.join(','), ...full].join('\n'), drills: [head.join(','), ...drills].join('\n'), date: d, start: (s.sessionDetails || {}).startTime || '', players: s.sessionPlayers.length, live, others };
 }
 
 /** The metric columns of one StatSports row, for `time` minutes (full session: whole minutes; drill: planned minutes). */

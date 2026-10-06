@@ -511,7 +511,8 @@ async function splFromStatsports(btn) {
     const tag = `StatSports · ${out.start.slice(11, 16)} · ${out.players} players`;
     SPL.files = { full: { name: `${tag} · full session`, text: out.full }, drills: { name: `${tag} · drills`, text: out.drills } };
     SPL.view = 'import';
-    SPL.state = out.live ? '' : 'No “Entire Session - Live” on StatSports for this day: the whole recording is used — check the times';
+    SPL.state = [out.live ? '' : 'No “Entire Session - Live” on StatSports for this day: the whole recording is used — check the times',
+      out.others.length ? `Also on StatSports this day, not imported: ${out.others.join(', ')}` : ''].filter(Boolean).join(' · ');
     splDraw();
   } catch (err) {
     SPL.state = 'Not fetched: ' + (err.message || err);
