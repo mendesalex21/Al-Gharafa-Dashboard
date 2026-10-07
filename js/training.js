@@ -32,6 +32,12 @@ function zBulletHtml(label, unit, actual, ref) {
     <div class="bl-foot zf"><span>usual ${fmtN(m)} <span class="muted">(${fmtN(lo)}–${fmtN(hi)})</span></span><span class="zs ${lv}">${Z_LABEL[lv]} · z ${fmtSigned(ref.z)}</span></div></div>`;
 }
 
+/** "the last 15 MD-3 sessions · since 14 Dec 2025" (MD references: the last 15 sessions of the same MD, his choice
+ * 2026-10-07 — the date moves with them, all this season by December); a match: its games since the date. */
+function refPeriod(ref, what) {
+  const since = ref.since ? fmtDay(ref.since, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  return ref.last ? `the last ${ref.n} ${what}${since ? ` · since ${since}` : ''}` : `${ref.n} ${what}${since ? ` since ${since}` : ''}`;
+}
 function objectivesPanel(s) {
   const cyc = s.cycle, ref = s.team_ref;
   const per90 = s.kind === 'match', comp = s.group === 'compensatory';
@@ -43,37 +49,56 @@ function objectivesPanel(s) {
     .map(([k, l, u]) => zBulletHtml(l, u + (per90 && k !== 'mpm' ? ' /90' : ''), ref[k].v, ref[k])).join(''); // v = value behind the z
   return `<section class="panel">
     <div class="panel-head">${comp
-    ? `<h2 class="panel-title small">Objectives · compensatory session${s.md ? ` (${s.md})` : ''}</h2><span class="panel-note">average of the ${s.n_core} compensatory players vs ${ref.n} past compensatory sessions since ${fmtDay(TR.obj ? TR.obj.since : '2024-07-01', { month: 'short', year: 'numeric' })} — not vs the usual ${s.md || 'training'}</span>`
-    : `<h2 class="panel-title small">Objectives · ${s.md} of a ${TYPE_LABEL[cyc.type].toLowerCase()} microcycle${per90 ? ' (per 90 min)' : ''}</h2><span class="panel-note">team average vs ${ref.n} past ${s.md} sessions since ${fmtDay(TR.obj ? TR.obj.since : '2024-07-01', { month: 'short', year: 'numeric' })}</span>`}</div>
+    ? `<h2 class="panel-title small">Objectives · compensatory session${s.md ? ` (${s.md})` : ''}</h2><span class="panel-note">average of the ${s.n_core} compensatory players vs ${refPeriod(ref, 'compensatory sessions')} — not vs the usual ${s.md || 'training'}</span>`
+    : `<h2 class="panel-title small">Objectives · ${s.md} of a ${TYPE_LABEL[cyc.type].toLowerCase()} microcycle${per90 ? ' (per 90 min)' : ''}</h2><span class="panel-note">team average vs ${refPeriod(ref, ref.last ? `${s.md} sessions` : 'games')}</span>`}</div>
     <div class="bullets">${bars}</div>
     <p class="panel-foot">Green = usual ± 1 SD (on target, |z| &lt; 1) · blue below · orange 1–2 SD above · red more than 2 SD above. Dark tick = usual. Same z-scores as the calendar and the planner.</p></section>`;
 }
 
 // ------------------------------------------------------------------ the week until the match, beside today's objectives
-const WK_M = [['td', 'Total distance', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE load', 'AU']];
-const wkFmt = (k, v) => (v == null ? '—' : k === 'td' && v >= 1000 ? (v / 1000).toFixed(1) + 'k' : fmtN(v));
+// mockup A chosen 2026-10-07: full width, the 9 metrics of the day's objectives, each day left kept visible (dotted, at its
+// usual) with its objective inside, what goes over the target in red
+const WK_M = [['td', 'Total distance', 'm'], ['d15', 'Distance > 15 km/h', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'],
+  ['spr_n', 'Sprints', ''], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE load', 'AU'], ['mpm', 'Intensity', 'm/min'], ['minutes', 'Duration', 'min']];
+const WK_BLUE = '#2a78d6';
+const wkFmt = (k, v) => (v == null ? '—' : k === 'td' && Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'k' : fmtN(v));
 /** Today's objectives and, beside them, the week until the match (staff report data: done, objectives of the days left). */
 function sePanels(s) {
   const wk = weekPanel(s);
-  return wk ? `<div class="se-top two">${objectivesPanel(s)}${wk}</div>` : objectivesPanel(s);
+  return wk ? `<div class="se-top two sv-bleed">${objectivesPanel(s)}${wk}</div>` : objectivesPanel(s);
 }
-/** The microcycle of one metric: done (green, a tick between days), still to do (dashed blue, a tick and the MD of each
- * day), the team's usual by today (black tick). */
+/** The microcycle of one metric: done (green, a tick between days), then each day left at its usual size (dotted) with
+ * its objective filled inside — a day whose objective fell to 0 stays visible —, the target (black line), and in red
+ * what goes over it: done already (solid) or if the days left are as usual (hatched). */
 function wkBar(X, k) {
   const t = (X.tot || {})[k];
-  if (!t) return '';
-  const [target, done, udone, left] = t, days = X.profile.filter((d) => d[k]), fut = (X.plan || []).filter((d) => d[k]);
-  const W = 230, scale = Math.max(target || 0, (done || 0) + (left || 0)) || 1, px = (v) => (v || 0) / scale * W;
-  const md = (x, w, txt, fill) => (w > 26 ? `<text x="${x + w / 2}" y="10.5" text-anchor="middle" font-size="8" font-weight="800" style="fill:${fill}">${txt}</text>` : '');
-  let x0 = 0, g = `<rect x="0" y="1" width="${W}" height="12" rx="4" style="fill:var(--surface-2)"/>`;
-  days.forEach((d) => { const w = px(d[k][0]); g += `<rect x="${x0}" y="1" width="${w}" height="12" fill="#34c759"/>${md(x0, w, d.md, '#fff')}`; x0 += w; g += `<line x1="${x0}" x2="${x0}" y1="1" y2="13" style="stroke:var(--surface)" stroke-width="1.5"/>`; });
-  fut.forEach((d) => { const w = px(d[k][0]); g += `<rect x="${x0 + 0.6}" y="1.6" width="${Math.max(0, w - 1.2)}" height="10.8" rx="2" fill="rgba(42,120,214,.1)" stroke="#2a78d6" stroke-width="1" stroke-dasharray="3 2"/>${md(x0, w, d.md, '#2a78d6')}`; x0 += w; });
-  if (days.length) g += `<line x1="${px(udone)}" x2="${px(udone)}" y1="0" y2="14" style="stroke:var(--ink)" stroke-width="2"/>`;
+  if (!t) return k === 'mpm' ? '<div class="wk-mb wk-note">An intensity has no week total: each day left keeps its usual m/min.</div>' : '';
+  const [target, done, udone] = t, days = X.profile.filter((d) => d[k]), fut = (X.plan || []).filter((d) => d[k]);
+  const uSum = fut.reduce((a, d) => a + (d[k][1] || 0), 0), proj = done + uSum;
+  const W = 300, scale = Math.max(target || 0, proj, done || 0) * 1.02 || 1, px = (v) => (v || 0) / scale * W;
+  const md = (x, w, txt, fill) => (w > 24 ? `<text x="${x + w / 2}" y="12.5" text-anchor="middle" font-size="8.5" font-weight="800" style="fill:${fill}">${txt}</text>` : '');
+  let x0 = 0, g = `<rect x="0" y="3" width="${W}" height="13" rx="4" style="fill:var(--surface-2)"/>`;
+  days.forEach((d) => { const w = px(d[k][0]); g += `<rect x="${x0}" y="3" width="${w}" height="13" fill="#34c759"/>${md(x0, w, d.md, '#fff')}`; x0 += w; g += `<line x1="${x0}" x2="${x0}" y1="3" y2="16" style="stroke:var(--surface)" stroke-width="1.5"/>`; });
+  if (done > target) g += `<rect x="${px(target)}" y="3" width="${px(done) - px(target)}" height="13" fill="#e5484d"/>`;
+  fut.forEach((d) => {
+    const wu = px(d[k][1]), wo = px(Math.min(d[k][0] || 0, d[k][1] || 0));
+    g += `<rect x="${x0 + 0.6}" y="3.6" width="${Math.max(0, wu - 1.2)}" height="11.8" rx="2" fill="none" stroke="${WK_BLUE}" stroke-width="1" stroke-dasharray="2.5 2"/>`;
+    if (wo > 0.5) g += `<rect x="${x0 + 1.2}" y="4.2" width="${Math.max(0, wo - 2.4)}" height="10.6" rx="1.5" fill="rgba(42,120,214,.28)"/>`;
+    g += md(x0, wu, d.md, WK_BLUE); x0 += wu;
+  });
+  if (proj > target && done <= target) g += `<rect x="${px(target)}" y="3" width="${px(proj) - px(target)}" height="13" fill="url(#wk-hatch)"/>`;
+  if (days.length && udone) g += `<line x1="${px(udone)}" x2="${px(udone)}" y1="1" y2="18" style="stroke:var(--ink-muted)" stroke-width="1.5" stroke-dasharray="2 1.5"/>`;
+  g += `<line x1="${px(target)}" x2="${px(target)}" y1="0" y2="19" style="stroke:var(--ink)" stroke-width="2"/>`;
+  const defs = '<defs><pattern id="wk-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="rgba(229,72,77,.08)"/><line x1="0" y1="0" x2="0" y2="5" stroke="rgba(229,72,77,.6)" stroke-width="1.6"/></pattern></defs>';
   const vs = days.length && udone ? Math.round((done / udone - 1) * 100) : null, cls = vs == null ? '' : Math.abs(vs) < 10 ? 'ok' : Math.abs(vs) < 25 ? 'warn' : 'bad';
-  return `<div class="wk-mb"><svg width="${W}" height="14" viewBox="0 0 ${W} 14" role="img" aria-label="microcycle: done and still to do">${g}</svg><span>done <b>${wkFmt(k, done)}</b>${vs != null ? ` <b class="wk-vs ${cls}">${vs > 0 ? '+' : vs < 0 ? '−' : ''}${Math.abs(vs)} %</b>` : ''} · to do <b>${wkFmt(k, left)}</b> · target <b>${wkFmt(k, target)}</b></span></div>`;
+  const pc = (v) => Math.round((v / target - 1) * 100);
+  const over = !target ? '' : done > target ? `<span class="wk-over">target passed: +${wkFmt(k, done - target)} (+${pc(done)} %)</span>`
+    : proj > target ? `<span class="wk-over">if the days left are as usual: +${wkFmt(k, proj - target)} (+${pc(proj)} %)</span>` : '';
+  return `<div class="wk-mb"><svg viewBox="0 0 ${W} 19" role="img" aria-label="microcycle: done, days left, target">${defs}${g}</svg><span>done <b>${wkFmt(k, done)}</b>${vs != null ? ` <b class="wk-vs ${cls}">${vs > 0 ? '+' : vs < 0 ? '−' : ''}${Math.abs(vs)} %</b>` : ''} · to do <b>${wkFmt(k, Math.max(0, target - done))}</b> · target <b>${wkFmt(k, target)}</b></span>${over}</div>`;
 }
-/** One metric day by day until the match: done = solid bar (colour = z), each day left = dashed bar up to its objective,
- * black line = the team's usual for that MD, grey band = usual range. */
+/** One metric day by day until the match: done = solid bar (colour = z); each day left = dotted bar up to its usual with
+ * its objective filled inside and written in blue (red when cut below its usual), black line = usual, grey band = usual
+ * range. */
 function wkChart(X, k) {
   const days = [...X.profile.map((d) => ({ ...d, done: 1 })), ...(X.plan || [])], W = 300, H = 150, L = 6, R = 6, T = 18, B = 30;
   const n = days.length + 1, step = (W - L - R) / n, ih = H - T - B, bw = Math.min(34, step * 0.5);
@@ -87,10 +112,15 @@ function wkChart(X, k) {
     if (p) {
       if (p[2] != null && p[3] != null) g += `<rect x="${bx - 5}" y="${y(p[3])}" width="${bw + 10}" height="${Math.max(2, y(p[2]) - y(p[3]))}" rx="4" style="fill:var(--surface-2)"/>`;
       if (d.done && p[0] != null) { const lv = zLevel(p[4]); g += `<rect x="${bx}" y="${y(p[0])}" width="${bw}" height="${Math.max(1, base - y(p[0]))}" rx="4" fill="${lv ? Z_COL[lv] : '#aeaeb2'}"/>`; t = lab(x, y(p[0]), p[0], 'var(--ink)'); }
-      else if (p[0] != null) { g += `<rect x="${bx + 0.7}" y="${y(p[0])}" width="${bw - 1.4}" height="${Math.max(1, base - y(p[0]))}" rx="4" fill="rgba(42,120,214,.08)" stroke="#2a78d6" stroke-width="1.3" stroke-dasharray="3.5 2.5"/>`; t = lab(x, y(p[0]), p[0], '#2a78d6'); }
+      else if (!d.done && (p[0] != null || p[1] != null)) {
+        const u = p[1] || 0, o = Math.min(p[0] || 0, u || p[0] || 0);
+        if (u) g += `<rect x="${bx + 0.7}" y="${y(u)}" width="${bw - 1.4}" height="${Math.max(1, base - y(u))}" rx="4" fill="none" stroke="${WK_BLUE}" stroke-width="1.2" stroke-dasharray="3 2.5"/>`;
+        if (o > 0) g += `<rect x="${bx + 2}" y="${y(o)}" width="${bw - 4}" height="${Math.max(1, base - y(o))}" rx="3" fill="rgba(42,120,214,.28)"/>`;
+        t = lab(x, Math.min(y(u), y(o)), p[0] || 0, u && (p[0] || 0) < u * 0.98 ? '#c4373c' : WK_BLUE);
+      }
       if (p[1] != null) g += `<line x1="${bx - 5}" x2="${bx + bw + 5}" y1="${y(p[1])}" y2="${y(p[1])}" style="stroke:var(--ink)" stroke-width="2" stroke-linecap="round"/>`;
     }
-    g += t + `<text x="${x}" y="${H - 16}" text-anchor="middle" font-size="10" font-weight="800" style="fill:${d.done ? 'var(--ink)' : '#2a78d6'}">${d.md}</text><text x="${x}" y="${H - 4}" text-anchor="middle" font-size="9" style="fill:var(--ink-muted)">${fmtDay(d.date, { weekday: 'short', day: 'numeric' })}</text>`;
+    g += t + `<text x="${x}" y="${H - 16}" text-anchor="middle" font-size="10" font-weight="800" style="fill:${d.done ? 'var(--ink)' : WK_BLUE}">${d.md}</text><text x="${x}" y="${H - 4}" text-anchor="middle" font-size="9" style="fill:var(--ink-muted)">${fmtDay(d.date, { weekday: 'short', day: 'numeric' })}</text>`;
   });
   const xm = L + step * (n - 0.5);
   g += `<rect x="${xm - bw / 2}" y="${T}" width="${bw}" height="${ih}" rx="6" fill="none" style="stroke:var(--hairline)" stroke-dasharray="3 3"/><text x="${xm}" y="${T + ih / 2 + 3}" text-anchor="middle" font-size="9" font-weight="700" style="fill:var(--ink-muted)">match</text>`
@@ -100,10 +130,10 @@ function wkChart(X, k) {
 function weekPanel(s) {
   const X = TR.staff && TR.staff.days ? TR.staff.days[s.date] : null;
   if (!X || s.kind !== 'training' || !(X.profile.length || (X.plan || []).length)) return '';
-  const nx = X.next;
+  const nx = X.next, all = [...X.profile, ...(X.plan || [])], mets = WK_M.filter(([k]) => all.some((d) => d[k]));
   return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">The week · objectives until the match</h2>${nx ? `<span class="panel-note">→ ${escapeHtml([nx.competition, nx.opponent].filter(Boolean).join(' · '))} · ${fmtDay(nx.date, { weekday: 'short', day: 'numeric', month: 'short' })}</span>` : ''}</div>
-    <div class="wk-grid">${WK_M.map(([k, l, u]) => `<div class="wk-cell"><div class="wk-t">${l}<span>${u}</span></div>${wkBar(X, k)}${wkChart(X, k)}</div>`).join('')}</div>
-    <p class="panel-foot">Solid = done (colour = z vs usual) · dashed = objective of the day: the team's usual of MD-4 → MD-1 added up, minus what is done, shared over the days left · black line = usual · grey band = usual range · bar = the microcycle (done · still to do · | usual by today).</p></section>`;
+    <div class="wk-grid">${mets.map(([k, l, u]) => `<div class="wk-cell"><div class="wk-t">${l}<span>${u}</span></div>${wkBar(X, k)}${wkChart(X, k)}</div>`).join('')}</div>
+    <div class="wk-legend"><span><i class="lg-done"></i>done (colour = z vs usual)</span><span><i class="lg-left"></i>day left at its usual</span><span><i class="lg-obj"></i>its objective: the usual of MD-4 → MD-1 added up, minus what is done, shared over the days left</span><span><i class="lg-line"></i>target · usual</span><span><i class="lg-over"></i>over the target</span><span><i class="lg-proj"></i>over if the days left are as usual</span><span><b class="wk-red">red number</b> = objective cut below its usual</span></div></section>`;
 }
 
 // ------------------------------------------------------------------ Sessions
@@ -214,10 +244,10 @@ function drawMdz(s) {
   }
   // each player vs his own sessions of the same type: training (this MD, same microcycle type), compensatory, or match
   const nC = s.players.filter((p) => p.mdref && p.mdref.kind === 'comp').length, nT = s.players.filter((p) => p.mdref && p.mdref.kind !== 'comp').length;
-  const day = ref.tag === 'MD' ? 'previous A and B games of 75 min or more, this season and the last (per 90 min; a player with less time today is compared at his minutes)' : `previous ${ref.tag} sessions of ${(TYPE_LABEL[ref.type] || '').toLowerCase()} microcycles`;
-  const since = fmtDay(ref.since, { month: 'short', year: 'numeric' });
-  const compTxt = `previous <b>compensatory sessions</b> since ${since} (the players who did not play the match; ${ref.comp} in the club history)`;
-  const dayTxt = `${day} since ${since} (${ref.sessions} sessions in the club history)`;
+  const dd = (d) => (d ? fmtDay(d, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+  const day = ref.tag === 'MD' ? 'previous A and B games of 75 min or more, this season and the last (per 90 min; a player with less time today is compared at his minutes)' : `the last ${ref.sessions} ${ref.tag} sessions of ${(TYPE_LABEL[ref.type] || '').toLowerCase()} microcycles`;
+  const compTxt = `the last ${ref.comp} <b>compensatory sessions</b>${ref.comp_since ? ` (since ${dd(ref.comp_since)})` : ''} — the players who did not play the match`;
+  const dayTxt = ref.tag === 'MD' ? `${day} (${ref.sessions} games since ${dd(ref.since)})` : `${day}${ref.since ? ` (since ${dd(ref.since)})` : ''}`;
   const what = nC && nT ? `compensatory players with his ${compTxt}, the others with his ${dayTxt}` : nC ? `his ${compTxt}, not with a usual ${ref.tag || 'training'}` : `his ${dayTxt}`;
   note.innerHTML = `Each player is compared with <b>his own</b> sessions of the same type: ${what}; with fewer than 5 of his own, the squad's is used. <span class="muted">z = (today − his usual) / his usual variation · hover a cell for the values · click a column to sort · click a player for his full session.</span>`;
   const ps = s.players.filter((p) => p.mdref);
@@ -357,7 +387,7 @@ function renderObjectives(opts) {
 function drawObjectives() {
   const o = TR.obj;
   if (!o || document.getElementById('view-objectives').hidden) return;
-  document.getElementById('ob-sub').textContent = `${TYPE_LABEL[TR.type]} microcycle = ${o.types[TR.type]} · team averages of full-session players since ${fmtDay(o.since, { month: 'long', year: 'numeric' })} · ${fmtUpdated(o.generated_at)}`;
+  document.getElementById('ob-sub').textContent = `${TYPE_LABEL[TR.type]} microcycle = ${o.types[TR.type]} · team averages of full-session players · the last ${o.last || 15} sessions of each day · ${fmtUpdated(o.generated_at)}`;
   const tab = o.table[TR.type] || {};
   const tags = o.tags.filter((t) => tab[t]);
   const cell = (c, k, unit) => (c && c[k] ? `<b>${fmtN(c[k].med)}</b><small>${fmtN(c[k].p25)}–${fmtN(c[k].p75)}${unit ? ' ' + unit : ''}</small>${c[k].pct != null && k !== 'minutes' ? `<em>${c[k].pct}%</em>` : ''}` : '—');

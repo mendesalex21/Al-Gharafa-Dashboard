@@ -498,7 +498,8 @@ function svSheetHtml(s, p, nav) {
   }).join('');
   const game = s.kind === 'match' || p.cat === 'b'; // A-team match, or a B-team game on a training day
   const comp = p.mdref && p.mdref.kind === 'comp'; // a compensatory session: vs his usual compensatory session
-  const refTxt = p.mdref ? `${p.mdref.src === 'own' ? `his ${p.mdref.n} ${game ? 'games of 75 min + (A + B, this season and last)' : comp ? 'compensatory sessions' : 'sessions'}` : comp ? 'squad, compensatory sessions' : 'squad reference'}${per90 && p.min < 75 ? `, scaled to his ${fmtN(p.min)} min — indicative` : ''}`
+  const among = !game && s.mdref && s.mdref.last ? ` among the last ${comp ? s.mdref.comp : s.mdref.sessions} ${comp ? 'compensatory sessions' : s.md}` : '';
+  const refTxt = p.mdref ? `${p.mdref.src === 'own' ? `his ${p.mdref.n} ${game ? 'games of 75 min + (A + B, this season and last)' : comp ? 'compensatory sessions' : 'sessions'}${among}` : `squad${among || (comp ? ', compensatory sessions' : ' reference')}`}${per90 && p.min < 75 ? `, scaled to his ${fmtN(p.min)} min — indicative` : ''}`
     : game && p.min < 20 ? 'under 20 min: no comparison' : 'no reference';
   const prep = plan && mc.prep;
   const cycTxt = prep ? `His preparation → this match <small>${mc.days[0].md} → MD-1 · vs his usual for these days</small>`

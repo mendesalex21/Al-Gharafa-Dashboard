@@ -216,7 +216,7 @@ function drawPlayerLoad(opts) {
       <div class="tile"><div class="tile-label">Monotony · strain</div><div class="tile-value">${p.monotony == null ? '—' : p.monotony.toFixed(2)}<small> · ${fmtN(p.strain)}</small></div>
         <div class="tile-sub">sRPE, last 7 days (Foster) · flag ≥ 2.0</div></div>
       <div class="tile"><div class="tile-label">High-speed exposure</div><div class="tile-value">${p.days_hsv == null ? '—' : p.days_hsv}<small> days</small></div>
-        <div class="tile-sub">since ≥90% of his max speed · max ${fmtN(p.vmax_ref, 1)} km/h (since Jul 2023)</div></div>
+        <div class="tile-sub">since ≥90% of his max speed · max ${fmtN(p.vmax_ref, 1)} km/h (his best of the last 12 months)</div></div>
       <div class="tile"><div class="tile-label">Last 28 days</div><div class="tile-value">${p.sessions_28}<small> sessions · </small>${p.matches_28}<small> matches</small></div>
         <div class="tile-sub">${fmtN(p.minutes_28)} match min · ${p.injury_days_season} injury/rehab days this season</div></div>
       <div class="tile"><div class="tile-label">Wellness today</div><div class="tile-value">${w && w.score != null ? `<span class="chip-v ${w.status}">${w.score}%</span>` : '—'}</div>
@@ -246,7 +246,7 @@ function drawPlayerLoad(opts) {
         <div id="pl-timeline"></div></section>
     </div>
     <div class="grid2">
-      <section class="panel"><div class="panel-head"><h2 class="panel-title small">Match references</h2><span class="panel-note">${p.top3_src === 'own' ? `top 3 of his ${p.top3_n} games ≥ 70 min (A + B) of this season and the last, extra time left out` : `no game of 70 min yet — ${p.top3_src} reference`}</span></div>
+      <section class="panel"><div class="panel-head"><h2 class="panel-title small">Match references</h2><span class="panel-note">${p.top3_src === 'own' ? `top 3 of his last ${p.top3_n} games ≥ 70 min (A + B, at most since last season), extra time left out` : `no game of 70 min yet — ${p.top3_src} reference`}</span></div>
         <table class="dtable compact"><thead><tr><th></th><th class="c">Median / 90 min</th><th class="c">Top-3 match avg</th></tr></thead><tbody>
         ${[['td', 'Total distance', 'm'], ['d15', 'Distance > 15 km/h', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'], ['spr_n', 'Sprints', ''], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE', 'AU']]
           .map(([k, l, u]) => `<tr><td>${l}</td><td class="c">${p.match_ref[k] == null ? '—' : fmtN(p.match_ref[k])}</td><td class="c"><b>${fmtN(p.top3[k])}</b> <small class="muted">${u}</small></td></tr>`).join('')}
