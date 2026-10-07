@@ -1010,9 +1010,8 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .rp-grp small { font-size: 11px; font-weight: 600; color: var(--rp-muted); letter-spacing: 0; }
 .rp-row { border-bottom: 1px solid var(--rp-rule); font-size: 12.5px; }
 .rp-nm { display: flex; align-items: center; padding-left: 10px; font-weight: 700; color: var(--rp-navy); white-space: nowrap; }
-.rp-half { margin-left: 6px; font-size: 9.5px; font-weight: 800; color: var(--rp-muted); text-transform: uppercase; letter-spacing: .03em; }
-.rp-half2 { padding-left: 28px; font-size: 9.5px; font-weight: 800; color: var(--rp-muted); text-transform: uppercase; letter-spacing: .03em; }
-.rp-pnew { border-top: 1px solid #d5d8e2; } .rp-team { height: 44px; font-size: 14px; } .rp-team .rp-v { font-size: 14px; }
+.rp-pname { display: flex; align-items: flex-end; padding: 0 0 1px 10px; font-size: 11px; font-weight: 800; color: var(--rp-brick); letter-spacing: .02em; text-transform: uppercase; } /* a match's page 4 */
+.rp-hn { padding-left: 22px; font-weight: 700; color: var(--rp-navy); } .rp-team { height: 34px; }
 .rp-c { display: flex; align-items: center; gap: 6px; height: 100%; }
 .rp-v { flex: 0 0 38px; text-align: right; font-weight: 700; }
 .rp-txt .rp-v, .rp-chip .rp-v { flex: 1; text-align: center; }
