@@ -100,10 +100,11 @@ async function data(req, name, user, env, ctx) {
 }
 
 async function pdf(file, env) {
-  if (!/^[\w.-]+\.pdf$/.test(file)) return json({ ok: false, error: 'bad_name' }, 400);
+  if (!/^[\w.-]+\.(pdf|pptx)$/.test(file)) return json({ ok: false, error: 'bad_name' }, 400);
   const value = await env.DATA.get('pdf:' + file, { type: 'stream' });
   if (!value) return json({ ok: false, error: 'not_ready' }, 404);
-  return new Response(value, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${file}"`, 'Cache-Control': 'private, no-store' } });
+  const type = file.endsWith('.pptx') ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation' : 'application/pdf';
+  return new Response(value, { headers: { 'Content-Type': type, 'Content-Disposition': `attachment; filename="${file}"`, 'Cache-Control': 'private, no-store' } });
 }
 
 /** A day's sessions from the STATSports 3rd Party API (v7), for the Session Plan import. The key (thirdPartyApiId) stays
@@ -150,7 +151,7 @@ async function upload(req, env) {
   const meta = { etag: (req.headers.get('X-Etag') || '').replace(/[^\w-]/g, '').slice(0, 64) || String(Date.now()), at: Date.now() };
   if (UPLOADS.includes(name) || KEY_ONLY.includes(name)) await env.DATA.put('p:' + name, req.body, { metadata: meta });
   else if (name.startsWith('snap:') && SNAPS.includes(name.slice(5))) await env.DATA.put(name, req.body, { metadata: meta });
-  else if (/^pdf:[\w.-]+\.pdf$/.test(name)) await env.DATA.put(name, req.body, { metadata: meta, expirationTtl: 120 * 86400 });
+  else if (/^pdf:[\w.-]+\.(pdf|pptx)$/.test(name)) await env.DATA.put(name, req.body, { metadata: meta, expirationTtl: 120 * 86400 });
   else return json({ ok: false, error: 'bad_name' }, 400);
   return json({ ok: true, name });
 }

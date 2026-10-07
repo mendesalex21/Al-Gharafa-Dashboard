@@ -6,7 +6,7 @@
  * Data: the `reports` payload (sync/build.py → build_reports); week load and % top-3 game avg are derived here;
  * the staff pages also read the `staff_report` payload (loaded the first time "Staff" is chosen).
  */
-const RP = { data: null, idx: -1, part: 'all', wanted: null, version: 'players', staff: null };
+const RP = { data: null, idx: -1, part: 'all', wanted: null, version: 'players', staff: null, week: null, who: '' };
 const RP_W = 1290;
 const RP_LOGO = 'img/logo.png';
 
@@ -219,19 +219,30 @@ function rpDrillBoards(D, cols) {
 // ---------------------------------------------------------------- page
 function renderReports(opts) {
   if (opts && opts.date === 'data') RP.version = 'data';
+  else if (opts && opts.date === 'weekly') { RP.version = 'weekly'; if (opts.version) RP.week = opts.version; } // #reports/weekly/<sunday>
   else if (opts && opts.date) RP.wanted = opts.date;
-  if (opts && opts.version) RP.version = opts.version === 'staff' ? 'staff' : 'players';
+  if (opts && opts.version && opts.date !== 'weekly') RP.version = opts.version === 'staff' ? 'staff' : 'players';
   const root = document.getElementById('view-reports');
   root.innerHTML = `
-    ${pageHead('PDF reports · Excel data', 'Downloads', 'rp-sub', `${segHtml('rp-ver', [['players', 'Players'], ['staff', 'Staff'], ['data', 'Excel data']], RP.version)}<div class="stepper" id="rp-step"><button type="button" id="rp-prev" aria-label="Previous session">‹</button>
+    ${pageHead('PDF reports · Excel data', 'Downloads', 'rp-sub', `${segHtml('rp-ver', [['players', 'Players'], ['staff', 'Staff'], ['weekly', 'Weekly'], ['data', 'Excel data']], RP.version)}<div class="stepper" id="rp-step"><button type="button" id="rp-prev" aria-label="Previous session">‹</button>
         <select class="select" id="rp-pick" aria-label="Session"></select><button type="button" id="rp-next" aria-label="Next session">›</button></div>
+      <select class="select" id="rp-who" aria-label="Player" hidden></select>
+      <button type="button" class="btn-light" id="rp-pptx" title="The players' report as slides, for the gym screen">PowerPoint</button>
       <button type="button" class="btn-primary" id="rp-pdf" disabled>Download PDF</button>`)}
     <div class="rp-preview" id="rp-preview"><div class="panel"><div class="empty">Loading…</div></div></div>`;
-  const step = (d) => { const o = (RP.opts || [])[rpOptIndex() + d]; if (o) rpGo(o[0], o[1]); };
+  const step = (d) => {
+    if (RP.version === 'weekly') { const ws = rwWeeks(RP.data && RP.data.weekly).map((w) => w.ws), k = ws.indexOf(RP.week) - d; if (ws[k]) { RP.week = ws[k]; rpHash(); drawReports(); } return; }
+    const o = (RP.opts || [])[rpOptIndex() + d]; if (o) rpGo(o[0], o[1]);
+  };
   document.getElementById('rp-prev').onclick = () => step(-1);
   document.getElementById('rp-next').onclick = () => step(1);
-  document.getElementById('rp-pick').onchange = (e) => { const [i, part] = e.target.value.split('|'); rpGo(Number(i), part); };
-  document.getElementById('rp-pdf').onclick = rpPrint;
+  document.getElementById('rp-pick').onchange = (e) => {
+    if (RP.version === 'weekly') { RP.week = e.target.value; rpHash(); drawReports(); return; }
+    const [i, part] = e.target.value.split('|'); rpGo(Number(i), part);
+  };
+  document.getElementById('rp-who').onchange = (e) => { RP.who = e.target.value; drawReports(); };
+  document.getElementById('rp-pdf').onclick = () => (RP.version === 'weekly' ? rwPrint() : rpPrint());
+  document.getElementById('rp-pptx').onclick = rpPptx;
   bindSeg('rp-ver', (v) => { RP.version = v; rpHash(); drawReports(); });
   withData('reports', (d) => {
     RP.data = d;
@@ -245,7 +256,8 @@ function renderReports(opts) {
     if (!list[RP.idx] || !list[RP.idx].parts) RP.part = 'all';
     // newest session first; within a day: all players, the session, the B game
     const byDay = shown.slice().reverse().flatMap((i) => RP.opts.filter((o) => o[0] === i));
-    document.getElementById('rp-pick').innerHTML = byDay.map(([i, part]) => `<option value="${i}|${part}">${rpEsc(rpOption(list[i], part))}</option>`).join('');
+    RP.sessOpts = byDay.map(([i, part]) => `<option value="${i}|${part}">${rpEsc(rpOption(list[i], part))}</option>`).join('');
+    document.getElementById('rp-pick').innerHTML = RP.sessOpts;
     drawReports();
   }, (err) => { document.getElementById('rp-preview').innerHTML = loadError(err); });
 }
@@ -269,6 +281,7 @@ function rpGo(i, part = 'all') {
 function rpHash() {
   const s = RP.data && RP.data.sessions[RP.idx];
   if (RP.version === 'data') history.replaceState(null, '', '#reports/data');
+  else if (RP.version === 'weekly') history.replaceState(null, '', '#reports/weekly' + (RP.week ? '/' + RP.week : ''));
   else if (s) history.replaceState(null, '', '#reports/' + s.date + (RP.version === 'staff' ? '/staff' : ''));
 }
 
@@ -288,11 +301,15 @@ function rpBuild(D) { return RP.version === 'staff' ? rpStaffState(D).html || ''
 function drawReports() {
   const box = document.getElementById('rp-preview');
   if (!box) return;
-  const data = RP.version === 'data';
+  const data = RP.version === 'data', weekly = RP.version === 'weekly', pick = document.getElementById('rp-pick');
   document.getElementById('rp-step').style.display = data ? 'none' : '';
   document.getElementById('rp-pdf').style.display = data ? 'none' : '';
+  document.getElementById('rp-who').hidden = !weekly;
+  document.getElementById('rp-pptx').style.display = RP.version === 'players' ? '' : 'none';
   if (data) { if (!box.querySelector('.rp-data')) rpDataDraw(); return; } // (re)drawn once: a late reports load must not reset the form
   if (!RP.data) return;
+  if (weekly) { rwDraw(); return; }
+  if (pick.dataset.mode !== 'sessions' && RP.sessOpts) { pick.innerHTML = RP.sessOpts; pick.dataset.mode = 'sessions'; }
   const list = RP.data.sessions;
   if (!list.length) { box.innerHTML = `<div class="panel">${emptyState('No sessions this season yet.')}</div>`; return; }
   const D = rpDoc(RP.data, RP.idx, RP.part);
@@ -427,8 +444,92 @@ async function rpGpsDownload() {
 
 /** The pages keep their exact print size (1290 px); the preview is zoomed to the available width. */
 function rpFit() {
-  const box = document.getElementById('rp-preview'), doc = box && box.querySelector('.rp-doc');
+  const box = document.getElementById('rp-preview'), doc = box && box.querySelector('.rp-doc'), wdoc = box && box.querySelector('.rw-doc');
   if (doc) doc.style.zoom = Math.min(1, box.clientWidth / RP_W);
+  if (wdoc) wdoc.style.zoom = Math.min(1, box.clientWidth / RW_W);
+}
+
+// ---------------------------------------------------------------- Weekly: the weekly player report (js/reports-weekly.js)
+function rwPhoto(pid) { const u = typeof PHOTO_DATA !== 'undefined' && PHOTO_DATA[pid]; return u && u.startsWith('data:') ? u : ''; }
+function rwDraw() {
+  const box = document.getElementById('rp-preview'), W = RP.data.weekly, pick = document.getElementById('rp-pick'), who = document.getElementById('rp-who');
+  const weeks = rwWeeks(W);
+  if (!weeks.length) {
+    box.innerHTML = `<div class="panel rp-msg">${emptyState('The weekly reports come with the next update of the data.')}</div>`;
+    document.getElementById('rp-pdf').disabled = true;
+    return;
+  }
+  if (!RP.week || !weeks.some((w) => w.ws === RP.week)) RP.week = (weeks.find((w) => w.done) || weeks[0]).ws; // the last complete week
+  pick.innerHTML = weeks.map((w) => `<option value="${w.ws}">${rpEsc(w.label || w.ws)} · ${rwRange(w.ws, w.we)}${w.done ? '' : ' · in progress'}</option>`).join('');
+  pick.dataset.mode = 'weeks';
+  pick.value = RP.week;
+  const k = weeks.findIndex((w) => w.ws === RP.week), wk = weeks[k];
+  document.getElementById('rp-prev').disabled = k >= weeks.length - 1;
+  document.getElementById('rp-next').disabled = k <= 0;
+  const players = rwPlayersOf(W, RP.week);
+  if (RP.who && !players.some((p) => p.pid === RP.who)) RP.who = '';
+  who.innerHTML = `<option value="">All players (${players.length})</option>` + players.map((p) => `<option value="${p.pid}">${rpEsc(p.name)}</option>`).join('');
+  who.value = RP.who;
+  const pids = RP.who ? [RP.who] : players.map((p) => p.pid);
+  document.getElementById('rp-pdf').disabled = !pids.length;
+  document.getElementById('rp-sub').textContent = `Weekly report · ${wk.label} · ${rwRange(wk.ws, wk.we)} · ${RP.who ? W.players[RP.who].name : `${players.length} players`}${wk.done ? '' : ' · week in progress'}`;
+  box.innerHTML = pids.length ? `<div class="rw-doc">${pids.map((pid) => `<div class="rw-page">${rwPage(W, pid, RP.week, rwPhoto(pid))}</div>`).join('')}</div>`
+    : `<div class="panel rp-msg">${emptyState('No player with data this week.')}</div>`;
+  rpFit();
+  if (!RW_PHOTOS_ASKED && typeof loadPlayerPhotos === 'function') { // the photos arrive after the first drawing
+    RW_PHOTOS_ASKED = true;
+    loadPlayerPhotos().then(() => { if (RP.version === 'weekly') rwDraw(); }).catch(() => {});
+  }
+  Promise.all(RP_JS.map(rpScript)).catch(() => { /* retried on click */ });
+}
+let RW_PHOTOS_ASKED = false;
+/** One PDF: the selected player, or every player of the week (one page each) — printed online for a complete week,
+ * otherwise made here, page by page, at the report's own size. */
+async function rwPrint() {
+  if (!RP.data || RP.busy) return;
+  const W = RP.data.weekly, ws = RP.week, btn = document.getElementById('rp-pdf'), label = btn.textContent;
+  const pids = RP.who ? [RP.who] : rwPlayersOf(W, ws).map((p) => p.pid), file = rwFile(W, ws, RP.who || null);
+  RP.busy = true; btn.disabled = true; btn.textContent = 'Preparing PDF…';
+  let host = null;
+  try {
+    if (await rpReadyPdf(file)) return;
+    await Promise.all(RP_JS.map(rpScript));
+    if (typeof loadPlayerPhotos === 'function') await loadPlayerPhotos().catch(() => {});
+    host = document.createElement('div');
+    host.className = 'rw-render';
+    host.innerHTML = pids.map((pid) => `<div class="rw-page">${rwPage(W, pid, ws, rwPhoto(pid))}</div>`).join('');
+    document.body.appendChild(host);
+    await Promise.all([...host.querySelectorAll('img')].map((im) => im.complete ? 0 : new Promise((ok) => { im.onload = im.onerror = ok; })));
+    if (document.fonts) await document.fonts.ready;
+    let pdf = null;
+    const pages = [...host.querySelectorAll('.rw-page')];
+    for (let i = 0; i < pages.length; i++) {
+      btn.textContent = `Preparing PDF… ${i + 1}/${pages.length}`;
+      const el = pages[i], w = el.offsetWidth * 0.75, h = el.offsetHeight * 0.75;
+      const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#e9ecf4', useCORS: true, logging: false, ignoreElements: (x) => x.parentElement === document.body && x !== host });
+      if (!pdf) pdf = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'pt', format: [w, h], compress: true });
+      else pdf.addPage([w, h], 'portrait');
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, w, h, undefined, 'FAST');
+    }
+    if (pdf) pdf.save(file);
+  } catch (err) {
+    alert('Could not create the PDF: ' + (err.message || err));
+  } finally {
+    if (host) host.remove();
+    RP.busy = false; btn.disabled = false; btn.textContent = label;
+  }
+}
+/** The players' report as a PowerPoint (one page per slide, 16:9) for the gym screen — made online with the PDF. */
+async function rpPptx() {
+  if (!RP.data || RP.busy) return;
+  const D = rpDoc(RP.data, RP.idx, RP.part), btn = document.getElementById('rp-pptx'), label = btn.textContent;
+  const file = `${D.session.id}_${D.session.date}_Training_slides.pptx`;
+  btn.disabled = true; btn.textContent = 'Preparing…';
+  try {
+    if (D.session.part || !(await rpReadyPdf(file))) {
+      alert('The PowerPoint is made online with the PDF reports of the last 10 days: it is ready a few minutes after the session is published.');
+    }
+  } finally { btn.disabled = false; btn.textContent = label; }
 }
 
 /** Loads a script once (the PDF libraries are only fetched when someone downloads a report). */
