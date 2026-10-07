@@ -70,12 +70,13 @@ function rpDoc(data, i, part = 'all') {
     }
   }
   return {
-    session: { id: s.id, date: s.date, dateLabel: rpDateLabel(s.date), week: s.week, md: pm.md ?? s.md, ampm: s.ampm, time: pm.time ?? s.time, exercise: s.ex,
+    session: { id: s.id, date: s.date, dateLabel: rpDateLabel(s.date), week: s.week, md: pm.md ?? s.md, ampm: s.ampm, time: pm.time ?? s.time, exercise: s.ex, type: s.type,
       part: s.parts && part !== 'all' ? rpPartLabel(s, part) : '' },
     positions: data.positions, players: data.pos, pids: data.pid || {}, fullSession, gameAvg,
     weekLoad: { from, to: s.date, label: rpRangeLabel(from, s.date), rows: Object.values(acc) },
     drills: (part === 'b' ? [] : s.drills).map((d) => ({ n: d.n, name: d.name, time: d.time,
-      rows: d.rows.filter((r) => known(r[0])).map(([name, mpm, td, d15, d20, vmax, sprints, accdec, pro]) => ({ name, mpm, td, d15, d20, vmax, sprints, accdec, pro })) })),
+      rows: d.rows.filter((r) => known(r[0])).map(([name, mpm, td, d15, d20, vmax, sprints, accdec, pro, time]) => ({ name, mpm, td, d15, d20, vmax, sprints, accdec, pro,
+        time: time ?? (mpm ? Math.round(td / mpm) : null) })) })), // his minutes in the drill (older data: distance ÷ m/min)
   };
 }
 
@@ -97,7 +98,7 @@ function rpFace(D, name) {
 const RP_TABLE_H = 634; // page height left for a table under the header (790 − padding − header − legend)
 
 /** `budget`: px available for the table — a big squad (22–25 players) gets lower rows so the page still holds everyone. */
-function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H) {
+function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H, minRow = 17) {
   // grey track = max of the players who did the typical team session (ProTraining / game): an individual session
   // (e.g. extra running) must not shrink everyone else's bars — his own bar is then capped at 100 %
   const ref = rows.some((r) => r.pro) ? rows.filter((r) => r.pro) : rows;
@@ -109,7 +110,7 @@ function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H) {
   const lo = (k) => Math.min(...span(k).map((r) => r[k] ?? 0)), hi = (k) => Math.max(...span(k).map((r) => r[k] ?? 0));
   const t01 = (k, v) => hi(k) > lo(k) ? Math.max(0, Math.min(1, ((v ?? 0) - lo(k)) / (hi(k) - lo(k)))) : 0;
   const tpl = '150px ' + cols.map((k) => RP_WIDTHS[k] || '44px').join(' ');
-  const rowH = rpRowH(D, rows, budget - 32, rows.length > 17 ? 23 : 25);
+  const rowH = rpRowH(D, rows, budget - 32, rows.length > 17 ? 23 : 25, minRow);
   const cell = (r, k) => {
     const v = fixed[k] ?? r[k];
     if (RP_BARS.includes(k)) {
@@ -127,19 +128,63 @@ function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H) {
   };
   let html = `<div class="rp-tbl${rowH < 21 ? ' rp-tight' : ''}"><div class="rp-tr rp-th" style="grid-template-columns:${tpl}"><span>Players</span>${cols.map((k) => `<span>${RP_LABELS[k]}</span>`).join('')}</div>`;
   for (const p of D.positions.order) {
-    const g = rows.filter((r) => D.players[r.name] === p).sort((a, b) => a.name.localeCompare(b.name));
+    const g = rows.filter((r) => D.players[r.name] === p).sort((a, b) => a.name.localeCompare(b.name) || (a.half || 0) - (b.half || 0));
     if (!g.length) continue;
     html += `<div class="rp-grp">${p}<small>${rpEsc(D.positions.labels[p])}</small></div>`;
-    html += g.map((r) => `<div class="rp-tr rp-row" style="grid-template-columns:${tpl};height:${rowH}px"><span class="rp-nm">${rpFace(D, r.name)}${rpEsc(r.name)}</span>${cols.map((k) => cell(r, k)).join('')}</div>`).join('');
+    // a match's halves (page 4): his 1st half, then his 2nd half on the line below
+    const nm = (r, i) => (!r.half ? `${rpFace(D, r.name)}${rpEsc(r.name)}`
+      : !g[i - 1] || g[i - 1].name !== r.name ? `${rpFace(D, r.name)}${rpEsc(r.name)}<small class="rp-half">${r.half === 1 ? '1st' : '2nd'}</small>` : '<small class="rp-half2">2nd half</small>');
+    html += g.map((r, i) => `<div class="rp-tr rp-row${r.half && (!g[i - 1] || g[i - 1].name !== r.name) && i ? ' rp-pnew' : ''}" style="grid-template-columns:${tpl};height:${rowH}px"><span class="rp-nm">${nm(r, i)}</span>${cols.map((k) => cell(r, k)).join('')}</div>`).join('');
   }
   return html + `</div>
   <div class="rp-legend"><span><b style="background:#6fb0ee"></b>player value</span><span><b style="background:#e6e8ee"></b>team max</span>${cols.includes('pmax') ? `<span><b style="background:${RP_GREEN[0]}"></b>≥ 90 % of his max speed</span>${rows.some((r) => r.rec) ? '<span><i class="rp-rec">★</i> his fastest of the last 12 months</span>' : ''}` : ''}</div>`;
 }
 
 /** Row height for a player table grouped by position: `space` px for the rows and group bands, at most `max`. */
-function rpRowH(D, rows, space, max) {
+function rpRowH(D, rows, space, max, min = 17) {
   const groups = D.positions.order.filter((p) => rows.some((r) => D.players[r.name] === p)).length;
-  return Math.max(17, Math.min(max, Math.floor((space - groups * 26) / Math.max(1, rows.length))));
+  return Math.max(min, Math.min(max, Math.floor((space - groups * 26) / Math.max(1, rows.length))));
+}
+
+// ---------------------------------------------------------------- a match: the halves (his Power BI "Game Data" pages 4–7)
+const RP_HALF_COLS = ['time', 'mpm', 'td', 'd15', 'd20', 'vmax', 'sprints', 'accdec'];
+function rpHalves(D) {
+  const half = (k) => ((D.drills || []).find((d) => d.name === `Game_${k}Half`) || { rows: [] }).rows;
+  return [half('1st'), half('2nd')];
+}
+const rpHalfTime = (rows) => Math.max(0, ...rows.map((r) => r.time || 0));
+/** The team in each half: every outfield player with GPS (distances, sprints and Acc + Dec added up, m/min = their
+ * average, top speed = the fastest), then the 2nd half against the 1st. */
+function rpTeamHalves(h1, h2) {
+  const sum = (rows, k) => rows.reduce((a, r) => a + (r[k] || 0), 0);
+  const tot = (rows) => ({ time: rpHalfTime(rows), mpm: rows.length ? Math.round(sum(rows, 'mpm') / rows.length) : null, td: sum(rows, 'td'), d15: sum(rows, 'd15'),
+    d20: sum(rows, 'd20'), vmax: Math.max(0, ...rows.map((r) => r.vmax || 0)) || null, sprints: sum(rows, 'sprints'), accdec: sum(rows, 'accdec'), n: rows.length });
+  const a = tot(h1), b = tot(h2), cols = RP_HALF_COLS, mx = (k) => Math.max(a[k] || 0, b[k] || 0) || 1;
+  const tpl = '150px ' + cols.map((k) => RP_WIDTHS[k] || '44px').join(' ');
+  const cell = (t, k) => (RP_BARS.includes(k) ? `<div class="rp-c"><span class="rp-v">${rpFmt(k, t[k])}</span><div class="rp-bar"><i style="width:${rpPct(t[k], mx(k))};background:${RP_COLORS[k]}"></i></div></div>`
+    : `<div class="rp-c rp-txt"><span class="rp-v">${rpFmt(k, t[k])}</span></div>`);
+  const chg = (k) => {
+    if (!a[k] || b[k] == null) return '<div class="rp-c rp-txt"><span class="rp-v">–</span></div>';
+    const p = Math.round((b[k] / a[k] - 1) * 100), c = p >= -5 ? ['#d5f2d5', '#1c6b1c'] : p >= -15 ? ['#ffe2b8', '#9a4f00'] : ['#ffd5d5', '#b42318'];
+    return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${c[0]};color:${c[1]}">${p > 0 ? '+' : ''}${p} %</span></div>`;
+  };
+  const row = (label, t) => `<div class="rp-tr rp-row rp-team" style="grid-template-columns:${tpl}"><span class="rp-nm">${label}<small class="rp-half">${t.n} players</small></span>${cols.map((k) => cell(t, k)).join('')}</div>`;
+  return `<div class="rp-tbl"><div class="rp-tr rp-th" style="grid-template-columns:${tpl}"><span>Half</span>${cols.map((k) => `<span>${RP_LABELS[k]}</span>`).join('')}</div>
+    ${row('1st half', a)}${row('2nd half', b)}<div class="rp-tr rp-row rp-team" style="grid-template-columns:${tpl}"><span class="rp-nm">2nd vs 1st</span>${cols.map((k) => (k === 'time' ? '<div class="rp-c rp-txt"><span class="rp-v"></span></div>' : chg(k))).join('')}</div></div>
+    <div class="rp-legend"><span>Team = every outfield player with GPS data in that half (substitutes included): distances, sprints and Acc + Dec added up, m/min = their average, max speed = the fastest.</span>
+      <span><b style="background:#d5f2d5"></b>≥ −5 %</span><span><b style="background:#ffe2b8"></b>−5 to −15 %</span><span><b style="background:#ffd5d5"></b>below −15 %</span></div>`;
+}
+/** Pages 4–7 of a match: every player's two halves, the team per half, the 1st half, the 2nd half. */
+function rpMatchPages(D, title) {
+  const s = D.session, [h1, h2] = rpHalves(D), cols = RP_HALF_COLS;
+  const meta = (time) => [['WEEK', s.week], ['MD', s.md], ['TIME', time + "'"], ['N SESSION', s.id]];
+  const pages = [];
+  const both = [...h1.map((r) => ({ ...r, half: 1 })), ...h2.map((r) => ({ ...r, half: 2 }))];
+  if (both.length) pages.push(rpHeader('MATCH · 1ST HALF & 2ND HALF', title, meta(s.time)) + rpTable(D, both, cols, {}, RP_TABLE_H, 14));
+  if (h1.length && h2.length) pages.push(rpHeader('TOTAL TEAM · 1ST HALF & 2ND HALF', title, meta(s.time)) + rpTeamHalves(h1, h2));
+  if (h1.length) pages.push(rpHeader('MATCH · 1ST HALF', title, meta(rpHalfTime(h1))) + rpTable(D, h1, cols));
+  if (h2.length) pages.push(rpHeader('MATCH · 2ND HALF', title, meta(rpHalfTime(h2))) + rpTable(D, h2, cols));
+  return pages;
 }
 
 /** The "% top 3 game avg" list beside a chart: every player fits in the block (325 px, 24 of them for the title) — the
@@ -175,10 +220,14 @@ function rpPages(D) {
   pages.push(rpHeader(kicker, title, meta) + rpTable(D, D.fullSession, ['time', 'mpm', 'td', 'd15', 'd20', 'vmax', 'pmax', 'days', 'sprints', 'accdec']));
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'td', 'TOTAL DISTANCE', 'TOTAL DISTANCE', 'td') + rpChart(D, 'd20', 'DISTANCE >20kmh', 'DISTANCE >20kmh', 'd20'));
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'accdec', 'Acceleration + Deceleration', 'HI Acc+Dec', 'accdec') + rpChart(D, 'sprints', 'Number of Sprints >25kmh', 'SPRINTS', 'sprints'));
-  // drills: rankings by m/min (+ High Acc+Dec), up to 4 drills per page — high-speed running is rare in drills
-  const drills = (D.drills || []).filter((d) => d.rows.length), cols = rpDrillColumns(drills);
-  for (let k = 0; k < cols.length; k += 4) {
-    pages.push(rpHeader('DRILLS SUMMARY', title, [['WEEK', s.week], ['MD', s.md], ['DRILLS', drills.length], ['N SESSION', s.id]]) + rpDrillBoards(D, cols.slice(k, k + 4)));
+  const halves = rpHalves(D);
+  if (s.type === 'match' && (halves[0].length || halves[1].length)) pages.push(...rpMatchPages(D, title)); // a match: his halves pages
+  else {
+    // drills: rankings by m/min (+ High Acc+Dec), up to 4 drills per page — high-speed running is rare in drills
+    const drills = (D.drills || []).filter((d) => d.rows.length), cols = rpDrillColumns(drills);
+    for (let k = 0; k < cols.length; k += 4) {
+      pages.push(rpHeader('DRILLS SUMMARY', title, [['WEEK', s.week], ['MD', s.md], ['DRILLS', drills.length], ['N SESSION', s.id]]) + rpDrillBoards(D, cols.slice(k, k + 4)));
+    }
   }
   // the total week load is the last page (the user's order)
   if (D.weekLoad && D.weekLoad.rows.length) pages.push(rpHeader('TOTAL WEEK LOAD', D.weekLoad.label, [['WEEK', s.week], ['FROM', D.weekLoad.from], ['TO', D.weekLoad.to]]) + rpTable(D, D.weekLoad.rows, ['min', 'td', 'd15', 'd20', 'vmax', 'pmax', 'sprints', 'accdec']));
@@ -336,7 +385,7 @@ function drawReports() {
     }
     html = st.html; n = 6 + drillPages;
   } else {
-    html = rpPages(D); n = 3 + (D.weekLoad.rows.length ? 1 : 0) + drillPages;
+    html = rpPages(D); n = (html.match(/class="rp-page"/g) || []).length;
   }
   document.getElementById('rp-pdf').disabled = false;
   document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel}${D.session.part ? ' · ' + D.session.part : ''}${RP.version === 'staff' ? ' · Staff' : ''} · ${n} pages · ${D.fullSession.length} players`;
