@@ -149,21 +149,28 @@ async function upload(req, env) {
   if (!env.UPLOAD_KEY || !same(req.headers.get('X-Upload-Key') || '', env.UPLOAD_KEY)) return json({ ok: false, error: 'forbidden' }, 403);
   const name = new URL(req.url).searchParams.get('name') || '';
   const meta = { etag: (req.headers.get('X-Etag') || '').replace(/[^\w-]/g, '').slice(0, 64) || String(Date.now()), at: Date.now() };
-  if (UPLOADS.includes(name) || KEY_ONLY.includes(name)) await env.DATA.put('p:' + name, req.body, { metadata: meta });
-  else if (name.startsWith('snap:') && SNAPS.includes(name.slice(5))) await env.DATA.put(name, req.body, { metadata: meta });
-  else if (/^pdf:[\w.-]+\.(pdf|pptx)$/.test(name)) await env.DATA.put(name, req.body, { metadata: meta, expirationTtl: 120 * 86400 });
-  else return json({ ok: false, error: 'bad_name' }, 400);
+  const pdf = /^pdf:[\w.-]+\.(pdf|pptx)$/.test(name);
+  const key = UPLOADS.includes(name) || KEY_ONLY.includes(name) ? 'p:' + name : (name.startsWith('snap:') && SNAPS.includes(name.slice(5))) || pdf ? name : null;
+  if (!key) return json({ ok: false, error: 'bad_name' }, 400);
+  // the same content already there → not written again (the free plan allows 1,000 KV writes a day; reads are plenty)
+  const old = await env.DATA.getWithMetadata(key, { type: 'stream' });
+  if (old.value) await old.value.cancel();
+  if (old.metadata && old.metadata.etag === meta.etag) return json({ ok: true, name, unchanged: true });
+  await env.DATA.put(key, req.body, pdf ? { metadata: meta, expirationTtl: 120 * 86400 } : { metadata: meta });
   return json({ ok: true, name });
 }
 
 /** Re-read from the Google script what it computes (wellness), the Staff list and the calendar edits. Only what changed is
- * written (KV writes are counted). force = the cron or the first request; otherwise at most once a minute per server. */
-let lastPull = 0;
+ * written (KV writes are counted): the script recomputes every 30 min and stamps a new generated_at even when no
+ * check-in came, so the fingerprint leaves generated_at out, and "etags" is written only with a changed payload (the
+ * script's own fingerprint is also kept in memory). force = the cron or the first request; otherwise at most once a
+ * minute per server. */
+let lastPull = 0, lastV = '';
 async function refresh(env, force) {
   if (!force && Date.now() - lastPull < 60000) return { skipped: true };
   lastPull = Date.now();
   const tags = (await env.DATA.get('etags', 'json')) || {};
-  const r = await fetch(env.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'bundle', key: env.UPLOAD_KEY, v: tags._v || '' }) });
+  const r = await fetch(env.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'bundle', key: env.UPLOAD_KEY, v: lastV || tags._v || '' }) });
   const text = await r.text();
   if (!text.startsWith('v\t')) throw new Error('bundle: unexpected answer');
   const lines = text.split('\n'), out = { changed: [] };
@@ -173,13 +180,13 @@ async function refresh(env, force) {
     const key = FROM_SCRIPT.includes(name) ? 'p:' + name : name === 'staff' || name === 'edits' ? name : null;
     if (!key || !val || val === 'null') continue;
     if (name === 'staff') out.staff = JSON.parse(val);
-    const etag = await hash(val);
+    const etag = await hash(val.replace(/"generated_at":"[^"]*"/, ''));
     if (tags[key] === etag) continue;
     await env.DATA.put(key, val, { metadata: { etag, at: Date.now() } });
     tags[key] = etag;
     out.changed.push(name);
   }
-  tags._v = lines[0].slice(2);
-  await env.DATA.put('etags', JSON.stringify(tags));
+  lastV = lines[0].slice(2);
+  if (out.changed.length) { tags._v = lastV; await env.DATA.put('etags', JSON.stringify(tags)); }
   return out;
 }
