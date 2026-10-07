@@ -158,6 +158,13 @@ function splColor(name) { const lib = SPL.lib.library, i = lib.findIndex((x) => 
 // ------------------------------------------------------------------ drill cards (created here: exact name, optional pitch and players)
 function splDefs() { return (SPL.saved && SPL.saved.drills) || {}; }
 function splDef(name) { const k = splKey(name); return k ? Object.values(splDefs()).find((x) => splKey(x.name) === k) || null : null; }
+/** The drill's card as the "Drill info" cell of Data_Drills, after its name: "4vs1 · 40x30 m" (his ask, 2026-10-07). */
+function splDrillInfo(name) {
+  const d = splDef(name);
+  if (!d) return null;
+  const dim = Number(d.length) && Number(d.width) ? `${Math.round(Number(d.length))}x${Math.round(Number(d.width))} m` : '';
+  return [d.players == null ? '' : String(d.players).trim(), dim].filter(Boolean).join(' · ') || null;
+}
 function splLibOf(name) { const k = splKey(name); return k ? SPL.lib.library.find((x) => splKey(x.name) === k) || null : null; }
 /** The per-minute load the forecast uses: the drill's own history, else the drill its card borrows from (until it has data). */
 function splRateOf(name) {
@@ -515,13 +522,35 @@ function splNtPlayer(pn) {
   const gps = (SPL.saved.titles || {})['NT:' + pn] || pn;
   return SPL.lib.players.find((q) => q.gps === gps) || null;
 }
+/** A national-team file from another GPS system (Sassi's Tunisia file, 2026-10-07: one row per day — Name, Date, Total
+ * Duration, Total Distance (m), V HID 20-25 km/h, HSR +25 km/h, sprints, max velocity…) → StatSports export rows for the
+ * file's player (named after the file: SASSI.csv → SASSI). What it does not measure the same way (its accelerations count
+ * 4–5 × StatSports' HIT Acc + Dec), or not at all (> 15 km/h, heart rate), is left empty (SPL_NT_NA). */
+function splNtOther(rows, file) {
+  const pn = spName(String(file || '').replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ')).toUpperCase();
+  const mins = (t) => { const m = /^(\d+):(\d{2}):(\d{2})$/.exec(String(t || '').trim()); return m ? Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 60 : spNum(t); };
+  const col = (r, re) => { const k = Object.keys(r).find((x) => re.test(x)); return k ? r[k] : ''; };
+  return rows.filter((r) => spIsoDate(r.Date)).map((r) => ({
+    'Player First Name': pn, 'Session Date': r.Date, 'Drill Title': r.Name || 'NT', 'Total Time': mins(col(r, /duration/i)),
+    'Total Distance': spNum(col(r, /^total distance/i)), 'Distance Zone 5 (Absolute)': spNum(col(r, /20\s*-\s*25/)),
+    'Distance Zone 6 (Absolute)': spNum(col(r, /\+\s*25|>\s*25/)), 'Entries Zone 6 (Absolute)': spNum(col(r, /sprint/i)),
+    'Max Speed': spNum(col(r, /max.*(velocity|speed)/i)), _other: 1,
+  }));
+}
+const SPL_NT_NA = ['HIT count', 'HIT Acc', 'HIT Dec', 'Acc 3-4.5', 'Acc 2.5-4', 'Dec 2.5-4', 'HIT Acc - HIT Dec', 'Acc 2.5-4 - Dec 2.5-4', 'BodyLoad',
+  'AVG Heart Rate', 'MAX Heart Rate', 'Time HR over 85%', 'Time HR over 85% Session', 'Running DT >10kmh', 'Speed AVG', 'MED Acc', 'MED Dec',
+  'Total Metabolic Power', 'HIT > 15', 'HIT/min > 15', 'Max Acc', 'Max Dec', 'DSL', 'DT zone5 Relative', 'DT zone6 Relative', 'DT zone5+6 Relative',
+  'Count Zone5 Relative', 'Count zone6 Relative'];
 /** One or several dates in the file(s): per day and player, the whole-session row ("Entire Session", "session [training]",
- * else the longest one). */
+ * else the longest one). A file from another GPS system: splNtOther. */
 async function splReadNtFiles(list) {
   const byDate = {}, names = [];
+  let other = false;
   for (const f of list) {
-    const rows = spParseCsv(await f.text());
-    if (!rows.length || !('Player First Name' in rows[0]) || !('Session Date' in rows[0])) { SPL.state = `${f.name}: not a StatSports export`; continue; }
+    let rows = spParseCsv(await f.text());
+    const alt = rows.length && !('Player First Name' in rows[0]) && 'Date' in rows[0] && Object.keys(rows[0]).some((k) => /^total distance/i.test(k));
+    if (alt) { rows = splNtOther(rows, f.name); other = true; }
+    if (!rows.length || !('Player First Name' in rows[0]) || !('Session Date' in rows[0])) { SPL.state = `${f.name}: not a GPS export`; continue; }
     names.push(f.name);
     rows.forEach((r) => {
       const date = spIsoDate(r['Session Date']), pn = spName(r['Player First Name']);
@@ -530,7 +559,7 @@ async function splReadNtFiles(list) {
       if (!old || (whole(r) && !whole(old)) || (whole(r) === whole(old) && spNum(r['Total Time']) > spNum(old['Total Time']))) day[pn] = r;
     });
   }
-  SPL.nt = Object.keys(byDate).length ? { byDate: Object.fromEntries(Object.entries(byDate).map(([d, o]) => [d, Object.values(o)])), files: names } : null;
+  SPL.nt = Object.keys(byDate).length ? { byDate: Object.fromEntries(Object.entries(byDate).map(([d, o]) => [d, Object.values(o)])), files: names, other } : null;
   splDraw();
   const el = document.getElementById('spl-nt');
   if (el) el.scrollIntoView({ block: 'nearest' });
@@ -542,7 +571,10 @@ function splNtRows(date, rows) {
   const titles = Object.fromEntries([...new Set(mine.map((r) => String(r['Drill Title'] || '').trim()))].map((t) => [t, { no: 1, name: 'NT', min: 0, own: true }]));
   const csv = spToCsv(mine), typed = (SPL.nt && SPL.nt.rpe) || {}, rpe = {};
   mine.forEach((r) => { const pn = spName(r['Player First Name']), v = typed[date + '|' + pn]; if (v != null && v !== '') rpe[pn] = Number(v); }); // his RPE, typed in the box
-  return spBuildRows(csv, csv, { date, sid: '/', week: splWeekNo(date), label: '/', md: '/', ampm: 'PM', players, extra: [], rpe, drills: titles, drillName: () => 'NT' });
+  const out = spBuildRows(csv, csv, { date, sid: '/', week: splWeekNo(date), label: '/', md: '/', ampm: 'PM', players, extra: [], rpe, drills: titles, drillName: () => 'NT' });
+  const other = new Set(mine.filter((r) => r._other).map((r) => splNtPlayer(spName(r['Player First Name'])).gps)); // another GPS system
+  if (other.size) [...out.full, ...out.drills].forEach((r) => { if (other.has(r.Players)) SPL_NT_NA.forEach((c) => { r[c] = null; }); });
+  return out;
 }
 function splNtMap(pn, gps) {
   SPL.saved.titles = { ...(SPL.saved.titles || {}), ['NT:' + pn]: gps };
@@ -569,11 +601,11 @@ function splNtHtml() {
       }).join('');
       return `<div class="sp-nt-d"><div class="sp-nt-h">${day(d)}${Object.values(SPL.saved.published || {}).some((x) => x.sid === 'NT' && x.date === d) ? ' <small>· published already: replaced</small>' : ''}</div>${lines}</div>`;
     }).join('');
-    body = `<div class="sp-nt-prev">${blocks}</div>
+    body = `${SPL.nt.other ? '<p class="sp-note">Another GPS system: distance, &gt; 20 / &gt; 25 km/h, sprints, top speed and minutes are taken; its accelerations (counted differently), &gt; 15 km/h and heart rate stay empty.</p>' : ''}<div class="sp-nt-prev">${blocks}</div>
       <div class="sp-card-a"><button type="button" class="btn-primary" data-nt-publish ${total ? '' : 'disabled'}>Publish ${days.length} NT day${days.length > 1 ? 's' : ''}</button><button type="button" class="btn-light" data-nt-cancel>Cancel</button>
         <em class="sp-card-msg">Written as in your Excel: session “/”, Type NT, his own minutes, his RPE if typed (Carga RPE = RPE × time), one “NT” drill. They replace his NT rows of that day in the Excel a few minutes after publishing.</em></div>`;
   }
-  return `<section class="sp-nt" id="spl-nt"><div class="sp-h3">National team (NT) <small>the Qatar NT export from Sonra — one or several dates</small></div>
+  return `<section class="sp-nt" id="spl-nt"><div class="sp-h3">National team (NT) <small>the Qatar NT export from Sonra, or another GPS file (one row per day, named after the player, e.g. SASSI.csv) — one or several dates</small></div>
     ${body || `<label class="sp-drop small"><input type="file" accept=".csv,text/csv" multiple hidden data-ntfiles>Drop the NT export here, or click to choose</label>`}
     ${done.length ? `<div class="sp-nt-done">Published: ${done.map((x) => `<span>${day(x.date)} <small>${escapeHtml(x.rows || '')}</small> <button type="button" class="linkbtn" data-unpub="${escapeHtml(x.date + '_NT')}">remove</button></span>`).join('')}</div>` : ''}</section>`;
 }
@@ -760,6 +792,7 @@ function splBuild() {
     date, sid: p.sid || splSid(date), week: splWeekNo(date), label: p.label || splLabel(date), md: splTag(date) || '/', ampm: p.ampm || 'PM', sessionTime, players, extra, rpe, drills, ownTime, cutOwn,
     drillName: (pn, d) => (SPL_NOT_TEAM.test(d.name) && players[pn] && players[pn].type === 'Rehab' ? 'Rehab' : d.name),
   });
+  out.drills.forEach((r) => { r['Drill info'] = splDrillInfo(r.Type); }); // the drill card, after its name in Data_Drills
   return { ...out, fileDate, missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk, checks, match, halfInfo };
 }
 /** The checks above the three columns: each flagged time with its one-click fixes (the chosen one stays highlighted). */

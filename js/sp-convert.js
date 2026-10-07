@@ -8,7 +8,8 @@ const SP_FULL_COLS = ['Date', 'N° Session', 'Week', 'WeeK MD Session', 'MD Sess
   'HIT Acc - HIT Dec', 'Acc 2.5-4 - Dec 2.5-4', 'BodyLoad', 'RPE', 'Carga RPE', 'AVG Heart Rate', 'MAX Heart Rate', 'Time HR over 85%',
   'Time HR over 85% Session', 'Running DT >10kmh', 'Speed AVG', 'MED Acc', 'MED Dec', 'Total Metabolic Power', 'HIT > 15', 'HIT/min > 15', 'AMPM',
   'Max Acc', 'Max Dec', 'DSL', 'DT zone5 Relative', 'DT zone6 Relative', 'DT zone5+6 Relative', 'Count Zone5 Relative', 'Count zone6 Relative'];
-const SP_DRILL_COLS = SP_FULL_COLS.map((c) => (c === 'Acc 3-4.5' ? 'Acc 2.5-4' : c)); // the drills file names it so
+// the drills file names "Acc 3-4.5" "Acc 2.5-4"; "Drill info" after the drill's name (Type) = its card: players · pitch (2026-10-07)
+const SP_DRILL_COLS = SP_FULL_COLS.flatMap((c) => (c === 'Type' ? ['Type', 'Drill info'] : [c === 'Acc 3-4.5' ? 'Acc 2.5-4' : c]));
 const SP_SESSION_TYPES = new Set(['ProTraining']); // their Time = the session's duration, as in the club's files (others: their own minutes)
 
 /** The session's duration: the most common GPS time, in whole minutes. */
