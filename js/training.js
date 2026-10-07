@@ -84,14 +84,14 @@ function wkBar(X, k) {
     labs += lab(WK_BLUE);
   });
   if (target && done > target) over += `<rect x="${xOf(target)}" y="3" width="${xOf(done) - xOf(target)}" height="13" fill="#e5484d"/>`;
-  else if (target && proj > target) over += `<rect x="${xOf(target)}" y="3" width="${xOf(proj) - xOf(target)}" height="13" fill="url(#wk-hatch)"/>`;
+  else if (target && proj > target * 1.02) over += `<rect x="${xOf(target)}" y="3" width="${xOf(proj) - xOf(target)}" height="13" fill="url(#wk-hatch)"/>`;
   if (G.segs.some((s) => s.done) && udone) over += `<line x1="${xOf(udone)}" x2="${xOf(udone)}" y1="1" y2="18" style="stroke:var(--ink-muted)" stroke-width="1.5" stroke-dasharray="2 1.5"/>`;
   if (target) over += `<line x1="${xOf(target)}" x2="${xOf(target)}" y1="0" y2="19" style="stroke:var(--ink)" stroke-width="2"/>`;
   const defs = '<defs><pattern id="wk-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="rgba(229,72,77,.08)"/><line x1="0" y1="0" x2="0" y2="5" stroke="rgba(229,72,77,.6)" stroke-width="1.6"/></pattern></defs>';
   const vs = G.segs.some((s) => s.done) && udone ? Math.round((done / udone - 1) * 100) : null, cls = vs == null ? '' : Math.abs(vs) < 10 ? 'ok' : Math.abs(vs) < 25 ? 'warn' : 'bad';
   const pc = (v) => Math.round((v / target - 1) * 100);
   const warn = !target ? '' : done > target ? `<span class="wk-over">target passed: +${wkFmt(k, done - target)} (+${pc(done)} %)</span>`
-    : proj > target ? `<span class="wk-over">if the days left are as usual: +${wkFmt(k, proj - target)} (+${pc(proj)} %)</span>` : '';
+    : proj > target * 1.02 ? `<span class="wk-over">if the days left are as usual: +${wkFmt(k, proj - target)} (+${pc(proj)} %)</span>` : '';
   return `<div class="wk-mb"><svg viewBox="0 0 ${W} 19" role="img" aria-label="microcycle: done, days left, target">${defs}${rects}${over}${labs}</svg><span>done <b>${wkFmt(k, done)}</b>${vs != null ? ` <b class="wk-vs ${cls}">${vs > 0 ? '+' : vs < 0 ? '−' : ''}${Math.abs(vs)} %</b>` : ''} · to do <b>${wkFmt(k, Math.max(0, target - done))}</b> · target <b>${wkFmt(k, target)}</b></span>${warn}</div>`;
 }
 /** One metric day by day until the match: every day has a dotted slot up to its usual (grey: done, blue: left) — so a

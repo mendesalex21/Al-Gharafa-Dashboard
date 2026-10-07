@@ -121,21 +121,21 @@ function rsMicroBar(C, k) {
     labs += lab('#1d5fae');
   });
   if (target && done > target) over += `<rect x="${xOf(target)}" y="1" width="${xOf(done) - xOf(target)}" height="${H - 2}" fill="#e5484d"/>`;
-  else if (target && proj > target) over += `<rect x="${xOf(target)}" y="1" width="${xOf(proj) - xOf(target)}" height="${H - 2}" fill="url(#rs-hatch)"/>`;
+  else if (target && proj > target * 1.02) over += `<rect x="${xOf(target)}" y="1" width="${xOf(proj) - xOf(target)}" height="${H - 2}" fill="url(#rs-hatch)"/>`;
   if (anyDone && udone) over += `<line x1="${xOf(udone)}" x2="${xOf(udone)}" y1="0" y2="${H}" stroke="#8a8f9e" stroke-width="1.6" stroke-dasharray="2 1.5"/>`;
   if (target) over += `<line x1="${xOf(target)}" x2="${xOf(target)}" y1="0" y2="${H}" stroke="#111" stroke-width="2.5"/>`;
   const defs = '<defs><pattern id="rs-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="rgba(229,72,77,.08)"/><line x1="0" y1="0" x2="0" y2="5" stroke="rgba(229,72,77,.65)" stroke-width="1.6"/></pattern></defs>';
   const vs = anyDone && udone ? Math.round((done / udone - 1) * 100) : null, col = vs == null ? '' : Math.abs(vs) < 10 ? '#1f7a37' : Math.abs(vs) < 25 ? '#c27c0e' : '#d64545';
   const pc = (v) => Math.round((v / target - 1) * 100);
   const warn = !target ? '' : done > target ? ` · <b class="rs-over">target passed: +${stK(done - target)} (+${pc(done)} %)</b>`
-    : proj > target ? ` · <b class="rs-over">if the days left are as usual: +${stK(proj - target)} (+${pc(proj)} %)</b>` : '';
+    : proj > target * 1.02 ? ` · <b class="rs-over">if as usual: +${stK(proj - target)} (+${pc(proj)} %)</b>` : '';
   return `<div class="rs-mbar"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${defs}${rects}${over}${labs}</svg><span>done <b>${stK(done)}</b>${vs != null ? ` <b style="color:${col}">${vs > 0 ? '+' : vs < 0 ? '−' : ''}${Math.abs(vs)} %</b> vs usual` : ''} · to do <b>${stK(Math.max(0, target - done))}</b> · target <b>${stK(target)}</b>${warn}</span></div>`;
 }
 /** One metric day by day — the Sessions page's chart: every day has a dotted slot up to its usual (grey: done, blue:
  * left); done = solid bar inside (colour = z vs usual), day left = its objective filled inside (red number when cut below
  * its usual); black line = usual, grey band = usual range (p25–p75), then the match. */
 function rsProfile(C, k, title, unit) {
-  const days = [...C.X.profile.map((d) => ({ ...d, done: 1 })), ...(C.X.plan || [])], W = 380, H = 148, L = 34, R = 6, T = 16, B = 32;
+  const days = [...C.X.profile.map((d) => ({ ...d, done: 1 })), ...(C.X.plan || [])], W = 380, H = 134, L = 34, R = 6, T = 16, B = 32;
   const n = days.length + 1, iw = W - L - R, ih = H - T - B, step = iw / n, bw = Math.min(36, step * 0.5);
   const raw = Math.max(1, ...days.flatMap((d) => (d[k] ? [d[k][0] || 0, d[k][1] || 0, d[k][3] || 0] : [0]))) * 1.14;
   const e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e, top = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e;
