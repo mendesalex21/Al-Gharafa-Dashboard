@@ -845,7 +845,9 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .pbar small { position: relative; display: block; line-height: 22px; padding-left: 8px; font-size: 11.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
 
 /* session */
-.sess-head { display: flex; flex-direction: column; gap: 10px; }
+.sess-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 24px; padding: 12px 20px; } /* one line, full width (his ask, 2026-10-07) */
+.sess-head .sh-l { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; } .sess-head .sh-date { margin-right: 8px; font-size: 18px; }
+.sess-head .sh-r { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; }
 .sh-date { font-size: 20px; font-weight: 700; letter-spacing: -0.015em; }
 .sh-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .sh-meta { font-size: 13px; color: var(--ink-muted); }
@@ -1471,7 +1473,7 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .sp-ctbl select.c, .sp-ctbl input.c { border-color: color-mix(in srgb, #e0a800 70%, var(--surface)); } .sp-ctbl .was { display: block; font-size: 10.5px; color: var(--ink-muted); text-decoration: line-through; } .sp-ctbl .was:empty { display: none; }
 .sp-ctbl .dim, .sp-csum .dim { color: var(--ink-muted); } .sp-ctbl small { color: var(--ink-muted); }
 .sp-csum { margin-top: 12px; background: var(--surface-2); border-radius: 12px; padding: 12px 14px; font-size: 13px; } .sp-csum ul { margin: 6px 0 0; padding-left: 18px; } .sp-csum li { margin: 3px 0; }
-.sh-corr { margin-top: 6px; padding-left: 0; }
+.sh-corr { padding-left: 0; white-space: nowrap; }
 .rp-v.rp-off { background: #f3f4f7 !important; color: #8a8f9e !important; box-shadow: inset 0 0 0 1px #e1e3ea; }
 .rs-wc { display: flex; align-items: center; gap: 6px; height: 100%; padding-right: 4px; } .rs-wc .v { flex: 0 0 46px; text-align: right; font-weight: 700; font-size: 12px; }
 .rs-wc .z { flex: 0 0 30px; font-size: 10.5px; font-weight: 700; } .rs-zb { flex: 1; position: relative; height: 9px; background: #f3f4f8; border-radius: 2px; }
