@@ -130,7 +130,7 @@ function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H, opts = {}) {
   let html = `<div class="rp-tbl${rowH < 21 ? ' rp-tight' : ''}"><div class="rp-tr rp-th" style="grid-template-columns:${tpl}"><span>Players</span>${cols.map((k) => `<span>${RP_LABELS[k]}</span>`).join('')}</div>`;
   if (opts.byPlayer) { // a match's halves (his Power BI page 4): the player's name, then his halves below it
     for (const n of rpByPosition(D, rows)) {
-      html += `<div class="rp-pname" style="height:${opts.nameH || 16}px">${rpEsc(n)}</div>`;
+      html += `<div class="rp-pname" style="height:${opts.nameH || 16}px">${rpFace(D, n)}${rpEsc(n)}</div>`; // his photo, as on page 1
       html += rows.filter((r) => r.name === n).sort((a, b) => a.half - b.half).map((r) => `<div class="rp-tr rp-row" style="grid-template-columns:${tpl};height:${rowH}px"><span class="rp-nm rp-hn">${rpEsc(r.label)}</span>${cols.map((k) => cell(r, k)).join('')}</div>`).join('');
     }
   } else {
