@@ -67,38 +67,36 @@ function sePanels(s) {
   const wk = weekPanel(s);
   return wk ? `<div class="se-top two sv-bleed">${objectivesPanel(s)}${wk}</div>` : objectivesPanel(s);
 }
-/** The microcycle of one metric: done (green, a tick between days), then each day left at its usual size (dotted) with
- * its objective filled inside — a day whose objective fell to 0 stays visible —, the target (black line), and in red
- * what goes over it: done already (solid) or if the days left are as usual (hatched). */
+/** The microcycle of one metric (geometry: stMicroGeo, shared with the staff report): done (green, a tick between days),
+ * then each day left at its usual size (dotted) with its objective filled inside, the target (black line), and in red
+ * what goes over it: done already (solid) or if the days left are as usual (hatched). Every day keeps room for its MD. */
 function wkBar(X, k) {
   const t = (X.tot || {})[k];
   if (!t) return k === 'mpm' ? '<div class="wk-mb wk-note">An intensity has no week total: each day left keeps its usual m/min.</div>' : '';
-  const [target, done, udone] = t, days = X.profile.filter((d) => d[k]), fut = (X.plan || []).filter((d) => d[k]);
-  const uSum = fut.reduce((a, d) => a + (d[k][1] || 0), 0), proj = done + uSum;
-  const W = 300, scale = Math.max(target || 0, proj, done || 0) * 1.02 || 1, px = (v) => (v || 0) / scale * W;
-  const md = (x, w, txt, fill) => (w > 24 ? `<text x="${x + w / 2}" y="12.5" text-anchor="middle" font-size="8.5" font-weight="800" style="fill:${fill}">${txt}</text>` : '');
-  let x0 = 0, g = `<rect x="0" y="3" width="${W}" height="13" rx="4" style="fill:var(--surface-2)"/>`;
-  days.forEach((d) => { const w = px(d[k][0]); g += `<rect x="${x0}" y="3" width="${w}" height="13" fill="#34c759"/>${md(x0, w, d.md, '#fff')}`; x0 += w; g += `<line x1="${x0}" x2="${x0}" y1="3" y2="16" style="stroke:var(--surface)" stroke-width="1.5"/>`; });
-  if (done > target) g += `<rect x="${px(target)}" y="3" width="${px(done) - px(target)}" height="13" fill="#e5484d"/>`;
-  fut.forEach((d) => {
-    const wu = px(d[k][1]), wo = px(Math.min(d[k][0] || 0, d[k][1] || 0));
-    g += `<rect x="${x0 + 0.6}" y="3.6" width="${Math.max(0, wu - 1.2)}" height="11.8" rx="2" fill="none" stroke="${WK_BLUE}" stroke-width="1" stroke-dasharray="2.5 2"/>`;
-    if (wo > 0.5) g += `<rect x="${x0 + 1.2}" y="4.2" width="${Math.max(0, wo - 2.4)}" height="10.6" rx="1.5" fill="rgba(42,120,214,.28)"/>`;
-    g += md(x0, wu, d.md, WK_BLUE); x0 += wu;
+  const W = 300, G = stMicroGeo(X, k, W), { target, done, udone, proj, xOf } = G;
+  let rects = `<rect x="0" y="3" width="${W}" height="13" rx="4" style="fill:var(--surface-2)"/>`, over = '', labs = '';
+  G.segs.forEach((s) => {
+    if (s.gap) return;
+    const lab = (fill) => (s.w > 17 ? `<text x="${s.x + s.w / 2}" y="12.5" text-anchor="middle" font-size="8.5" font-weight="800" style="fill:${fill}">${s.md}</text>` : '');
+    if (s.done) { rects += `<rect x="${s.x}" y="3" width="${s.w}" height="13" fill="#34c759"/><line x1="${s.x + s.w}" x2="${s.x + s.w}" y1="3" y2="16" style="stroke:var(--surface)" stroke-width="1.5"/>`; labs += lab('#fff'); return; }
+    rects += `<rect x="${s.x + 0.6}" y="3.6" width="${Math.max(0, s.w - 1.2)}" height="11.8" rx="2" fill="none" stroke="${WK_BLUE}" stroke-width="1" stroke-dasharray="2.5 2"/>`;
+    if (s.o > 0 && s.v > 0) rects += `<rect x="${s.x + 1.2}" y="4.2" width="${Math.max(0, s.w * s.o / s.v - 2.4)}" height="10.6" rx="1.5" fill="rgba(42,120,214,.28)"/>`;
+    labs += lab(WK_BLUE);
   });
-  if (proj > target && done <= target) g += `<rect x="${px(target)}" y="3" width="${px(proj) - px(target)}" height="13" fill="url(#wk-hatch)"/>`;
-  if (days.length && udone) g += `<line x1="${px(udone)}" x2="${px(udone)}" y1="1" y2="18" style="stroke:var(--ink-muted)" stroke-width="1.5" stroke-dasharray="2 1.5"/>`;
-  g += `<line x1="${px(target)}" x2="${px(target)}" y1="0" y2="19" style="stroke:var(--ink)" stroke-width="2"/>`;
+  if (target && done > target) over += `<rect x="${xOf(target)}" y="3" width="${xOf(done) - xOf(target)}" height="13" fill="#e5484d"/>`;
+  else if (target && proj > target) over += `<rect x="${xOf(target)}" y="3" width="${xOf(proj) - xOf(target)}" height="13" fill="url(#wk-hatch)"/>`;
+  if (G.segs.some((s) => s.done) && udone) over += `<line x1="${xOf(udone)}" x2="${xOf(udone)}" y1="1" y2="18" style="stroke:var(--ink-muted)" stroke-width="1.5" stroke-dasharray="2 1.5"/>`;
+  if (target) over += `<line x1="${xOf(target)}" x2="${xOf(target)}" y1="0" y2="19" style="stroke:var(--ink)" stroke-width="2"/>`;
   const defs = '<defs><pattern id="wk-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="rgba(229,72,77,.08)"/><line x1="0" y1="0" x2="0" y2="5" stroke="rgba(229,72,77,.6)" stroke-width="1.6"/></pattern></defs>';
-  const vs = days.length && udone ? Math.round((done / udone - 1) * 100) : null, cls = vs == null ? '' : Math.abs(vs) < 10 ? 'ok' : Math.abs(vs) < 25 ? 'warn' : 'bad';
+  const vs = G.segs.some((s) => s.done) && udone ? Math.round((done / udone - 1) * 100) : null, cls = vs == null ? '' : Math.abs(vs) < 10 ? 'ok' : Math.abs(vs) < 25 ? 'warn' : 'bad';
   const pc = (v) => Math.round((v / target - 1) * 100);
-  const over = !target ? '' : done > target ? `<span class="wk-over">target passed: +${wkFmt(k, done - target)} (+${pc(done)} %)</span>`
+  const warn = !target ? '' : done > target ? `<span class="wk-over">target passed: +${wkFmt(k, done - target)} (+${pc(done)} %)</span>`
     : proj > target ? `<span class="wk-over">if the days left are as usual: +${wkFmt(k, proj - target)} (+${pc(proj)} %)</span>` : '';
-  return `<div class="wk-mb"><svg viewBox="0 0 ${W} 19" role="img" aria-label="microcycle: done, days left, target">${defs}${g}</svg><span>done <b>${wkFmt(k, done)}</b>${vs != null ? ` <b class="wk-vs ${cls}">${vs > 0 ? '+' : vs < 0 ? '−' : ''}${Math.abs(vs)} %</b>` : ''} · to do <b>${wkFmt(k, Math.max(0, target - done))}</b> · target <b>${wkFmt(k, target)}</b></span>${over}</div>`;
+  return `<div class="wk-mb"><svg viewBox="0 0 ${W} 19" role="img" aria-label="microcycle: done, days left, target">${defs}${rects}${over}${labs}</svg><span>done <b>${wkFmt(k, done)}</b>${vs != null ? ` <b class="wk-vs ${cls}">${vs > 0 ? '+' : vs < 0 ? '−' : ''}${Math.abs(vs)} %</b>` : ''} · to do <b>${wkFmt(k, Math.max(0, target - done))}</b> · target <b>${wkFmt(k, target)}</b></span>${warn}</div>`;
 }
-/** One metric day by day until the match: done = solid bar (colour = z); each day left = dotted bar up to its usual with
- * its objective filled inside and written in blue (red when cut below its usual), black line = usual, grey band = usual
- * range. */
+/** One metric day by day until the match: every day has a dotted slot up to its usual (grey: done, blue: left) — so a
+ * small day stays visible next to a big one —; done = solid bar inside (colour = z); day left = its objective filled
+ * inside, written in blue (red when cut below its usual); black line = usual, grey band = usual range. */
 function wkChart(X, k) {
   const days = [...X.profile.map((d) => ({ ...d, done: 1 })), ...(X.plan || [])], W = 300, H = 150, L = 6, R = 6, T = 18, B = 30;
   const n = days.length + 1, step = (W - L - R) / n, ih = H - T - B, bw = Math.min(34, step * 0.5);
@@ -110,11 +108,15 @@ function wkChart(X, k) {
     const p = d[k], x = L + step * (i + 0.5), bx = x - bw / 2;
     let t = '';
     if (p) {
+      const u = p[1] || 0;
       if (p[2] != null && p[3] != null) g += `<rect x="${bx - 5}" y="${y(p[3])}" width="${bw + 10}" height="${Math.max(2, y(p[2]) - y(p[3]))}" rx="4" style="fill:var(--surface-2)"/>`;
-      if (d.done && p[0] != null) { const lv = zLevel(p[4]); g += `<rect x="${bx}" y="${y(p[0])}" width="${bw}" height="${Math.max(1, base - y(p[0]))}" rx="4" fill="${lv ? Z_COL[lv] : '#aeaeb2'}"/>`; t = lab(x, y(p[0]), p[0], 'var(--ink)'); }
-      else if (!d.done && (p[0] != null || p[1] != null)) {
-        const u = p[1] || 0, o = Math.min(p[0] || 0, u || p[0] || 0);
-        if (u) g += `<rect x="${bx + 0.7}" y="${y(u)}" width="${bw - 1.4}" height="${Math.max(1, base - y(u))}" rx="4" fill="none" stroke="${WK_BLUE}" stroke-width="1.2" stroke-dasharray="3 2.5"/>`;
+      if (u > 0) g += `<rect x="${bx + 0.7}" y="${y(u)}" width="${bw - 1.4}" height="${Math.max(1, base - y(u))}" rx="4" fill="none" style="stroke:${d.done ? 'var(--ink-muted)' : WK_BLUE}" stroke-width="1.2" stroke-dasharray="3 2.5"/>`;
+      if (d.done && p[0] != null) {
+        const lv = zLevel(p[4]), yy = Math.min(y(p[0]), base - 2.5);
+        g += `<rect x="${bx + 2}" y="${yy}" width="${bw - 4}" height="${base - yy}" rx="3" fill="${lv ? Z_COL[lv] : '#aeaeb2'}"/>`;
+        t = lab(x, Math.min(yy, y(u)), p[0], 'var(--ink)');
+      } else if (!d.done && (p[0] != null || u)) {
+        const o = Math.min(p[0] || 0, u || p[0] || 0);
         if (o > 0) g += `<rect x="${bx + 2}" y="${y(o)}" width="${bw - 4}" height="${Math.max(1, base - y(o))}" rx="3" fill="rgba(42,120,214,.28)"/>`;
         t = lab(x, Math.min(y(u), y(o)), p[0] || 0, u && (p[0] || 0) < u * 0.98 ? '#c4373c' : WK_BLUE);
       }
@@ -133,7 +135,7 @@ function weekPanel(s) {
   const nx = X.next, all = [...X.profile, ...(X.plan || [])], mets = WK_M.filter(([k]) => all.some((d) => d[k]));
   return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">The week · objectives until the match</h2>${nx ? `<span class="panel-note">→ ${escapeHtml([nx.competition, nx.opponent].filter(Boolean).join(' · '))} · ${fmtDay(nx.date, { weekday: 'short', day: 'numeric', month: 'short' })}</span>` : ''}</div>
     <div class="wk-grid">${mets.map(([k, l, u]) => `<div class="wk-cell"><div class="wk-t">${l}<span>${u}</span></div>${wkBar(X, k)}${wkChart(X, k)}</div>`).join('')}</div>
-    <div class="wk-legend"><span><i class="lg-done"></i>done (colour = z vs usual)</span><span><i class="lg-left"></i>day left at its usual</span><span><i class="lg-obj"></i>its objective: the usual of MD-4 → MD-1 added up, minus what is done, shared over the days left</span><span><i class="lg-line"></i>target · usual</span><span><i class="lg-over"></i>over the target</span><span><i class="lg-proj"></i>over if the days left are as usual</span><span><b class="wk-red">red number</b> = objective cut below its usual</span></div></section>`;
+    <div class="wk-legend"><span><i class="lg-done"></i>done (colour = z vs usual)</span><span><i class="lg-left"></i>dotted = the day's usual (grey: done · blue: day left)</span><span><i class="lg-obj"></i>its objective: the usual of MD-4 → MD-1 added up, minus what is done, shared over the days left</span><span><i class="lg-line"></i>target · usual</span><span><i class="lg-over"></i>over the target</span><span><i class="lg-proj"></i>over if the days left are as usual</span><span><b class="wk-red">red number</b> = objective cut below its usual</span></div></section>`;
 }
 
 // ------------------------------------------------------------------ Sessions

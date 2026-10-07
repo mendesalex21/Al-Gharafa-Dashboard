@@ -78,60 +78,101 @@ function rsAcPanel(D, C, key, title) {
 }
 
 // ---------------------------------------------------------------- page 6: team, microcycle so far — dot = this week, grey bar = usual range of that MD
-/** The whole microcycle of one metric, above its chart: done (green, a tick between days), still to do (dashed blue, a
- * tick and the MD of each day), the team's usual by today (black tick). */
+/** The microcycle bar's geometry, shared by the Sessions page (training.js wkBar) and this report: the days done (their
+ * value), then the days left (their usual), then the gap to the target. Each day keeps at least `min` px so its MD stays
+ * readable however small next to the others (his request, 2026-10-07: "je ne vois pas le MD-2 quand le MD-3 prend trop
+ * de place"); xOf(cumulative value) puts the target and what goes over it through the same widths. */
+function stMicroGeo(X, k, W, min = 26) {
+  const [target = 0, done = 0, udone = 0] = (X.tot || {})[k] || [];
+  const segs = [...X.profile.filter((d) => d[k]).map((d) => ({ md: d.md, v: Math.max(0, d[k][0] || 0), done: true })),
+    ...(X.plan || []).filter((d) => d[k]).map((d) => ({ md: d.md, v: Math.max(0, d[k][1] || 0), o: Math.max(0, Math.min(d[k][0] || 0, d[k][1] || 0)) }))];
+  const sum = segs.reduce((a, s) => a + s.v, 0), proj = sum, total = Math.max(target, sum, done) * 1.02 || 1;
+  if (total > sum) segs.push({ gap: true, v: total - sum });
+  const nDays = segs.filter((s) => !s.gap).length, m = Math.min(min, (W * 0.8) / Math.max(1, nDays));
+  let free = W, freeV = total;
+  for (let i = 0; i <= nDays; i++) {
+    const kw = freeV > 0 ? free / freeV : 0;
+    let changed = false;
+    segs.forEach((s) => { if (!s.gap && !s.fixed && s.v * kw < m) { s.fixed = true; free -= m; freeV -= s.v; changed = true; } });
+    if (!changed) break;
+  }
+  const kw = freeV > 0 ? Math.max(0, free) / freeV : 0;
+  let x = 0, c = 0;
+  segs.forEach((s) => { s.w = s.fixed ? m : s.v * kw; s.x = x; s.c = c; x += s.w; c += s.v; });
+  const xOf = (v) => { for (const s of segs) if (v <= s.c + s.v) return s.x + (s.v > 0 ? (v - s.c) / s.v : 0) * s.w; return x; };
+  return { segs, target, done, udone, proj, xOf };
+}
+const ST_BLUE = '#2a78d6';
+const RS_WEEK = [['td', 'TOTAL DISTANCE', 'm'], ['d15', 'DISTANCE > 15 km/h', 'm'], ['hit', 'DISTANCE > 20 km/h', 'm'], ['spr', 'DISTANCE > 25 km/h', 'm'],
+  ['spr_n', 'SPRINTS', ''], ['acc_dec', 'HIGH ACC + DEC', ''], ['srpe', 'SESSION × RPE', 'AU'], ['mpm', 'INTENSITY', 'm/min'], ['minutes', 'DURATION', 'min']];
+/** The whole microcycle of one metric, above its chart — the Sessions page's bar: done (green), each day left at its usual
+ * (dotted) with its objective inside, the target (black), over it in red (done) or hatched (if the days left are as usual). */
 function rsMicroBar(C, k) {
   const t = (C.X.tot || {})[k];
-  if (!t) return '';
-  const [target, done, udone, left] = t, days = C.X.profile.filter((d) => d[k]), fut = (C.X.plan || []).filter((d) => d[k]);
-  const W = 250, H = 16, scale = Math.max(target || 0, (done || 0) + (left || 0)) || 1, px = (v) => (v || 0) / scale * W;
-  const md = (x, w, txt, col) => (w > 28 ? `<text x="${x + w / 2}" y="${H - 4.5}" text-anchor="middle" font-size="8.5" font-weight="800" fill="${col}">${rpEsc(txt)}</text>` : '');
-  let x0 = 0, g = `<rect x="0" y="1" width="${W}" height="${H - 2}" rx="5" fill="#f4f5f8"/>`;
-  days.forEach((d) => { const w = px(d[k][0]); g += `<rect x="${x0}" y="1" width="${w}" height="${H - 2}" fill="#34c759"/>${md(x0, w, d.md, '#fff')}`; x0 += w; g += `<line x1="${x0}" x2="${x0}" y1="1" y2="${H - 1}" stroke="#fff" stroke-width="1.5"/>`; });
-  fut.forEach((d) => { const w = px(d[k][0]); g += `<rect x="${x0 + 0.75}" y="1.75" width="${Math.max(0, w - 1.5)}" height="${H - 3.5}" rx="2" fill="rgba(42,120,214,.1)" stroke="#2a78d6" stroke-width="1.2" stroke-dasharray="3 2"/>${md(x0, w, d.md, '#1d5fae')}`; x0 += w; });
-  if (days.length) g += `<line x1="${px(udone)}" x2="${px(udone)}" y1="0" y2="${H}" stroke="#111" stroke-width="2.5"/>`;
-  const vs = days.length && udone ? Math.round((done / udone - 1) * 100) : null, col = vs == null ? '' : Math.abs(vs) < 10 ? '#1f7a37' : Math.abs(vs) < 25 ? '#c27c0e' : '#d64545';
-  return `<div class="rs-mbar"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${g}</svg><span>done <b>${stK(done)}</b>${vs != null ? ` <b style="color:${col}">${vs > 0 ? '+' : vs < 0 ? '−' : ''}${Math.abs(vs)} %</b> vs usual` : ''} · to do <b>${stK(left)}</b> (${fut.length} day${fut.length === 1 ? '' : 's'}) · target <b>${stK(target)}</b></span></div>`;
+  if (!t) return k === 'mpm' ? '<div class="rs-mbar rs-mnote">An intensity has no week total: each day left keeps its usual m/min.</div>' : '';
+  const W = 360, H = 16, G = stMicroGeo(C.X, k, W), { target, done, udone, proj, xOf } = G, anyDone = G.segs.some((s) => s.done);
+  let rects = `<rect x="0" y="1" width="${W}" height="${H - 2}" rx="5" fill="#f4f5f8"/>`, over = '', labs = '';
+  G.segs.forEach((s) => {
+    if (s.gap) return;
+    const lab = (col) => (s.w > 17 ? `<text x="${s.x + s.w / 2}" y="${H - 4.5}" text-anchor="middle" font-size="8.5" font-weight="800" fill="${col}">${rpEsc(s.md)}</text>` : '');
+    if (s.done) { rects += `<rect x="${s.x}" y="1" width="${s.w}" height="${H - 2}" fill="#34c759"/><line x1="${s.x + s.w}" x2="${s.x + s.w}" y1="1" y2="${H - 1}" stroke="#fff" stroke-width="1.5"/>`; labs += lab('#fff'); return; }
+    rects += `<rect x="${s.x + 0.75}" y="1.75" width="${Math.max(0, s.w - 1.5)}" height="${H - 3.5}" rx="2" fill="none" stroke="${ST_BLUE}" stroke-width="1.2" stroke-dasharray="3 2"/>`;
+    if (s.o > 0 && s.v > 0) rects += `<rect x="${s.x + 1.5}" y="2.5" width="${Math.max(0, s.w * s.o / s.v - 3)}" height="${H - 5}" rx="1.5" fill="rgba(42,120,214,.28)"/>`;
+    labs += lab('#1d5fae');
+  });
+  if (target && done > target) over += `<rect x="${xOf(target)}" y="1" width="${xOf(done) - xOf(target)}" height="${H - 2}" fill="#e5484d"/>`;
+  else if (target && proj > target) over += `<rect x="${xOf(target)}" y="1" width="${xOf(proj) - xOf(target)}" height="${H - 2}" fill="url(#rs-hatch)"/>`;
+  if (anyDone && udone) over += `<line x1="${xOf(udone)}" x2="${xOf(udone)}" y1="0" y2="${H}" stroke="#8a8f9e" stroke-width="1.6" stroke-dasharray="2 1.5"/>`;
+  if (target) over += `<line x1="${xOf(target)}" x2="${xOf(target)}" y1="0" y2="${H}" stroke="#111" stroke-width="2.5"/>`;
+  const defs = '<defs><pattern id="rs-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="rgba(229,72,77,.08)"/><line x1="0" y1="0" x2="0" y2="5" stroke="rgba(229,72,77,.65)" stroke-width="1.6"/></pattern></defs>';
+  const vs = anyDone && udone ? Math.round((done / udone - 1) * 100) : null, col = vs == null ? '' : Math.abs(vs) < 10 ? '#1f7a37' : Math.abs(vs) < 25 ? '#c27c0e' : '#d64545';
+  const pc = (v) => Math.round((v / target - 1) * 100);
+  const warn = !target ? '' : done > target ? ` · <b class="rs-over">target passed: +${stK(done - target)} (+${pc(done)} %)</b>`
+    : proj > target ? ` · <b class="rs-over">if the days left are as usual: +${stK(proj - target)} (+${pc(proj)} %)</b>` : '';
+  return `<div class="rs-mbar"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${defs}${rects}${over}${labs}</svg><span>done <b>${stK(done)}</b>${vs != null ? ` <b style="color:${col}">${vs > 0 ? '+' : vs < 0 ? '−' : ''}${Math.abs(vs)} %</b> vs usual` : ''} · to do <b>${stK(Math.max(0, target - done))}</b> · target <b>${stK(target)}</b>${warn}</span></div>`;
 }
-/** One metric day by day: done = solid bar (colour = z vs usual), each day left = dashed bar up to its objective, black
- * line = the team's usual for that MD, grey band = usual range (p25–p75), then the match. */
+/** One metric day by day — the Sessions page's chart: every day has a dotted slot up to its usual (grey: done, blue:
+ * left); done = solid bar inside (colour = z vs usual), day left = its objective filled inside (red number when cut below
+ * its usual); black line = usual, grey band = usual range (p25–p75), then the match. */
 function rsProfile(C, k, title, unit) {
-  const days = [...C.X.profile.map((d) => ({ ...d, done: 1 })), ...(C.X.plan || [])], W = 600, H = 250, L = 44, R = 8, T = 22, B = 46;
-  const n = days.length + 1, iw = W - L - R, ih = H - T - B, step = iw / n, bw = Math.min(48, step * 0.48);
+  const days = [...C.X.profile.map((d) => ({ ...d, done: 1 })), ...(C.X.plan || [])], W = 380, H = 148, L = 34, R = 6, T = 16, B = 32;
+  const n = days.length + 1, iw = W - L - R, ih = H - T - B, step = iw / n, bw = Math.min(36, step * 0.5);
   const raw = Math.max(1, ...days.flatMap((d) => (d[k] ? [d[k][0] || 0, d[k][1] || 0, d[k][3] || 0] : [0]))) * 1.14;
   const e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e, top = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e;
   const y = (v) => T + ih * (1 - Math.min(v, top) / top), base = y(0);
   let g = '';
-  [0, top / 2, top].forEach((t) => { g += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="#eceef3"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end" font-size="10" fill="#9aa0ad">${stK(t)}</text>`; });
+  [0, top / 2, top].forEach((t) => { g += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="#eceef3"/><text x="${L - 5}" y="${y(t) + 3.5}" text-anchor="end" font-size="9" fill="#9aa0ad">${stK(t)}</text>`; });
   days.forEach((d, i) => {
     const x = L + step * (i + 0.5), bx = x - bw / 2, p = d[k], lab = [];
     if (p) {
-      if (p[2] != null && p[3] != null) g += `<rect x="${bx - 8}" y="${y(p[3])}" width="${bw + 16}" height="${Math.max(3, y(p[2]) - y(p[3]))}" rx="6" fill="#eef0f4"/>`;
+      const u = p[1] || 0, txt = (yy, v, col) => `<text x="${x}" y="${Math.max(11, yy - 5)}" text-anchor="middle" font-size="10.5" font-weight="800" fill="${col}" stroke="#fff" stroke-width="3" paint-order="stroke">${stK(v)}</text>`;
+      if (p[2] != null && p[3] != null) g += `<rect x="${bx - 6}" y="${y(p[3])}" width="${bw + 12}" height="${Math.max(3, y(p[2]) - y(p[3]))}" rx="5" fill="#eef0f4"/>`;
+      if (u > 0) g += `<rect x="${bx + 0.75}" y="${y(u)}" width="${bw - 1.5}" height="${Math.max(1, base - y(u))}" rx="4" fill="none" stroke="${d.done ? '#8a8f9e' : ST_BLUE}" stroke-width="1.3" stroke-dasharray="3.5 2.5"/>`;
       if (d.done && p[0] != null) {
-        const yy = y(p[0]), col = stZCol(p[4]);
-        g += `<rect x="${bx}" y="${yy}" width="${bw}" height="${Math.max(1.5, base - yy)}" rx="5" fill="${col}"/>`;
-        lab.push(`<text x="${x}" y="${Math.max(12, yy - 7)}" text-anchor="middle" font-size="12" font-weight="800" fill="#111" stroke="#fff" stroke-width="3" paint-order="stroke">${stK(p[0])}</text>`);
-        if (p[4] != null && stLvl(p[4]) !== 'on') lab.push(`<text x="${x + bw / 2 + 5}" y="${yy + 12}" font-size="10" font-weight="800" fill="${col}">${stSigned(p[4])}</text>`);
-      } else if (p[0] != null) {
-        const yo = y(p[0]);
-        g += `<rect x="${bx + 1}" y="${yo}" width="${bw - 2}" height="${Math.max(1, base - yo)}" rx="5" fill="rgba(42,120,214,.08)" stroke="#2a78d6" stroke-width="1.5" stroke-dasharray="4 3"/>`;
-        lab.push(`<text x="${x}" y="${Math.max(12, yo - 7)}" text-anchor="middle" font-size="12" font-weight="800" fill="#1d5fae" stroke="#fff" stroke-width="3" paint-order="stroke">${stK(p[0])}</text>`);
+        const yy = Math.min(y(p[0]), base - 2.5), col = stZCol(p[4]);
+        g += `<rect x="${bx + 2.5}" y="${yy}" width="${bw - 5}" height="${base - yy}" rx="4" fill="${col}"/>`;
+        lab.push(txt(Math.min(yy, y(u)), p[0], '#111'));
+        if (p[4] != null && stLvl(p[4]) !== 'on') lab.push(`<text x="${x + bw / 2 + 4}" y="${yy + 11}" font-size="9" font-weight="800" fill="${col}">${stSigned(p[4])}</text>`);
+      } else if (!d.done && (p[0] != null || u)) {
+        const o = Math.min(p[0] || 0, u || p[0] || 0);
+        if (o > 0) g += `<rect x="${bx + 2.5}" y="${y(o)}" width="${bw - 5}" height="${Math.max(1, base - y(o))}" rx="4" fill="rgba(42,120,214,.28)"/>`;
+        lab.push(txt(Math.min(y(u), y(o)), p[0] || 0, u && (p[0] || 0) < u * 0.98 ? '#c4373c' : '#1d5fae'));
       }
-      if (p[1] != null) g += `<line x1="${bx - 8}" x2="${bx + bw + 8}" y1="${y(p[1])}" y2="${y(p[1])}" stroke="#111" stroke-width="2.5" stroke-linecap="round"/>`;
+      if (p[1] != null) g += `<line x1="${bx - 6}" x2="${bx + bw + 6}" y1="${y(p[1])}" y2="${y(p[1])}" stroke="#111" stroke-width="2.2" stroke-linecap="round"/>`;
     }
-    g += lab.join('') + `<text x="${x}" y="${H - 20}" text-anchor="middle" font-size="11.5" font-weight="800" fill="${d.done ? '#16269e' : '#7d86b8'}">${rpEsc(d.md)}</text><text x="${x}" y="${H - 6}" text-anchor="middle" font-size="10" fill="#8a8f9e">${stDay(d.date, { weekday: 'short', day: 'numeric' })}</text>`;
+    g += lab.join('') + `<text x="${x}" y="${H - 17}" text-anchor="middle" font-size="10.5" font-weight="800" fill="${d.done ? '#16269e' : ST_BLUE}">${rpEsc(d.md)}</text><text x="${x}" y="${H - 5}" text-anchor="middle" font-size="9" fill="#8a8f9e">${stDay(d.date, { weekday: 'short', day: 'numeric' })}</text>`;
   });
   const xm = L + step * (n - 0.5);
-  g += `<rect x="${xm - bw / 2}" y="${T}" width="${bw}" height="${ih}" rx="8" fill="none" stroke="#c9ccd6" stroke-dasharray="4 4"/><text x="${xm}" y="${T + ih / 2}" text-anchor="middle" font-size="11" font-weight="700" fill="#8a8f9e">match</text>`
-    + `<text x="${xm}" y="${H - 20}" text-anchor="middle" font-size="11.5" font-weight="800" fill="#16269e">MD</text>${C.X.next ? `<text x="${xm}" y="${H - 6}" text-anchor="middle" font-size="10" fill="#8a8f9e">${stDay(C.X.next.date, { weekday: 'short', day: 'numeric' })}</text>` : ''}`;
-  return `<div class="rs-prof"><div class="rs-proft">${title}<span>${unit}</span></div>${rsMicroBar(C, k)}<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">${g}</svg></div>`;
+  g += `<rect x="${xm - bw / 2}" y="${T}" width="${bw}" height="${ih}" rx="7" fill="none" stroke="#c9ccd6" stroke-dasharray="4 4"/><text x="${xm}" y="${T + ih / 2}" text-anchor="middle" font-size="10" font-weight="700" fill="#8a8f9e">match</text>`
+    + `<text x="${xm}" y="${H - 17}" text-anchor="middle" font-size="10.5" font-weight="800" fill="#16269e">MD</text>${C.X.next ? `<text x="${xm}" y="${H - 5}" text-anchor="middle" font-size="9" fill="#8a8f9e">${stDay(C.X.next.date, { weekday: 'short', day: 'numeric' })}</text>` : ''}`;
+  return `<div class="rs-prof"><div class="rs-proft">${title}<span>${unit}</span></div>${rsMicroBar(C, k)}<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${g}</svg></div>`;
 }
 function rsMicro(C) {
-  const ac = C.X.team_ac || {};
+  const ac = C.X.team_ac || {}, all = [...C.X.profile, ...(C.X.plan || [])], mets = RS_WEEK.filter(([k]) => all.some((d) => d[k]));
   const body = C.X.profile.length || (C.X.plan || []).length
-    ? `<div class="rs-profs rs-obj">${rsProfile(C, 'td', 'TOTAL DISTANCE', 'm')}${rsProfile(C, 'hit', 'DISTANCE > 20 km/h', 'm')}${rsProfile(C, 'acc_dec', 'HIGH ACC + DEC', '')}${rsProfile(C, 'srpe', 'SESSION × RPE', 'AU')}</div>`
+    ? `<div class="rs-profs rs-obj">${mets.map(([k, t, u]) => rsProfile(C, k, t, u)).join('')}</div>`
     : '<div class="rs-profs"><span class="rp-empty">No usual reference for these days yet</span></div>';
-  const lg = '<span class="rs-olg"><i style="background:#34c759"></i>done</span><span class="rs-olg"><i class="ob"></i>objective</span><span class="rs-olg"><i style="height:3px;background:#111"></i>usual</span><span class="rs-olg"><i style="background:#eef0f4"></i>usual range</span><span class="rs-olg"><b>|</b> usual by today</span>';
+  const lg = '<span class="rs-olg"><i style="background:#34c759"></i>done</span><span class="rs-olg"><i class="dl"></i>usual (dotted)</span><span class="rs-olg"><i class="ob"></i>objective</span><span class="rs-olg"><i style="height:3px;background:#111"></i>usual · <i style="background:#eef0f4"></i>range</span><span class="rs-olg"><i style="background:#e5484d"></i>over the target</span><span class="rs-olg"><i class="hz"></i>over if as usual</span>';
   return `${body}
     <div class="rs-acrow rs-foot"><span class="rs-legs">${lg}</span><span class="rs-acl">Team A:C 7:28 today</span>${[['td', 'Total distance'], ['hit', 'HIT > 20'], ['acc_dec', 'Acc + Dec'], ['srpe', 'sRPE']].map(([k, l]) => `<div class="rs-act"><i style="background:${stAcCol(ac[k])}"></i>${l}<b>${ac[k] != null ? ac[k].toFixed(2) : '–'}</b></div>`).join('')}</div>`;
 }
@@ -154,7 +195,7 @@ function rsCycle(D, C, s) {
         <span><span class="mz" style="background:${dbg};color:${dfg}">${r.days ?? '–'}</span></span><span class="rs-v">${x.vmax != null ? x.vmax.toFixed(1) + ' km/h' : '–'}${wrec ? rpRec({ rec: true }) : ''}</span></div>`;
     }).join('');
   }
-  return html + `</div><div class="rp-legend">${ST_LEG5}<span>Week so far: value · bar and number = z vs the same days of his previous weeks</span><span>Days = days since his last run ≥ 90 % of max speed</span>${wkRec.size ? '<span><i class="rp-rec">★</i> new max speed record this week</span>' : ''}</div>`;
+  return html + `</div><div class="rp-legend">${ST_LEG5}<span>Week so far: value · bar and number = z vs the same days of his previous weeks</span><span>Days = days since his last run ≥ 90 % of max speed</span>${wkRec.size ? '<span><i class="rp-rec">★</i> his fastest of the last 12 months this week</span>' : ''}</div>`;
 }
 /** A week-so-far cell: his value, a bar from the middle (right = above his usual, left = below; full width = 3 SD) and z. */
 function rsWeekCell(v, z) {

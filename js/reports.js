@@ -24,7 +24,7 @@ const RP_JS = ['https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2ca
 const rpLerp = (a, b, t) => a.map((x, i) => Math.round(x + (b[i] - x) * t));
 // Days since the last exposure ≥ 90 % of max speed (thresholds from the handoff — to confirm with the staff)
 const RP_GREEN = ['#d5f2d5', '#1c6b1c']; // % max speed ≥ 90 % (the "Days" green)
-const rpRec = (r) => (r.rec ? '<i class="rp-rec" title="New max speed record">★</i>' : ''); // a new max-speed record
+const rpRec = (r) => (r.rec ? '<i class="rp-rec" title="His fastest of the last 12 months">★</i>' : ''); // a new max-speed record
 const rpDaysColor = (d) => d == null ? ['#f0f1f5', '#6a6f80'] : d <= 5 ? ['#d5f2d5', '#1c6b1c'] : d <= 10 ? ['#fbd9c6', '#8a3b12'] : ['#f6c4c4', '#9b1c1c'];
 // light red: many sprints is not "bad", just highlighted (staff request); the number stays black
 const rpSprintColor = (t) => [`rgb(${rpLerp([254, 242, 242], [244, 172, 172], t)})`, '#111'];
@@ -133,7 +133,7 @@ function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H) {
     html += g.map((r) => `<div class="rp-tr rp-row" style="grid-template-columns:${tpl};height:${rowH}px"><span class="rp-nm">${rpFace(D, r.name)}${rpEsc(r.name)}</span>${cols.map((k) => cell(r, k)).join('')}</div>`).join('');
   }
   return html + `</div>
-  <div class="rp-legend"><span><b style="background:#6fb0ee"></b>player value</span><span><b style="background:#e6e8ee"></b>team max</span>${cols.includes('pmax') ? `<span><b style="background:${RP_GREEN[0]}"></b>≥ 90 % of his max speed</span>${rows.some((r) => r.rec) ? '<span><i class="rp-rec">★</i> new max speed record</span>' : ''}` : ''}</div>`;
+  <div class="rp-legend"><span><b style="background:#6fb0ee"></b>player value</span><span><b style="background:#e6e8ee"></b>team max</span>${cols.includes('pmax') ? `<span><b style="background:${RP_GREEN[0]}"></b>≥ 90 % of his max speed</span>${rows.some((r) => r.rec) ? '<span><i class="rp-rec">★</i> his fastest of the last 12 months</span>' : ''}` : ''}</div>`;
 }
 
 /** Row height for a player table grouped by position: `space` px for the rows and group bands, at most `max`. */
