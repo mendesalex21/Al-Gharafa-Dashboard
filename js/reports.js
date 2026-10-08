@@ -112,11 +112,12 @@ function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H, opts = {}) {
   const t01 = (k, v) => hi(k) > lo(k) ? Math.max(0, Math.min(1, ((v ?? 0) - lo(k)) / (hi(k) - lo(k)))) : 0;
   const tpl = '150px ' + cols.map((k) => RP_WIDTHS[k] || '44px').join(' ');
   const rowH = opts.rowH || rpRowH(D, rows, budget - 32, rows.length > 17 ? 23 : 25);
+  const midH = Math.max(10, Math.min(18, rowH - 6)); // the max-speed bar follows the row: a gap between players, as the other bars
   const cell = (r, k) => {
     const v = fixed[k] ?? r[k];
     if (RP_BARS.includes(k)) {
       const m = scaleMax(k), trk = rpPct(teamMax(k), m);
-      if (k === 'vmax') return `<div class="rp-c"><div class="rp-bar rp-mid"><i class="rp-trk" style="width:${trk}"></i><i style="width:${rpPct(v, m)};background:${RP_COLORS[k]}"></i><em>${rpFmt(k, v)}</em></div></div>`;
+      if (k === 'vmax') return `<div class="rp-c"><div class="rp-bar rp-mid" style="height:${midH}px"><i class="rp-trk" style="width:${trk}"></i><i style="width:${rpPct(v, m)};background:${RP_COLORS[k]}"></i><em>${rpFmt(k, v)}</em></div></div>`;
       return `<div class="rp-c"><span class="rp-v">${rpFmt(k, v)}</span><div class="rp-bar"><i class="rp-trk" style="width:${trk}"></i><i style="width:${rpPct(v, m)};background:${RP_COLORS[k]}"></i></div></div>`;
     }
     if (k === 'mpm') return !r.pro && all.some((x) => x.pro) ? `<div class="rp-c rp-chip"><span class="rp-v rp-off" title="individual / rehab session: not in the team average">${rpFmt(k, v)}</span></div>`
