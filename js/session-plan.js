@@ -723,7 +723,9 @@ function splBuild() {
   const drills = {}, mapping = [], skipped = new Set();
   seen.forEach((t) => {
     // his choice for this session or a title he named before, then (a match) the match's own titles, then what was learned
-    const name = splName(map[t] || (SPL.saved.titles || {})[t] || (match ? splGameTitle(t) || (/^MSH\s+(FTD|FND)\b/i.test(t) ? '__skip' : '') : '') || titles[t] || '');
+    // "Session-[Training]" on a training day is the session's total, never a drill (a dropped drills file can carry it)
+    const name = !match && SP_SESSION_TOTAL.test(t) ? '__skip'
+      : splName(map[t] || (SPL.saved.titles || {})[t] || (match ? splGameTitle(t) || (/^MSH\s+(FTD|FND)\b/i.test(t) ? '__skip' : '') : '') || titles[t] || '');
     if (name === '__skip') { // a StatSports title not used (e.g. old 10-minute cuts)
       skipped.add(t);
       mapping.push({ title: t, d: null, skip: true, n: drillRows.filter((r) => titleOfRow(r) === t).length, times: [], min: 0, med: 0 });

@@ -89,9 +89,10 @@ function spAddRows(a, b) {
   }
   return out;
 }
+const SP_SESSION_TOTAL = /^session\s*-?\s*\[training\]$/i; // StatSports' own name for the session cut without the live recording
 /** sessions = getFullSessionsByDateRange's list for one day; ampm picks the session (started before 15:00 = AM). Full
- * session = the drill "Entire Session - Live" (the export's), else "Entire Session"; drills = the others.
- * → { full, drills } CSV texts, date (yyyy-mm-dd), start time, players, live (false = no "Live" whole session).
+ * session = the drill "Entire Session - Live" (the export's), else "Session-[Training]", else "Entire Session"; drills =
+ * the others. → { full, drills } CSV texts, date (yyyy-mm-dd), start time, players, live (false = only the whole recording).
  * opts.match (a match day): every recording of the day is read — the players not in the squad often train apart,
  * earlier, in their own recording; each row says which one it comes from ("Session Start"). */
 function spFromStatsports(sessions, ampm, opts = {}) {
@@ -118,9 +119,13 @@ function spFromStatsports(sessions, ampm, opts = {}) {
   let live = true;
   for (const ses of use) for (const p of ses.sessionPlayers) {
     const dl = p.drills || [];
-    const ent = dl.find((x) => /^entire session - live$/i.test(x.drillName)) || dl.find((x) => /^entire session$/i.test(x.drillName));
-    if (ent) { full.push(line(p, ent, ses)); if (!/live/i.test(ent.drillName)) live = false; }
-    dl.filter((x) => !/^entire session/i.test(x.drillName)).forEach((x) => drills.push(line(p, x, ses)));
+    // the session's total: "Entire Session - Live" when he recorded it live, else "Session-[Training]" (the session cut
+    // afterwards: 47′, not the 87′ of the whole recording), else the whole recording. On a match day "Session-[Training]"
+    // is the work of the players who trained apart: a drill there.
+    const total = !opts.match && dl.find((x) => SP_SESSION_TOTAL.test(x.drillName));
+    const ent = dl.find((x) => /^entire session - live$/i.test(x.drillName)) || total || dl.find((x) => /^entire session$/i.test(x.drillName));
+    if (ent) { full.push(line(p, ent, ses)); if (/^entire session$/i.test(ent.drillName)) live = false; }
+    dl.filter((x) => !/^entire session/i.test(x.drillName) && (opts.match || !SP_SESSION_TOTAL.test(x.drillName))).forEach((x) => drills.push(line(p, x, ses)));
   }
   const others = list.filter((x) => !use.includes(x)).map((x) => `${String((x.sessionDetails || {}).startTime || '').slice(11, 16)} (${x.sessionPlayers.length} player${x.sessionPlayers.length > 1 ? 's' : ''})`);
   const n = new Set(use.flatMap((x) => x.sessionPlayers.map((p) => p.playerDetails.firstName || p.playerDetails.displayName))).size;
