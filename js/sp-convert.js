@@ -82,7 +82,7 @@ function spAddRows(a, b) {
   if (!a) return { ...b, 'Drill Title': 'Match (halves added up)' };
   const isNum = (v) => v !== '' && v != null && Number.isFinite(parseFloat(v)), ta = spNum(a['Total Time']), tb = spNum(b['Total Time']), out = { ...a };
   for (const k of Object.keys(b)) {
-    if (k === 'Player First Name' || k === 'Session Date' || k === 'Drill Title' || (!isNum(a[k]) && !isNum(b[k]))) continue;
+    if (k === 'Player First Name' || k === 'Session Date' || k === 'Session Start' || k === 'Drill Title' || (!isNum(a[k]) && !isNum(b[k]))) continue;
     const x = spNum(a[k]), y = spNum(b[k]);
     out[k] = SP_MAX_COLS.has(k) ? Math.max(x, y) : SP_MIN_COLS.has(k) ? Math.min(x || y, y || x)
       : SP_AVG_COLS.has(k) ? (ta + tb > 0 ? (x * ta + y * tb) / (ta + tb) : 0) : x + y;
@@ -91,35 +91,76 @@ function spAddRows(a, b) {
 }
 /** sessions = getFullSessionsByDateRange's list for one day; ampm picks the session (started before 15:00 = AM). Full
  * session = the drill "Entire Session - Live" (the export's), else "Entire Session"; drills = the others.
- * → { full, drills } CSV texts, date (yyyy-mm-dd), start time, players, live (false = no "Live" whole session). */
-function spFromStatsports(sessions, ampm) {
+ * → { full, drills } CSV texts, date (yyyy-mm-dd), start time, players, live (false = no "Live" whole session).
+ * opts.match (a match day): every recording of the day is read — the players not in the squad often train apart,
+ * earlier, in their own recording; each row says which one it comes from ("Session Start"). */
+function spFromStatsports(sessions, ampm, opts = {}) {
   const list = (Array.isArray(sessions) ? sessions : [sessions]).filter((s) => s && (s.sessionPlayers || []).length);
   if (!list.length) return null;
   const hour = (s) => Number(String((s.sessionDetails || {}).startTime || '').slice(11, 13)) || 0;
   // the team session of that half-day: the one with most players (a 1-player extra session can start later the same day)
   const half = list.filter((x) => (hour(x) < 15 ? 'AM' : 'PM') === (ampm || 'PM'));
-  const s = (half.length ? half : list).slice().sort((x, y) => y.sessionPlayers.length - x.sessionPlayers.length)[0];
+  const isGame = (x) => x.sessionPlayers.some((p) => (p.drills || []).some((dr) => /match|1st\s*h|2nd\s*h/i.test(dr.drillName)));
+  const s = (opts.match && list.find(isGame)) || (half.length ? half : list).slice().sort((x, y) => y.sessionPlayers.length - x.sessionPlayers.length)[0];
+  const use = opts.match ? list : [s], startOf = (x) => String((x.sessionDetails || {}).startTime || '').slice(11, 16);
   const d = String((s.sessionDetails || {}).sessionDate || '').slice(0, 10), date = d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '';
-  const head = ['Player First Name', 'Drill Title', 'Session Date', ...SP_API_COLS.map(([c]) => c)];
+  const head = ['Player First Name', 'Drill Title', 'Session Date', 'Session Start', ...SP_API_COLS.map(([c]) => c)];
   const cell = (v) => { const t = String(v ?? ''); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-  const line = (p, dr) => {
+  const line = (p, dr, x) => {
     const k = dr.drillKpi || {};
     // the export's "Player First Name" is StatSports' first name (SANO's is SEYDOU)
-    return [p.playerDetails.firstName || p.playerDetails.displayName, dr.drillName, date, ...SP_API_COLS.map(([, f]) => {
+    return [p.playerDetails.firstName || p.playerDetails.displayName, dr.drillName, date, startOf(x), ...SP_API_COLS.map(([, f]) => {
       const v = Number(typeof f === 'function' ? f(k) : k[f]);
       return Number.isFinite(v) ? spRound(v, 2) : '';
     })].map(cell).join(',');
   };
   const full = [], drills = [];
   let live = true;
-  for (const p of s.sessionPlayers) {
+  for (const ses of use) for (const p of ses.sessionPlayers) {
     const dl = p.drills || [];
     const ent = dl.find((x) => /^entire session - live$/i.test(x.drillName)) || dl.find((x) => /^entire session$/i.test(x.drillName));
-    if (ent) { full.push(line(p, ent)); if (!/live/i.test(ent.drillName)) live = false; }
-    dl.filter((x) => !/^entire session/i.test(x.drillName)).forEach((x) => drills.push(line(p, x)));
+    if (ent) { full.push(line(p, ent, ses)); if (!/live/i.test(ent.drillName)) live = false; }
+    dl.filter((x) => !/^entire session/i.test(x.drillName)).forEach((x) => drills.push(line(p, x, ses)));
   }
-  const others = list.filter((x) => x !== s).map((x) => `${String((x.sessionDetails || {}).startTime || '').slice(11, 16)} (${x.sessionPlayers.length} player${x.sessionPlayers.length > 1 ? 's' : ''})`);
-  return { full: [head.join(','), ...full].join('\n'), drills: [head.join(','), ...drills].join('\n'), date: d, start: (s.sessionDetails || {}).startTime || '', players: s.sessionPlayers.length, live, others };
+  const others = list.filter((x) => !use.includes(x)).map((x) => `${String((x.sessionDetails || {}).startTime || '').slice(11, 16)} (${x.sessionPlayers.length} player${x.sessionPlayers.length > 1 ? 's' : ''})`);
+  const n = new Set(use.flatMap((x) => x.sessionPlayers.map((p) => p.playerDetails.firstName || p.playerDetails.displayName))).size;
+  return { full: [head.join(','), ...full].join('\n'), drills: [head.join(','), ...drills].join('\n'), date: d, start: (s.sessionDetails || {}).startTime || '', players: n, live, others, recordings: use.length };
+}
+
+/** A status that keeps a player out of everything that day: his one row carries it (0 min). */
+const SP_OUT = new Set(['Injury', 'Injury_no_muscular', 'Sick', 'NT', 'Authorized', 'Unauthorized', 'Day_Off']);
+/**
+ * A match day's Data_Full rows, as in the club's Excel (his rule, 2026-10-10): for each player of the list
+ *  - a match row: "Game" with his two halves added up (his own minutes) — "Game" with 0 min when he was in the squad
+ *    without playing, "NC" with 0 min when he was not called; injured / sick / national team: that status, 0 min;
+ *  - and, when he trained that day (after the match, or apart), a second row with that work: INDIVIDUAL (Rehab for a
+ *    player in rehab), his own minutes, exercise n° 3.
+ * The RPE (one answer a day) goes on the match row when he played, else on the session row.
+ * a = { played: {GPS: row}, alone: {GPS: row}, apart: Set of GPS names whose work was in another recording than the
+ * match (or lasted 30 min and more) → "NC" by default, roster: [{gps, id, name, pos, status}], squad: {id: 'Game'|'NC'}
+ * (his choice), rpe: {GPS: n}, ctx: spBuildRows' date, sid, week, label, md, ampm }.
+ * → { full: [rows], squad: [{id, g, name, v, work}] (who did not play: in the squad or not), players: {GPS: {name, pos, type}} }.
+ */
+function spMatchDay(a) {
+  const byGps = Object.fromEntries(a.roster.map((q) => [q.gps, q])), game = {}, solo = {}, zero = [], squad = [];
+  const names = [...new Set([...a.roster.map((q) => q.gps), ...Object.keys(a.played), ...Object.keys(a.alone)])];
+  names.forEach((g) => {
+    const q = byGps[g], base = { name: q ? q.gps : g, pos: q ? q.pos : '' }, st = q ? q.status : 'ProTraining', id = q ? q.id : g;
+    if (a.played[g]) game[g] = { ...base, type: 'Game' };
+    if (a.alone[g]) solo[g] = { ...base, type: st === 'Rehab' ? 'Rehab' : 'INDIVIDUAL' };
+    if (a.played[g]) return;
+    if (!a.alone[g] && (SP_OUT.has(st) || st === 'Rehab')) { zero.push({ ...base, type: st }); return; }
+    const v = (a.squad || {})[id] || (a.apart.has(g) ? 'NC' : 'Game');
+    zero.push({ ...base, type: v });
+    squad.push({ id, g, name: q ? q.name : g, v, work: !!a.alone[g] });
+  });
+  const rows = (o) => (Object.keys(o).length ? spToCsv(Object.values(o)) : '');
+  const rpeSolo = Object.fromEntries(Object.entries(a.rpe || {}).filter(([g]) => !a.played[g]));
+  const m = spBuildRows(rows(a.played), '', { ...a.ctx, players: game, extra: zero, rpe: a.rpe });
+  const x = spBuildRows(rows(a.alone), '', { ...a.ctx, players: solo, extra: [], rpe: rpeSolo });
+  x.full.forEach((r) => { r['N°Exercice'] = 3; });
+  const full = [...m.full, ...x.full].sort((p, q) => String(p.Players).localeCompare(String(q.Players)) || p['N°Exercice'] - q['N°Exercice']);
+  return { full, squad, players: { ...game, ...solo } };
 }
 
 /** The metric columns of one StatSports row, for `time` minutes (full session: whole minutes; drill: planned minutes). */
@@ -191,4 +232,4 @@ function spBuildRows(fullCsv, drillsCsv, ctx) {
   return { full: full.map(pick(SP_FULL_COLS)), drills: drills.map(pick(SP_DRILL_COLS)), issues: [...new Set(issues)] };
 }
 
-if (typeof module !== 'undefined') module.exports = { SP_FULL_COLS, SP_DRILL_COLS, spParseCsv, spMetrics, spBuildRows, spSessionTime, spIsoDate, spName, spNum, spRound };
+if (typeof module !== 'undefined') module.exports = { SP_FULL_COLS, SP_DRILL_COLS, spParseCsv, spMetrics, spBuildRows, spSessionTime, spIsoDate, spName, spNum, spRound, spFromStatsports, spMatchDay, spAddRows, spToCsv };

@@ -18,7 +18,7 @@ const UPLOADS = ['workload', 'sessions', 'objectives', 'calendar', 'tests', 'rep
 const FROM_SCRIPT = ['home', 'wellness', 'wellness_history']; // computed by the Google script from the kiosk check-ins
 const DATA = [...FROM_SCRIPT, ...UPLOADS];
 const KEY_ONLY = ['player_photos']; // kept for the online calculation, not served here (the site reads the photos from the script)
-const SNAPS = ['full', 'drills', 'calendar', 'players', 'config', 'gps', 'pdfs']; // Update dashboard's copies (sync/cloud.py SNAPS)
+const SNAPS = ['full', 'drills', 'calendar', 'players', 'config', 'gps', 'pdfs', 'min10']; // Update dashboard's copies (sync/cloud.py SNAPS)
 const enc = new TextEncoder();
 
 export default {
