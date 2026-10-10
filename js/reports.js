@@ -30,7 +30,11 @@ const rpDaysColor = (d) => d == null ? ['#f0f1f5', '#6a6f80'] : d <= 5 ? ['#d5f2
 const rpSprintColor = (t) => [`rgb(${rpLerp([254, 242, 242], [244, 172, 172], t)})`, '#111'];
 const rpGmColor = (v) => v >= 60 ? '#e8743b' : v >= 40 ? '#d6a90a' : '#8fdc88';
 
-function rpPartLabel(s, part) { return part === 'b' ? 'Game B' : part === 't' ? (s.type === 'match' ? 'Match' : 'Training') : 'All players'; }
+function rpPartLabel(s, part) { return part === 'b' ? 'Game B' : part === 'x' ? 'Extra session' : part === 't' ? (s.type === 'match' ? 'Match' : 'Training') : 'All players'; }
+/** The reports of a session: all players / the session / the B-team game the same day — or, a match day with players
+ * who trained apart (not in the squad, did not come on, a top-up after a few minutes): the match / the extra session. */
+function rpParts(s) { return !s.parts ? ['all'] : [...(s.parts.x ? [] : ['all']), ...['t', 'b', 'x'].filter((k) => s.parts[k])]; }
+function rpPartOk(s, part) { const ok = rpParts(s); return ok.includes(part) ? part : ok[0]; }
 function rpDateLabel(iso) { const [y, m, d] = iso.split('-').map(Number); return `${d} ${RP_MONTHS[m - 1]} ${y}`; }
 function rpRangeLabel(a, b) {
   if (a === b) return rpDateLabel(a);
@@ -45,9 +49,13 @@ function rpDoc(data, i, part = 'all') {
   const s = data.sessions[i], order = data.positions.order;
   const known = (n) => order.includes(data.pos[n]);
   // part: 'all' players · 't' the team session only · 'b' the B-team game only (days when both happened)
-  const inPart = (r) => part === 'all' || (part === 'b') === (r[12] === 1);
+  part = rpPartOk(s, part);
+  // a row's report (index 12): 0 the session · 1 the B-team game · 2 a match day's extra session · 3 week load only
+  const extra = part === 'x', mark = { t: 0, b: 1, x: 2 }[part];
+  const inPart = (r) => { const m = r[12] || 0; return m !== 3 && (part === 'all' ? m < 2 : m === mark); };
   const fullSession = s.full.filter((r) => known(r[0]) && inPart(r)).map(([name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro, , rec]) =>
     ({ name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro: part === 'b' ? 1 : pro, rec: rec === 1 }));
+  const inX = new Set(extra ? fullSession.map((r) => r.name) : []);
   const pm = (s.parts && s.parts[part]) || {};
   const gameAvg = {};
   for (const k of ['td', 'd20', 'accdec', 'sprints']) {
@@ -70,12 +78,14 @@ function rpDoc(data, i, part = 'all') {
     }
   }
   return {
-    session: { id: s.id, date: s.date, dateLabel: rpDateLabel(s.date), week: s.week, md: pm.md ?? s.md, ampm: s.ampm, time: pm.time ?? s.time, exercise: s.ex, type: s.type,
-      part: s.parts && part !== 'all' ? rpPartLabel(s, part) : '' },
+    // a match day's match report keeps its usual name and look (part ''); its extra session reads as a training report
+    session: { id: s.id, date: s.date, dateLabel: rpDateLabel(s.date), week: s.week, md: pm.md ?? s.md, ampm: s.ampm, time: pm.time ?? s.time, exercise: s.ex, type: extra ? 'training' : s.type,
+      part: s.parts && part !== 'all' && !(s.parts.x && part === 't') ? rpPartLabel(s, part) : '', extra },
     positions: data.positions, players: data.pos, pids: data.pid || {}, fullSession, gameAvg,
     weekLoad: { from, to: s.date, label: rpRangeLabel(from, s.date), rows: Object.values(acc) },
-    drills: (part === 'b' ? [] : s.drills).map((d) => ({ n: d.n, name: d.name, time: d.time,
-      rows: d.rows.filter((r) => known(r[0])).map(([name, mpm, td, d15, d20, vmax, sprints, accdec, pro, time, hitn]) => ({ name, mpm, td, d15, d20, vmax, sprints, accdec, pro,
+    // the extra session's drills: the day's drills that are not the match, for its own players
+    drills: (part === 'b' ? [] : extra ? s.drills.filter((d) => !/^Game_/.test(d.name)) : s.drills).map((d) => ({ n: d.n, name: d.name, time: d.time,
+      rows: d.rows.filter((r) => known(r[0]) && (!extra || inX.has(r[0]))).map(([name, mpm, td, d15, d20, vmax, sprints, accdec, pro, time, hitn]) => ({ name, mpm, td, d15, d20, vmax, sprints, accdec, pro: extra ? 1 : pro,
         time: time ?? (mpm ? Math.round(td / mpm) : null), hitn })) })), // his minutes in the drill (older data: distance ÷ m/min), his efforts > 20 km/h
   };
 }
@@ -233,7 +243,7 @@ function rpPages(D) {
   const s = D.session, pages = [];
   const meta = [['WEEK', s.week], ['MD', s.md], ['TIME', s.time + "'"], ['N EXERCICE', s.exercise], ['AM/PM', s.ampm]];
   const title = `${s.id} · ${s.dateLabel}`;
-  const kicker = 'FULL SESSION' + (s.part ? ' · ' + s.part.toUpperCase() : '');
+  const kicker = s.extra ? 'EXTRA SESSION · MATCH DAY' : 'FULL SESSION' + (s.part ? ' · ' + s.part.toUpperCase() : '');
   pages.push(rpHeader(kicker, title, meta) + rpTable(D, D.fullSession, ['time', 'mpm', 'td', 'd15', 'd20', 'vmax', 'pmax', 'days', 'sprints', 'accdec']));
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'td', 'TOTAL DISTANCE', 'TOTAL DISTANCE', 'td') + rpChart(D, 'd20', 'DISTANCE >20kmh', 'DISTANCE >20kmh', 'd20'));
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'accdec', 'Acceleration + Deceleration', 'HI Acc+Dec', 'accdec') + rpChart(D, 'sprints', 'Number of Sprints >25kmh', 'SPRINTS', 'sprints'));
@@ -316,10 +326,10 @@ function renderReports(opts) {
     const want = RP.wanted ? list.findIndex((s) => s.date === RP.wanted) : -1;
     const shown = list.map((s, i) => i).filter((i) => !list[i].hidden);
     // a day with a B-team game alongside the team session offers three reports: all players, the session, the game
-    RP.opts = shown.flatMap((i) => list[i].parts ? [[i, 'all'], [i, 't'], [i, 'b']] : [[i, 'all']]);
+    RP.opts = shown.flatMap((i) => rpParts(list[i]).map((part) => [i, part]));
     rpGpsPlayers(); // the Excel data view's player list, if it is open
     RP.idx = want >= 0 ? want : RP.idx >= 0 && RP.idx < list.length ? RP.idx : shown[shown.length - 1] ?? -1;
-    if (!list[RP.idx] || !list[RP.idx].parts) RP.part = 'all';
+    RP.part = list[RP.idx] ? rpPartOk(list[RP.idx], RP.part) : 'all';
     // newest session first; within a day: all players, the session, the B game
     const byDay = shown.slice().reverse().flatMap((i) => RP.opts.filter((o) => o[0] === i));
     RP.sessOpts = byDay.map(([i, part]) => `<option value="${i}|${part}">${rpEsc(rpOption(list[i], part))}</option>`).join('');
@@ -339,7 +349,7 @@ function rpOption(s, part = 'all') {
 
 function rpGo(i, part = 'all') {
   if (!RP.data || i < 0 || i >= RP.data.sessions.length) return;
-  RP.idx = i; RP.part = RP.data.sessions[i].parts ? part : 'all'; RP.wanted = null;
+  RP.idx = i; RP.part = rpPartOk(RP.data.sessions[i], part); RP.wanted = null;
   rpHash();
   drawReports();
 }
@@ -354,7 +364,7 @@ function rpHash() {
 /** Staff version of this report: its pages, or why there is none (match days and B-team games: later). */
 function rpStaffState(D) {
   if (!RP.staff) return { wait: true };
-  if (RP.part === 'b' || !RP.staff.days[D.session.date]) {
+  if (RP.part === 'b' || RP.part === 'x' || !RP.staff.days[D.session.date]) {
     const s = RP.data.sessions[RP.idx];
     return { msg: s.type === 'match' || RP.part === 'b' ? 'The staff version of match reports is coming later — the Players version is ready.'
       : 'No staff version for this session (no usual reference for this day yet).' };
@@ -589,10 +599,10 @@ async function rwPrint() {
 async function rpPptx() {
   if (!RP.data || RP.busy) return;
   const D = rpDoc(RP.data, RP.idx, RP.part), btn = document.getElementById('rp-pptx'), label = btn.textContent;
-  const file = `${D.session.id}_${D.session.date}_Training_slides.pptx`;
+  const file = `${D.session.id}_${D.session.date}_${D.session.extra ? 'Extra' : 'Training'}_slides.pptx`;
   btn.disabled = true; btn.textContent = 'Preparing…';
   try {
-    if (D.session.part || !(await rpReadyPdf(file))) {
+    if ((D.session.part && !D.session.extra) || !(await rpReadyPdf(file))) {
       alert('The PowerPoint is made online with the PDF reports of the last 10 days: it is ready a few minutes after the session is published.');
     }
   } finally { btn.disabled = false; btn.textContent = label; }
@@ -678,8 +688,10 @@ async function rpPrint() {
   let host = null;
   try {
     const D = rpDoc(RP.data, RP.idx, RP.part);
-    const file = `${D.session.id}_${D.session.date}${D.session.part ? '_' + D.session.part.replace(/\s+/g, '') : ''}_${RP.version === 'staff' ? 'Staff' : 'Training'}_report.pdf`;
-    if (!D.session.part && await rpReadyPdf(file)) return; // ready on the server: no picture of each page to take
+    const ready = D.session.extra && RP.version !== 'staff'; // a match day's extra session is printed online too
+    const file = ready ? `${D.session.id}_${D.session.date}_Extra_session.pdf`
+      : `${D.session.id}_${D.session.date}${D.session.part ? '_' + D.session.part.replace(/\s+/g, '') : ''}_${RP.version === 'staff' ? 'Staff' : 'Training'}_report.pdf`;
+    if ((ready || !D.session.part) && await rpReadyPdf(file)) return; // ready on the server: no picture of each page to take
     await Promise.all(RP_JS.map(rpScript));
     btn.textContent = 'Loading photos…';
     const photos = await rpPhotos(D), dims = await rpImageSizes(photos);
