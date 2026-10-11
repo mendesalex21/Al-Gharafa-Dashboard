@@ -17,7 +17,13 @@ const MATCH_COMPS = ['QSL', 'Qatar Cup', 'Amir Cup', 'QSL Cup', 'ACL Elite', 'Fr
 const CAL_METRICS = [['td', 'TD'], ['hit', 'HIT'], ['acc_dec', 'A/D'], ['srpe', 'RPE']];
 
 // ------------------------------------------------------------------ edits (same rules as sync/build.py apply_edits)
+/** The MD of a day chosen by the staff (Session Plan or the day's sheet here): an edit "day:yyyy-mm-dd" {md}. It wins over
+ * the tag in the data and over the rule (two days after a match and two before the next: MD+2 or MD-2 is his call). */
+const DAY_MD = {};
+const DAY_MD_TAGS = ['MD+1', 'MD+2', 'MD+3', 'MD-6', 'MD-5', 'MD-4', 'MD-3', 'MD-2', 'MD-1'];
 function applyCalendarEdits(cal) {
+  Object.keys(DAY_MD).forEach((k) => { delete DAY_MD[k]; });
+  (cal.edits || []).forEach((ed) => { if (/^day:\d{4}-\d{2}-\d{2}$/.test(ed.id) && ed.data && ed.data.md) DAY_MD[ed.id.slice(4)] = ed.data.md; });
   const events = cal.events.map((e) => ({ ...e }));
   const byId = Object.fromEntries(events.map((e) => [e.id, e]));
   (cal.edits || []).forEach((ed) => {
@@ -54,7 +60,8 @@ function gharafaMatchDates(cal, events) {
   return [...set].sort();
 }
 
-function computedTag(d, prev, next) {
+function computedTag(d, prev, next, rule) { // rule = true: the rule alone, without the staff's choice for that day
+  if (!rule && DAY_MD[d]) return DAY_MD[d];
   const since = prev ? daysBetween(prev, d) : null, until = next ? daysBetween(d, next) : null;
   if (since != null && since >= 3 && (until == null || until > 7)) return null;
   if (since === 1) return 'MD+1';
@@ -230,7 +237,7 @@ function drawMonth(events, today) {
     const evs = eventsOn(events, iso);
     const match = evs.find((e) => e.kind === 'match' && e.gharafa === 'yes' && (e.played_date === iso || (!e.played_date && (e.start === (e.end || e.start) || e.confirmed_date))));
     const camp = evs.find((e) => e.kind === 'camp');
-    let kind = g ? g.kind : null, tag = g ? (g.kind === 'match' ? 'MD' : g.md) : null, planned = false;
+    let kind = g ? g.kind : null, tag = g ? (g.kind === 'match' ? 'MD' : DAY_MD[iso] || g.md) : null, planned = false;
     if (match) { kind = 'match'; tag = 'MD'; }
     if (future && !g) {
       const prev = matchDates.filter((x) => x < iso).pop(), next = matchDates.find((x) => x > iso);
@@ -345,7 +352,12 @@ function drawDay() {
     const lv = zLevel(v[1]);
     return `<div><span>${METRIC_LONG[k]}${g.per90 ? ' <small>/90</small>' : ''}</span><b>${fmtN(v[0])}</b>${lv ? `<span class="zs ${lv}">${Z_LABEL[lv]} · z ${fmtSigned(v[1])}</span>` : '<small class="muted">no reference</small>'}</div>`;
   }).join('')}</div>` : '';
-  const kindTxt = g ? ({ match: 'Match', training: `${g.comp ? 'Compensatory session' : 'Training'}${g.md ? ' · ' + g.md : ''}`, off: 'Day off', individual: 'Recovery / individual work', none: 'No team session' }[g.kind]) : iso > d.as_of ? 'Upcoming' : 'No GPS data';
+  // the day's MD, chosen by the staff when the rule is not what they do that day (not on a match day)
+  const mds = gharafaMatchDates(d, events), isMd = mds.includes(iso) || (g && g.kind === 'match');
+  const autoTag = (g && g.md) || computedTag(iso, mds.filter((x) => x < iso).pop(), mds.find((x) => x > iso), true) || '—';
+  const mdPick = isMd ? '' : `<label class="sh-md"><span>MD of this day</span><select id="sh-md"><option value="">Automatic${DAY_MD[iso] ? '' : ' · ' + autoTag}</option>${DAY_MD_TAGS.map((t) => `<option ${DAY_MD[iso] === t ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+    <p class="note">Change it when the day is not what the calendar says — e.g. two days after a match and two before the next: MD+2 (recovery, compensatory) or MD-2. The session's data follows a few minutes later.</p>`;
+  const kindTxt = g ? ({ match: 'Match', training: `${g.comp ? 'Compensatory session' : 'Training'}${DAY_MD[iso] || g.md ? ' · ' + (DAY_MD[iso] || g.md) : ''}`, off: 'Day off', individual: 'Recovery / individual work', none: 'No team session' }[g.kind]) : iso > d.as_of ? 'Upcoming' : 'No GPS data';
 
   const evRow = (e) => `<div class="li"><i style="background:${eventColor(e)}"></i><div><b>${escapeHtml(eventTitle(e))}${e.edit ? ' <span class="edited">edited</span>' : ''}</b><small>${e.start === e.end ? fmtDay(e.start) : `${fmtDay(e.start, { day: 'numeric', month: 'short' })} – ${fmtDay(e.end, { day: 'numeric', month: 'short' })} · date TBC`}${e.time ? ' · ' + escapeHtml(e.time) : ''}${e.venue ? ' · ' + escapeHtml(e.venue) : ''}${e.edit ? ` · by ${escapeHtml(String(e.edit.by || '').split('@')[0])}` : ''}</small></div><button type="button" class="btn-light" data-edit="${e.id}">Edit</button></div>`;
 
@@ -354,12 +366,19 @@ function drawDay() {
     ${g && g.comp && metrics ? '<p class="note">Average of the players who did not play the match (the others recovered, no GPS) · z vs the past compensatory sessions.</p>' : ''}
     ${metrics}
     ${sess ? `<button type="button" class="btn-light wide" id="sh-open">Open the session report ›</button>` : ''}
+    ${mdPick}
     ${other.length ? `<div class="sh-notes">${other.map((e) => `<span class="cnote">${escapeHtml(eventTitle(e))}</span>`).join('')}</div>` : ''}
     <h3 class="sh-sub">Fixtures</h3>
     ${evs.length ? `<div class="list">${evs.map(evRow).join('')}</div>` : '<p class="note">No fixture on this day.</p>'}
     ${removed.length ? `<p class="note">Removed: ${removed.map((e) => `${escapeHtml(eventTitle(e))} <button type="button" class="linkbtn" data-restore="${e.id}">restore</button>`).join(' · ')}</p>` : ''}
     ${CAL.form ? formHtml(events, iso) : `<button type="button" class="btn-light wide" id="sh-add">+ Add a match on this day</button>`}`;
   el.querySelector('.sheet-x').onclick = closeDay;
+  const mdSel = el.querySelector('#sh-md');
+  if (mdSel) mdSel.onchange = async () => {
+    mdSel.disabled = true;
+    try { CAL.data.edits = await saveCalendarEdit('day:' + iso, mdSel.value ? { md: mdSel.value } : null); cacheSet('calendar', CAL.data); drawCalendar(); }
+    catch (err) { alert(err.message || err); mdSel.disabled = false; }
+  };
   const open = el.querySelector('#sh-open');
   if (open) open.onclick = () => { closeDay(); switchView('sessions', { date: iso }); };
   const add = el.querySelector('#sh-add');

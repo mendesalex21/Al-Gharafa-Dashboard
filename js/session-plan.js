@@ -71,6 +71,7 @@ function splMatches() {
 }
 function splTag(date) {
   const r = SPL.lib.recent[date];
+  if (DAY_MD[date] && !splMatchOn(date)) return DAY_MD[date]; // his choice for that day (the header's MD list, or the Calendar)
   if (r && r.md && r.md !== '/') return r.md;
   const md = SPL.cal ? gharafaMatchDates(SPL.cal, SPL.events || []) : [];
   return md.includes(date) ? 'MD' : computedTag(date, md.filter((x) => x < date).pop(), md.find((x) => x > date)) || '';
@@ -145,7 +146,7 @@ function splHead(date, step) {
   const p = splPlan(date), m = splMatchOn(date), next = SPL.matches.find((x) => x.date > date);
   const dd = next ? daysBetween(date, next.date) : null;
   return `<div class="sp-head"><div class="sp-id"><span class="sp-k">Session</span><b><input class="sp-sid" data-f="sid" value="${escapeHtml(p.sid || splSid(date))}" aria-label="Session number"> · ${SPL_DAY(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</b></div>
-    <div class="sp-auto"><span><small>Week</small>${splWeekNo(date)}</span><span><small>MD</small>${splTag(date) || '—'}</span><span><small>Week MD session</small><input class="sp-lbl" data-f="label" value="${escapeHtml(p.label || splLabel(date))}" aria-label="Week MD session"></span>
+    <div class="sp-auto"><span><small>Week</small>${splWeekNo(date)}</span><span><small>MD</small>${m ? 'MD' : `<select class="sp-md" data-md aria-label="MD of this day"><option value="">${DAY_MD[date] ? 'Automatic' : splTag(date) || '—'}</option>${DAY_MD_TAGS.map((t) => `<option ${DAY_MD[date] === t ? 'selected' : ''}>${t}</option>`).join('')}</select>`}</span><span><small>Week MD session</small><input class="sp-lbl" data-f="label" value="${escapeHtml(p.label || splLabel(date))}" aria-label="Week MD session"></span>
       ${m ? `<span><small>Match</small>${escapeHtml(m.e.opponent || '')}</span>` : next ? `<span><small>Next match</small>${SPL_DAY(next.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${dd === 1 ? 'tomorrow' : `in ${dd} days`}</span>` : ''}</div>
     <div class="seg sp-ampm">${['AM', 'PM'].map((v) => `<button type="button" data-ampm="${v}" class="${(p.ampm || 'PM') === v ? 'active' : ''}">${v}</button>`).join('')}</div></div>
     <div class="sp-steps">${['Plan', 'After the session', 'Published'].map((l, i) => `<span class="${i < step ? 'done' : i === step ? 'on' : ''}"><i>${i < step ? '✓' : i + 1}</i>${l}</span>`).join('<u></u>')}<em id="spl-state">${escapeHtml(SPL.state || 'Filled in from the calendar · saved as you type')}</em></div>`;
@@ -970,6 +971,16 @@ function splChange(e) {
   if (t.dataset.ntmap) { splNtMap(t.dataset.ntmap, t.value); return; }
   if (t.dataset.ntrpe && SPL.nt) { SPL.nt.rpe = { ...(SPL.nt.rpe || {}), [t.dataset.ntrpe]: t.value }; return; } // used at Publish (RPE × time)
   if (t.dataset.norpe) { splSaveNoRpe(date, t.dataset.norpe, t); return; } // an RPE typed for a session in the data
+  if (t.dataset.md != null) { // the day's MD chosen here (also in the Calendar): saved with the calendar edits, the data follows
+    const v = t.value;
+    SPL.state = 'Saving the MD…'; splStateLine();
+    saveCalendarEdit('day:' + date, v ? { md: v } : null).then((edits) => {
+      SPL.cal.edits = edits; SPL.events = applyCalendarEdits(SPL.cal); splMatches();
+      if (typeof cacheSet === 'function') cacheSet('calendar', SPL.cal);
+      SPL.state = `MD ${v || 'automatic'} saved ✓ — the session's data follows at the next update`; splDraw();
+    }).catch((err) => { SPL.state = 'MD not saved — ' + (err.message || err); splDraw(); });
+    return;
+  }
   if (t.dataset.cf) { splCorrEdit(t); return; } // the correction table
   const p = splEnsure(date);
   if (t.dataset.drill != null) { p.drills[Number(t.dataset.drill)].name = t.value; splTouch(date); splDraw(); return; }
