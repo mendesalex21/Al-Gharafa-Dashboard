@@ -232,6 +232,52 @@ const MDZ_UNIT = { td: 'm', d15: 'm', hit: 'm', spr: 'm', spr_n: '', acc_dec: ''
 const MZ_LEVELS = [['vlow', 'well below (z ≤ −2)'], ['low', 'below'], ['ok', 'usual (|z| < 1)'], ['up', 'slightly above'], ['vup', 'well above (z ≥ 2)']];
 function mzClass(z) { return z == null ? 'na' : z <= -2 ? 'vlow' : z <= -1 ? 'low' : z < 1 ? 'ok' : z < 2 ? 'up' : 'vup'; }
 
+/** The microcycle so far, beside the day's z-scores (his mockup A, 2026-10-11): for each player what he has done since
+ * the last match, one piece of the bar per MD, against his usual for those same days (black tick); the colour is the z
+ * of his total (staff report `mc`). Three readings of the number: z-score · % of his usual · % of his match (the mean
+ * of his 3 best games, dotted line = one match). Training days with a staff-report block only. */
+const MC_KEYS = [['td', 'TD'], ['hit', '>20'], ['acc_dec', 'Acc+Dec'], ['spr_n', 'Sprints']]; // the staff report's order
+const MC_MODES = [['z', 'z-score'], ['usual', '% of his usual'], ['match', '% of his match']];
+const MC_COL = { vlow: '#1d5fae', low: '#7fb0ea', ok: '#34c759', up: '#ff9f0a', vup: '#e5484d', na: '#aeaeb2' };
+function mcMicro(s) {
+  const X = TR.staff && TR.staff.days ? TR.staff.days[s.date] : null, se = TR.sessions;
+  if (!X || !X.micro || !X.micro.from || !se || !se.usual || s.kind === 'match') return null;
+  const days = se.sessions.filter((x) => x.date >= X.micro.from && x.date <= s.date).sort((a, b) => (a.date < b.date ? -1 : 1));
+  if (!days.length) return null;
+  const usual = se.usual, out = {};
+  for (const p of s.players.filter((q) => q.mdref)) {
+    const done = {}, exp = {}, parts = {};
+    MC_KEYS.forEach(([k]) => { done[k] = 0; exp[k] = 0; parts[k] = []; });
+    for (const x of days) {
+      const q = x.players.find((r) => r.id === p.id);
+      if (!q) continue;
+      const comp = q.mdref && q.mdref.kind === 'comp', type = (x.cycle || {}).type;
+      const u = comp ? (((usual.comp || {}).players || {})[p.id] || (usual.comp || {}).squad)
+        : ((((usual.players || {})[p.id] || {})[type] || {})[x.md] || ((usual.squad || {})[type] || {})[x.md]);
+      MC_KEYS.forEach(([k]) => { const v = q[k] || 0, e = u && u[k] ? u[k][0] : 0; done[k] += v; exp[k] += e; parts[k].push({ md: x.md, v, u: e }); });
+    }
+    out[p.id] = { done, exp, parts, z: ((X.players || {})[p.id] || {}).mc || [], game: (se.top3 || {})[p.id] || null };
+  }
+  return { md: days.map((x) => x.md), out };
+}
+function mcBar(k, j, c, mode) {
+  const done = c.done[k], exp = c.exp[k], z = c.z[j], col = MC_COL[mzClass(z)], g = c.game && c.game[k];
+  const val = k === 'td' && done >= 1000 ? (done / 1000).toFixed(1) + 'k' : fmtN(done);
+  const scale = mode === 'match' && g ? Math.max(done, exp, g) * 1.12 : Math.max(done, exp, 1) * 1.15;
+  let x = 0;
+  const live = c.parts[k].filter((d) => d.v > 0);
+  const segs = c.parts[k].map((d, i) => { if (!(d.v > 0)) return ''; const left = x; x += d.v;
+    return `<i class="${d === live[live.length - 1] ? 'last' : ''}" style="left:${left / scale * 100}%;width:${d.v / scale * 100}%;background:${col};opacity:${i % 2 ? 0.62 : 1}" title="${escapeHtml(d.md || '')}: ${fmtN(d.v)} · his usual ${fmtN(d.u)}"></i>`; }).join('');
+  const tick = exp > 0 ? `<em style="left:${exp / scale * 100}%" title="his usual for these days: ${fmtN(exp)}"></em>` : '';
+  if (mode === 'match') {
+    if (!g) return `<div class="mcb"><b>${val}</b><div class="mcb-bar">${segs}${tick}</div><small>no match</small></div>`;
+    return `<div class="mcb"><b>${val}</b><div class="mcb-bar">${segs}<u style="left:${g / scale * 100}%" title="one match of his (average of his 3 best games): ${fmtN(g)}"></u>${tick}</div><strong>${Math.round(done / g * 100)} %</strong></div>`;
+  }
+  const pc = exp > 0 ? Math.round((done / exp - 1) * 100) : null;
+  const tail = mode === 'z' ? `<span class="mz ${mzClass(z)}" title="${fmtN(done)} vs his usual ${fmtN(exp)}">${z == null ? '—' : fmtSigned(z)}</span>` : `<small>${pc == null ? '—' : `${pc >= 0 ? '+' : ''}${pc} %`}</small>`;
+  return `<div class="mcb"><b>${val}</b><div class="mcb-bar">${segs}${tick}</div>${tail}</div>`;
+}
+
 /** z-score of each player vs his own past sessions with the same MD tag in the same microcycle type — all metrics. */
 function drawMdz(s) {
   const note = document.getElementById('se-mdz-note'), mount = document.getElementById('se-mdz');
@@ -258,10 +304,17 @@ function drawMdz(s) {
     return `<td class="c"><span class="mz ${mzClass(z)}" title="${fmtN(val(p, k))} vs his usual ${fmtN(u)}${MDZ_UNIT[k] ? ' ' + MDZ_UNIT[k] : ''}">${z == null ? '—' : fmtSigned(z)}</span></td>`;
   };
   const rows = ps.slice().sort((a, b) => (k0 === 'name' ? playerName(a.id).localeCompare(playerName(b.id)) : (b.mdref.z[k0] ?? -9) - (a.mdref.z[k0] ?? -9)));
-  mount.innerHTML = `<div class="table-wrap"><table class="dtable compact mz-tab"><thead><tr><th data-mz="name" class="${k0 === 'name' ? 'sorted' : ''}">Player</th>${MDZ_METRICS.map(([k, l]) => `<th class="c ${k0 === k ? 'sorted' : ''}" data-mz="${k}">${l}${k0 === k ? ' ↓' : ''}</th>`).join('')}<th class="c">Reference</th></tr></thead><tbody>
-    ${rows.map((p) => `<tr data-id="${p.id}" class="clickable"><td><span class="mz-p">${avatarHtml(p.id, playerName(p.id), 22)}<b>${escapeHtml(playerName(p.id))}</b>${p.cat === 't' || p.cat === 'm' ? '' : `<small>${escapeHtml(String(p.type).toLowerCase())}</small>`}</span></td>${MDZ_METRICS.map(([k]) => cell(p, k)).join('')}<td class="c"><small class="muted">${p.mdref.src === 'own' ? `his ${p.mdref.n}` : 'squad'}${p.mdref.kind === 'comp' ? ' comp.' : ''}</small></td></tr>`).join('')}
-    </tbody></table></div>`;
+  // the microcycle so far, beside the day (the panel then takes the full width)
+  if (!TR.mcMode) { try { TR.mcMode = localStorage.getItem('mc_mode') || 'z'; } catch (err) { TR.mcMode = 'z'; } } // his last reading
+  const mc = mcMicro(s), mode = MC_MODES.some(([m]) => m === TR.mcMode) ? TR.mcMode : 'z';
+  mount.closest('section').classList.toggle('sv-bleed', !!mc);
+  const grp = mc ? `<tr class="mcb-grp"><th></th><th class="c" colspan="${MDZ_METRICS.length + 1}">Today · vs his usual ${escapeHtml(ref.tag || '')}</th><th class="mcb-sep" colspan="${MC_KEYS.length}"><div class="mcb-top"><span>Microcycle so far · ${mc.md.map(escapeHtml).join(' · ')}</span>
+      <span class="seg">${MC_MODES.map(([m, l]) => `<button type="button" data-mc="${m}" class="${mode === m ? 'active' : ''}">${l}</button>`).join('')}</span></div></th></tr>` : '';
+  mount.innerHTML = `<div class="table-wrap"><table class="dtable compact mz-tab"><thead>${grp}<tr><th data-mz="name" class="${k0 === 'name' ? 'sorted' : ''}">Player</th>${MDZ_METRICS.map(([k, l]) => `<th class="c ${k0 === k ? 'sorted' : ''}" data-mz="${k}">${l}${k0 === k ? ' ↓' : ''}</th>`).join('')}<th class="c">Reference</th>${mc ? MC_KEYS.map(([, l], j) => `<th class="${j ? '' : 'mcb-sep'}">${l}</th>`).join('') : ''}</tr></thead><tbody>
+    ${rows.map((p) => `<tr data-id="${p.id}" class="clickable"><td><span class="mz-p">${avatarHtml(p.id, playerName(p.id), 22)}<b>${escapeHtml(playerName(p.id))}</b>${p.cat === 't' || p.cat === 'm' ? '' : `<small>${escapeHtml(String(p.type).toLowerCase())}</small>`}</span></td>${MDZ_METRICS.map(([k]) => cell(p, k)).join('')}<td class="c"><small class="muted">${p.mdref.src === 'own' ? `his ${p.mdref.n}` : 'squad'}${p.mdref.kind === 'comp' ? ' comp.' : ''}</small></td>${mc ? MC_KEYS.map(([k], j) => `<td class="mcb-td${j ? '' : ' mcb-sep'}">${mc.out[p.id] ? mcBar(k, j, mc.out[p.id], mode) : ''}</td>`).join('') : ''}</tr>`).join('')}
+    </tbody></table></div>${mc ? `<p class="note mcb-note"><span class="mcb-key"><i></i><i></i></span>one piece of the bar per day since the last match (${mc.md.map(escapeHtml).join(' · ')}) · <em class="mcb-tick"></em>his usual for those same days · colour = the z of his total${mode === 'match' ? ' · <u class="mcb-dot"></u>one match of his = the average of his 3 best games' : ''} · hover a piece for the day.</p>` : ''}`;
   mount.querySelectorAll('th[data-mz]').forEach((th) => th.addEventListener('click', (e) => { e.stopPropagation(); TR.mdzSort = th.dataset.mz; drawMdz(s); }));
+  mount.querySelectorAll('[data-mc]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); TR.mcMode = b.dataset.mc; try { localStorage.setItem('mc_mode', TR.mcMode); } catch (err) { /* private mode */ } drawMdz(s); }));
 }
 
 function playerName(id) {
