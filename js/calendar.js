@@ -65,7 +65,7 @@ function computedTag(d, prev, next, rule) { // rule = true: the rule alone, with
   const since = prev ? daysBetween(prev, d) : null, until = next ? daysBetween(d, next) : null;
   if (since != null && since >= 3 && (until == null || until > 7)) return null;
   if (since === 1) return 'MD+1';
-  if (since === 2 && (until == null || until >= 4)) return 'MD+2';
+  if (since === 2 && (until == null || until >= 3)) return 'MD+2'; // 3 days to the next match: MD+2 too (he tagged it so 9 times out of 10) — 2 days: MD-2, or his choice for that day
   if (until != null) return `MD-${until}`;
   return since != null ? `MD+${since}` : null;
 }
