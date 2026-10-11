@@ -60,19 +60,11 @@ function renderSquad() {
       <span class="sq-wk-ctl"><select class="select" id="sq-wk-pick" aria-label="Week"></select>${segHtml('sq-wk-mode', [['train', 'Training only'], ['all', 'All sessions']], WL.weekMode)}</span></div>
     <div class="grid2">${WEEK_TARGET_METRICS.map(([k, l]) => `<section class="panel"><div class="panel-head"><h2 class="panel-title small">% of top-3 match · ${l}</h2><span class="panel-note" id="sq-wk-target-${k}"></span></div><div class="chart" id="sq-wk-pct-${k}"></div></section>`).join('')}</div>
     <div class="panel-head bare"><h2 class="panel-title">Load by metric</h2>${segHtml('sq-metric', METRIC_KEYS.map((k) => [k, METRIC_SHORT[k]]), WL.metric)}</div>
-    <div class="grid2">
-      <section class="panel">
-        <div class="panel-head"><h2 class="panel-title small">Acute vs chronic</h2><span class="panel-note">rolling averages per day</span></div>
-        <div class="chart" id="sq-scatter"></div>
-        <p class="panel-foot">Dashed lines: ACWR 0.78 · 1.37 · 1.5. Shaded wedge: 0.78–1.37.</p>
-      </section>
-      <section class="panel">
-        <div class="panel-head"><h2 class="panel-title small">Team weekly load</h2><span class="panel-note">the team (your Team rule: ProTraining, whole-game players, 0 on days off) · weeks start Sunday</span></div>
-        <div class="chart" id="sq-weekly"></div>
-        <div class="panel-head"><h2 class="panel-title small">Team ACWR · rolling 7:28</h2></div>
-        <div class="chart" id="sq-team-acwr"></div>
-      </section>
-    </div>
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title small">Acute vs chronic</h2><span class="panel-note">rolling averages per day · the team's own load is on the Team page</span></div>
+      <div class="chart" id="sq-scatter"></div>
+      <p class="panel-foot">Dashed lines: ACWR 0.78 · 1.37 · 1.5. Shaded wedge: 0.78–1.37.</p>
+    </section>
     <div class="legend-row">
       <span><i style="background:${ACWR_COL.green}"></i>ACWR 0.78–1.37</span>
       <span><i style="background:${ACWR_COL.amber}"></i>1.37–1.5</span>
@@ -176,20 +168,6 @@ function drawSquad() {
     xLabel: `Chronic · avg of the 28 days before the week ${METRIC_UNIT[k]}`, yLabel: `Acute · 7-day avg ${METRIC_UNIT[k]}`,
     tip: (p) => `<b>${escapeHtml(p.label)}</b><span>ACWR ${p.r.toFixed(2)} · acute ${fmtN(p.y)} · chronic ${fmtN(p.x)}</span>`,
     onClick: (p) => switchView('player', { player: p.id }),
-  });
-  chXY(document.getElementById('sq-weekly'), {
-    x: weeks.map((w) => w.start), height: 190,
-    bars: { values: weeks.map((w) => w[k]), color: (v, i) => (weeks[i].days < 7 ? 'rgba(42,120,214,.45)' : 'var(--accent)') },
-    tick: (x) => fmtDay(x, { day: 'numeric', month: 'short' }),
-    tip: (i) => `<b>${fmtN(weeks[i][k])} ${METRIC_UNIT[k]}</b><span>Week of ${fmtDay(weeks[i].start, { day: 'numeric', month: 'short' })}${weeks[i].days < 7 ? ` · ${weeks[i].days} days so far` : ''}</span>`,
-  });
-  const tdates = d.team.acwr[k].map((_, i) => addDays(d.team.start, i));
-  const tv = d.team.acwr[k];
-  chXY(document.getElementById('sq-team-acwr'), {
-    x: tdates, height: 170, yMin: 0, yMax: 2.5, bands: ACWR_BANDS,
-    lines: [{ values: tv, color: 'var(--ink)' }],
-    tick: (x) => fmtDay(x, { day: 'numeric', month: 'short' }),
-    tip: (i) => `<b>${tv[i] == null ? '—' : tv[i].toFixed(2)}</b><span>${fmtDay(tdates[i])}</span>`,
   });
 }
 

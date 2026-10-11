@@ -1464,6 +1464,42 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .sp-day { font: inherit; text-align: left; color: inherit; cursor: pointer; } .sp-md.off { background: transparent; color: var(--ink-muted); }
 .sp-sid { font: inherit; width: 60px; border: 0; border-bottom: 1px dashed var(--hairline); background: transparent; color: inherit; padding: 0; }
 .sp-lbl { font: inherit; font-size: 13px; font-weight: 650; width: 150px; border: 0; background: transparent; color: inherit; padding: 0; }
+/* Workload › Team */
+.tm-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.tm-tile { background: var(--surface); border-radius: 18px; padding: 14px 15px 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.tm-tile .k { font-size: 11px; font-weight: 700; color: var(--ink-muted); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tm-tile .ac { display: flex; align-items: baseline; gap: 8px; } .tm-tile .ac b { font-size: 30px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; } .tm-tile .ac b small { font-size: 15px; }
+.tm-tile .ac span { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.tm-zone { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 650; white-space: nowrap; } .tm-zone i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.tm-tile .ln { font-size: 12px; color: var(--ink-2); display: flex; justify-content: space-between; align-items: center; gap: 6px; border-top: 1px solid var(--hairline); padding-top: 6px; white-space: nowrap; }
+.tm-tile .ln b { color: var(--ink); font-variant-numeric: tabular-nums; } .tm-tile .ln .mz { min-width: 0; padding: 1px 5px; font-size: 11px; margin-left: 2px; }
+.tm-2w { font-style: normal; font-size: 10px; font-weight: 800; color: #fff; background: #e5484d; border-radius: 5px; padding: 1px 5px; margin-left: 6px; }
+.tm-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; margin-bottom: 10px; }
+.tm-dates { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-2); } .tm-dates label { display: inline-flex; align-items: center; gap: 7px; }
+.tm-dates input { font: inherit; font-size: 13px; padding: 6px 9px; border-radius: 10px; border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); }
+.tm-ctl { display: flex; align-items: center; gap: 12px; margin-left: auto; } .tm-lab { font-size: 13px; color: var(--ink-2); }
+.tm-legend { display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); align-items: center; margin-bottom: 14px; }
+.tm-legend i { display: inline-block; width: 12px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; } .tm-legend i.u { background: rgba(120, 120, 128, .22); } .tm-legend i.b { background: rgba(52, 199, 89, .16); }
+.tm-legend em { display: inline-block; width: 14px; height: 0; border-top: 2px solid var(--ink); margin-right: 6px; vertical-align: 3px; } .tm-legend b.g { font-size: 10.5px; font-weight: 800; color: #16269e; margin-right: 6px; }
+.tm-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.tm-card { background: var(--surface); border-radius: 18px; padding: 16px 18px 10px; box-shadow: var(--shadow); min-width: 0; }
+.tm-card h2 { font-size: 15px; margin: 0 0 2px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; } .tm-card h2 small { font-size: 12px; font-weight: 500; color: var(--ink-muted); text-align: right; }
+.tm-svg { width: 100%; height: auto; display: block; } .tm-svg text { font-family: inherit; }
+.tm-ax { font-size: 10px; fill: var(--ink-muted); } .tm-ax.now { font-weight: 800; fill: var(--ink); } .tm-ax.red { fill: #c4282d; }
+.tm-val { font-size: 10.5px; font-weight: 650; fill: var(--ink); } .tm-pt { font-size: 10px; font-weight: 650; fill: var(--ink); } .tm-cap { font-size: 10px; font-weight: 700; fill: var(--ink-muted); letter-spacing: .04em; }
+.tm-game { font-size: 9.5px; font-weight: 800; fill: #16269e; } .tm-gl { stroke: var(--hairline); } .tm-base { stroke: var(--ink-muted); opacity: .5; } .tm-sep { stroke: var(--hairline); stroke-dasharray: 2 3; }
+.tm-band { fill: rgba(52, 199, 89, .13); } .tm-usual { fill: rgba(120, 120, 128, .2); } .tm-cnt { fill: rgba(120, 120, 128, .4); } .tm-red { stroke: #e5484d; stroke-dasharray: 3 3; opacity: .7; }
+.tm-line { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; } .tm-dot { stroke: var(--surface); stroke-width: 1.5; }
+.tm-tbl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tm-tbl th { font-size: 10.5px; font-weight: 700; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .04em; text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--hairline); }
+.tm-tbl td { text-align: right; padding: 7px 8px; border-bottom: 1px solid var(--hairline); } .tm-tbl th:first-child, .tm-tbl td:first-child, .tm-tbl .l { text-align: left; }
+.tm-tbl .g { padding-right: 16px; } .tm-tbl td .mz { min-width: 40px; padding: 2px 6px; font-size: 12px; } .tm-tbl tr.now td { background: rgba(42, 120, 214, .06); }
+.tm-acchip { display: inline-block; min-width: 40px; text-align: center; border-radius: 7px; padding: 2px 6px; font-weight: 700; font-size: 12px; color: #fff; }
+.tm-share { display: flex; height: 11px; border-radius: 4px; overflow: hidden; min-width: 130px; margin-bottom: 2px; } .tm-share i { display: block; }
+@media (max-width: 1100px) { .tm-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .tm-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tm-grid { grid-template-columns: 1fr; } .tm-ctl { margin-left: 0; flex-wrap: wrap; } }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) .tm-game, :root:where(:not([data-theme="light"])) .tm-legend b.g { fill: #a9bfff; color: #a9bfff; } }
+:root[data-theme="dark"] .tm-game, :root[data-theme="dark"] .tm-legend b.g { fill: #a9bfff; color: #a9bfff; }
 .sq-wk-ctl { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .sp-md { font: inherit; font-size: 13px; font-weight: 650; border: 0; background: transparent; color: inherit; padding: 0; margin-left: -3px; cursor: pointer; }
 .sh-md { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; font-size: 14px; font-weight: 600; }

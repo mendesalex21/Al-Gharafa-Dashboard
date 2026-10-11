@@ -1,17 +1,17 @@
 const VIEWS = {}; // view -> already rendered?
 const VIEW_SECTION = {
   wellness: 'wellness', longitudinal: 'wellness', sessions: 'training', objectives: 'training',
-  squad: 'workload', player: 'workload', readiness: 'workload', testing: 'testing', calendar: 'calendar', reports: 'reports', roster: 'roster', plan: 'plan',
+  team: 'workload', squad: 'workload', player: 'workload', readiness: 'workload', testing: 'testing', calendar: 'calendar', reports: 'reports', roster: 'roster', plan: 'plan',
 };
 const VIEW_RENDER = {
   wellness: () => renderWellness(), longitudinal: () => renderLongitudinal(),
-  sessions: (o) => renderSessions(o), objectives: (o) => renderObjectives(o), squad: () => renderSquad(),
+  sessions: (o) => renderSessions(o), objectives: (o) => renderObjectives(o), team: () => renderTeam(), squad: () => renderSquad(),
   player: (o) => renderPlayerLoad(o), readiness: () => renderReadiness(), testing: (o) => renderTesting(o), calendar: (o) => renderCalendar(o),
   reports: (o) => renderReports(o), roster: () => renderRoster(), plan: () => renderPlan(),
 };
 const VIEW_REDRAW = {
   longitudinal: () => drawLongitudinal(), sessions: (o) => drawSessions(o), objectives: () => drawObjectives(),
-  squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: () => drawCalendar(), reports: () => rpFit(), roster: () => drawRoster(), plan: () => splDraw(),
+  team: () => drawTeam(), squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: () => drawCalendar(), reports: () => rpFit(), roster: () => drawRoster(), plan: () => splDraw(),
 };
 let CURRENT_VIEW = null;
 
