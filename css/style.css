@@ -1464,6 +1464,7 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .sp-day { font: inherit; text-align: left; color: inherit; cursor: pointer; } .sp-md.off { background: transparent; color: var(--ink-muted); }
 .sp-sid { font: inherit; width: 60px; border: 0; border-bottom: 1px dashed var(--hairline); background: transparent; color: inherit; padding: 0; }
 .sp-lbl { font: inherit; font-size: 13px; font-weight: 650; width: 150px; border: 0; background: transparent; color: inherit; padding: 0; }
+.sq-wk-ctl { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .sp-md { font: inherit; font-size: 13px; font-weight: 650; border: 0; background: transparent; color: inherit; padding: 0; margin-left: -3px; cursor: pointer; }
 .sh-md { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; font-size: 14px; font-weight: 600; }
 .sh-md select { font: inherit; font-weight: 600; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--hairline); background: var(--surface); color: inherit; }

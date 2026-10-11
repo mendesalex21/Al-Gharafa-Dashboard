@@ -3,7 +3,8 @@
  * Data: sync/build.py → "workload" payload (ACWR rolling 7:28 + EWMA, weekly load z-scores, monotony,
  * high-speed exposure, availability). Wellness and tests payloads are joined in for the 360° view.
  */
-const WL = { data: null, wellness: null, tests: null, history: null, model: 'acwr', metric: 'td', rank: 'hit', player: null, plMetric: 'td', plModel: 'acwr' };
+const WL = { data: null, wellness: null, tests: null, history: null, model: 'acwr', metric: 'td', rank: 'hit', player: null, plMetric: 'td', plModel: 'acwr', week: null, weekMode: 'train' };
+const WEEK_TARGET_METRICS = [['td', 'Total distance'], ['hit', 'Distance > 20 km/h'], ['spr_n', 'Sprints (count)'], ['acc_dec', 'HIT Acc + Dec']];
 const RISK_ORDER = { red: 0, orange: 1, green: 2, na: 3 };
 const STATUS_LABEL = { available: 'Available', injured: 'Injured', rehab: 'Rehab', sick: 'Sick', 'national team': 'National team', absent: 'Absent' };
 
@@ -55,6 +56,9 @@ function renderSquad() {
       <div class="chart" id="sq-rank-chart"></div>
       <p class="panel-foot">Available players with ≥ 28 days of data. Same ratios as the club Power BI: 7:28 = last 7 days ÷ the 28 days before them; 14:35 = the same ratio one week earlier — both above 1.37 = two weeks in a row of overload. Zones: 0.5 · 0.78 · 1.37 · 1.5.</p>
     </section>
+    <div class="panel-head bare"><h2 class="panel-title">Weekly load vs top-3 match</h2><span class="panel-note" id="sq-wk-note"></span>
+      <span class="sq-wk-ctl"><select class="select" id="sq-wk-pick" aria-label="Week"></select>${segHtml('sq-wk-mode', [['train', 'Training only'], ['all', 'All sessions']], WL.weekMode)}</span></div>
+    <div class="grid2">${WEEK_TARGET_METRICS.map(([k, l]) => `<section class="panel"><div class="panel-head"><h2 class="panel-title small">% of top-3 match · ${l}</h2><span class="panel-note" id="sq-wk-target-${k}"></span></div><div class="chart" id="sq-wk-pct-${k}"></div></section>`).join('')}</div>
     <div class="panel-head bare"><h2 class="panel-title">Load by metric</h2>${segHtml('sq-metric', METRIC_KEYS.map((k) => [k, METRIC_SHORT[k]]), WL.metric)}</div>
     <div class="grid2">
       <section class="panel">
@@ -79,13 +83,43 @@ function renderSquad() {
   bindSeg('sq-model', (v) => { WL.model = v; drawSquad(); });
   bindSeg('sq-metric', (v) => { WL.metric = v; drawSquad(); });
   bindSeg('sq-rank', (v) => { WL.rank = v; drawRanking(); });
+  bindSeg('sq-wk-mode', (v) => { WL.weekMode = v; drawSquadWeek(); });
+  withData('sessions', (d) => { TR.sessions = d; drawSquadWeek(); }, () => {}); // the players' weeks (% of his top-3 match)
   withData('workload', (d) => { WL.data = d; drawSquad(); }, (err) => { root.innerHTML = loadError(err); });
   withData('wellness', (d) => { WL.wellness = d; drawSquad(); }, () => {});
+}
+
+/** Each player's week (Sunday → Saturday) as a % of his top-3 match — from the old Training › Week load page. The green
+ * band = the usual range of the club's past competitive weeks (training only), or the staff's targets when set. */
+function drawSquadWeek() {
+  const d = TR.sessions, pick = document.getElementById('sq-wk-pick');
+  if (!d || !d.weeks || !pick || document.getElementById('view-squad').hidden) return;
+  const list = d.weeks.list;
+  if (!WL.week || !list.find((w) => w.start === WL.week)) WL.week = list[0].start;
+  if (pick.options.length !== list.length) pick.innerHTML = list.map((w) => `<option value="${w.start}">Week of ${fmtDay(w.start, { day: 'numeric', month: 'short' })}</option>`).join('');
+  pick.value = WL.week;
+  pick.onchange = () => { WL.week = pick.value; drawSquadWeek(); };
+  const w = list.find((x) => x.start === WL.week), mode = WL.weekMode, bands = d.weeks.bands, partial = w.data_to && w.data_to < w.end;
+  document.getElementById('sq-wk-note').textContent = `${fmtDay(w.start, { day: 'numeric', month: 'short' })} – ${fmtDay(w.end, { day: 'numeric', month: 'short' })}${partial ? ` · in progress, to ${fmtDay(w.data_to, { weekday: 'short', day: 'numeric' })}` : ''} · ${mode === 'train' ? 'training sessions only' : 'training and matches'} · 100 % = one match of his (average of his 3 best games) · shaded = ${d.weeks.bands_source === 'config' ? 'staff targets' : `usual range of ${d.weeks.bands_n} past competitive player-weeks (training only)`}`;
+  const ids = Object.keys(w.players);
+  WEEK_TARGET_METRICS.forEach(([k]) => {
+    const vals = ids.map((id) => ({ id, v: w.players[id][mode + '_p3'][k] })).filter((x) => x.v != null && x.v > 0).sort((a, b) => b.v - a.v);
+    const b = bands[k];
+    document.getElementById('sq-wk-target-' + k).textContent = b ? `target ${b[0]}–${b[1]}%` : '';
+    chXY(document.getElementById('sq-wk-pct-' + k), {
+      x: vals.map((x) => playerName(x.id)), height: 270, slantTicks: true, yMin: 0,
+      bands: b ? [{ from: b[0], to: b[1], color: STATUS_COL.green, alpha: 0.12 }] : [],
+      bars: { values: vals.map((x) => x.v), color: (v) => (!b ? '#2a78d6' : v > b[1] * 1.25 ? STATUS_COL.red : v > b[1] ? STATUS_COL.orange : v >= b[0] ? '#34c759' : '#9fc2ee') },
+      refs: [{ y: 100, dash: true, label: '1 match' }],
+      tip: (i) => `<b>${escapeHtml(playerName(vals[i].id))} · ${vals[i].v}%</b><span>${fmtN(w.players[vals[i].id][mode][k])} this week${b ? ` · target ${b[0]}–${b[1]}%` : ''}</span>`,
+    });
+  });
 }
 
 function drawSquad() {
   const d = WL.data;
   if (!d || document.getElementById('view-squad').hidden) return;
+  drawSquadWeek();
   document.getElementById('sq-sub').textContent = `Data up to ${fmtDay(d.as_of, { weekday: 'long', day: 'numeric', month: 'long' })} · ${fmtUpdated(d.generated_at)}`;
   const ratio = (p) => (WL.model === 'ewma' ? p.ewma : p.acwr);
   const ps = d.players;
