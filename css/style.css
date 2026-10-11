@@ -568,7 +568,7 @@ main.page { padding-top: 40px; }
 .mcb-td { min-width: 168px; } .mcb-sep { border-left: 2px solid var(--hairline) !important; }
 .mcb-grp th { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #16269e; border-bottom: 0 !important; padding-bottom: 2px !important; cursor: default; }
 .mcb-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; } .mcb-top .seg { text-transform: none; letter-spacing: 0; } .mcb-top .seg button { font-size: 12px; padding: 4px 11px; }
-.mcb-note { margin-top: 10px; } .mcb-key { display: inline-flex; vertical-align: middle; margin-right: 6px; } .mcb-key i { width: 13px; height: 10px; background: #34c759; } .mcb-key i:first-child { border-radius: 3px 0 0 3px; margin-right: 1.5px; } .mcb-key i:last-child { border-radius: 0 3px 3px 0; opacity: .62; }
+.mcb-note { margin-top: 10px; } .mcb-key { display: inline-flex; vertical-align: middle; margin-right: 6px; } .mcb-key i { width: 13px; height: 10px; background: #34c759; } .mcb-key i:first-child { border-radius: 3px 0 0 3px; margin-right: 1.5px; } .mcb-key i:last-child { border-radius: 0 3px 3px 0; background: #ff9f0a; }
 .mcb-tick { display: inline-block; width: 2px; height: 12px; background: var(--ink); vertical-align: middle; margin: 0 5px 0 2px; } .mcb-dot { display: inline-block; height: 12px; border-left: 1.5px dotted #16269e; vertical-align: middle; margin: 0 5px 0 2px; }
 @media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) .mcb-grp th { color: #a9bfff; } }
 :root[data-theme="dark"] .mcb-grp th { color: #a9bfff; }
