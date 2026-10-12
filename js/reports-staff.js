@@ -177,33 +177,39 @@ function rsMicro(C) {
     <div class="rs-acrow rs-foot"><span class="rs-legs">${lg}</span><span class="rs-acl">Team A:C 7:28 today</span>${[['td', 'Total distance'], ['hit', 'HIT > 20'], ['acc_dec', 'Acc + Dec'], ['srpe', 'sRPE']].map(([k, l]) => `<div class="rs-act"><i style="background:${stAcCol(ac[k])}"></i>${l}<b>${ac[k] != null ? ac[k].toFixed(2) : '–'}</b></div>`).join('')}</div>`;
 }
 
-// ---------------------------------------------------------------- page 7: players, microcycle so far + week so far (z chips) + speed
-function rsCycle(D, C, s) {
-  const mc = [['td', 'TD'], ['hit', '> 20'], ['acc_dec', 'Acc+Dec'], ['spr_n', 'Sprints']], wk = [['td', 'TD'], ['hit', '> 20'], ['acc_dec', 'Acc+Dec'], ['spr_n', 'Sprints']];
-  const tpl = '160px repeat(4, minmax(0,0.68fr)) 14px repeat(4, minmax(0,1.5fr)) 14px 60px 84px';
-  const from = (C.X.micro && C.X.micro.md[0]) || '';
-  const rowH = rpRowH(D, D.fullSession, RP_TABLE_H - 41, 25), wkRec = new Set(((D.weekLoad && D.weekLoad.rows) || []).filter((w) => w.rec).map((w) => w.name));
-  let html = `<div class="rs-tbl${rowH < 21 ? ' rp-tight' : ''}"><div class="rs-tr rs-gh" style="grid-template-columns:${tpl}"><span></span><span style="grid-column:span 4">MICROCYCLE SO FAR · ${rpEsc(from)}${from && from !== s.md ? ' → ' + rpEsc(s.md) : ''} vs his usual</span><span></span><span style="grid-column:span 4">WEEK SO FAR · Sun → today · value, bar = z vs his weeks</span><span></span><span style="grid-column:span 2">MAX SPEED</span></div>
-    <div class="rs-tr rs-th" style="grid-template-columns:${tpl}"><span>Players</span>${mc.map(([, l]) => `<span>${l}</span>`).join('')}<span></span>${wk.map(([, l]) => `<span>${l}</span>`).join('')}<span></span><span>Days</span><span>This week</span></div>`;
+// ---------------------------------------------------------------- last page: today vs his usual MD + his microcycle so far
+/** As the site's Training › Sessions table (his ask, 2026-10-12): each player's z today on the seven metrics, then his
+ * microcycle since the last match on four of them — the bar cut in one piece per MD, each piece in the colour of its
+ * own day, a black tick at his usual for those days, and the z of his total. */
+const RS_MDZ = [['td', 'TD'], ['d15', '>15'], ['hit', '>20'], ['spr', '>25'], ['spr_n', 'Sprints'], ['acc_dec', 'Acc+Dec'], ['srpe', 'sRPE']];
+const RS_MC = [['td', 'TOTAL DISTANCE'], ['hit', 'DISTANCE > 20 km/h'], ['acc_dec', 'ACC + DEC'], ['spr_n', 'SPRINTS']];
+function rsMcBar(parts, z, k) {
+  const live = (parts || []).filter((d) => d), done = live.reduce((a, d) => a + (d[0] || 0), 0), exp = live.reduce((a, d) => a + (d[1] || 0), 0);
+  if (!live.length) return '<div class="mcb"><b>–</b><div class="mcb-bar"></div><span class="mz na">—</span></div>';
+  const scale = Math.max(done, exp, 1) * 1.15, shown = live.filter((d) => d[0] > 0);
+  let x = 0;
+  const segs = shown.map((d) => { const left = x; x += d[0];
+    return `<i class="${d === shown[shown.length - 1] ? 'last' : ''}" style="left:${(left / scale * 100).toFixed(2)}%;width:${(d[0] / scale * 100).toFixed(2)}%;background:${ST_DOT[stMz(d[2])] || '#aeaeb2'}"></i>`; }).join('');
+  return `<div class="mcb"><b>${k === 'td' ? stK(done) : Math.round(done).toLocaleString('en-US')}</b><div class="mcb-bar">${segs}${exp > 0 ? `<em style="left:${(exp / scale * 100).toFixed(2)}%"></em>` : ''}</div>${stChip(z)}</div>`;
+}
+function rsToday(D, C, s, S) {
+  const mk = S.md_keys || [], tpl = '150px repeat(7, 46px) 50px 6px repeat(4, minmax(0, 1fr))', md = (C.X.micro && C.X.micro.md) || [];
+  const rowH = rpRowH(D, D.fullSession, RP_TABLE_H - 41, 25), ki = (k) => S.keys.indexOf(k);
+  let html = `<div class="rs-tbl rs-day${rowH < 21 ? ' rp-tight' : ''}"><div class="rs-tr rs-gh" style="grid-template-columns:${tpl}"><span></span><span style="grid-column:span 8">TODAY · VS HIS USUAL ${rpEsc(s.md || '')}</span><span></span>
+      <span style="grid-column:span 4">MICROCYCLE SO FAR · ${md.map(rpEsc).join(' · ')}</span></div>
+    <div class="rs-tr rs-th" style="grid-template-columns:${tpl}"><span>Players</span>${RS_MDZ.map(([, l]) => `<span>${l}</span>`).join('')}<span>Reference</span><span></span>${RS_MC.map(([, l]) => `<span class="l">${l}</span>`).join('')}</div>`;
   for (const p of D.positions.order) {
     const g = D.fullSession.filter((r) => D.players[r.name] === p).sort((a, b) => a.name.localeCompare(b.name));
     if (!g.length) continue;
     html += `<div class="rp-grp">${p}<small>${rpEsc(D.positions.labels[p])}</small></div>`;
     html += g.map((r) => {
-      const x = C.px(r.name) || {}, [dbg, dfg] = rpDaysColor(r.days), wrec = wkRec.has(r.name); // ★ a new max-speed record this week
-      return `<div class="rs-tr rs-row" style="grid-template-columns:${tpl};height:${rowH}px"><span class="rp-nm">${rpFace(D, r.name)}${rpEsc(r.name)}</span>${mc.map(([k]) => `<span>${stChip(C.mc(r.name, k))}</span>`).join('')}<span></span>${wk.map(([k]) => `<span>${rsWeekCell(C.wv(r.name, k), C.wk(r.name, k))}</span>`).join('')}<span></span>
-        <span><span class="mz" style="background:${dbg};color:${dfg}">${r.days ?? '–'}</span></span><span class="rs-v">${x.vmax != null ? x.vmax.toFixed(1) + ' km/h' : '–'}${wrec ? rpRec({ rec: true }) : ''}</span></div>`;
+      const x = C.px(r.name) || {}, z = x.mdz || [], src = x.src;
+      return `<div class="rs-tr rs-row" style="grid-template-columns:${tpl};height:${rowH}px"><span class="rp-nm">${rpFace(D, r.name)}${rpEsc(r.name)}</span>${RS_MDZ.map(([k]) => `<span>${stChip(z[mk.indexOf(k)])}</span>`).join('')}
+        <span class="rs-src">${!src || !src[0] ? '–' : src[0] === 'own' ? `his ${src[1]}` : 'squad'}${x.comp ? ' comp.' : ''}</span><span></span>${RS_MC.map(([k]) => `<span>${rsMcBar((x.parts || [])[ki(k)], (x.mc || [])[ki(k)], k)}</span>`).join('')}</div>`;
     }).join('');
   }
-  return html + `</div><div class="rp-legend">${ST_LEG5}<span>Week so far: value · bar and number = z vs the same days of his previous weeks</span><span>Days = days since his last run ≥ 90 % of max speed</span>${wkRec.size ? '<span><i class="rp-rec">★</i> his fastest of the last 12 months this week</span>' : ''}</div>`;
-}
-/** A week-so-far cell: his value, a bar from the middle (right = above his usual, left = below; full width = 3 SD) and z. */
-function rsWeekCell(v, z) {
-  if (v == null) return '<div class="rs-wc"><span class="v">–</span></div>';
-  const val = Math.round(v).toLocaleString('en-US');
-  if (z == null) return `<div class="rs-wc"><span class="v">${val}</span><span class="rs-zb"><i class="mid"></i></span><span class="z"></span></div>`;
-  const w = Math.min(Math.abs(z), 3) / 3 * 50;
-  return `<div class="rs-wc"><span class="v">${val}</span><span class="rs-zb"><i class="mid"></i><i style="${z < 0 ? 'right:50%' : 'left:50%'};width:${w.toFixed(1)}%;background:${stZCol(z)}"></i></span><span class="z" style="color:${stZCol(z)}">${stSigned(z)}</span></div>`;
+  return html + `</div><div class="rp-legend">${ST_LEG5}<span>Today: z vs his own sessions of that MD (the squad's when he has fewer than 5)</span>
+    <span><span class="mcb-key"><i></i><i></i></span>microcycle: one piece of the bar per day since the last match, in the colour of that day · <em class="mcb-tick"></em>his usual for those days · the number = the z of his total</span></div>`;
 }
 
 /** The staff report pages (same 1290 × 790 pages and PDF as the players' report). */
@@ -232,6 +238,6 @@ function rpStaffPages(D, S) {
   pages.push(rpHeader('TEAM · MICROCYCLE · OBJECTIVES UNTIL THE MATCH',
     `${short(first)}${toMatch ? ' – ' + short(toMatch) : ''} · ${X.profile.length ? `done up to ${s.md} (${stDay(s.date, { weekday: 'short', day: 'numeric' })})` : 'objectives until the match'}`,
     [['MICROCYCLE', cycle], ['WEEK', s.week], ['NEXT', X.next ? [X.next.competition, X.next.opponent].filter(Boolean).join(' · ') : '—']]) + rsMicro(C));
-  pages.push(rpHeader('MICROCYCLE & WEEK · PLAYER BY PLAYER', title, [['MD', s.md], ['MICROCYCLE', cycle], ['PLAYERS', String(D.fullSession.length)]]) + rsCycle(D, C, s));
+  pages.push(rpHeader('TODAY & MICROCYCLE · PLAYER BY PLAYER', title, [['MD', s.md], ['MICROCYCLE', cycle], ['PLAYERS', String(D.fullSession.length)]]) + rsToday(D, C, s, S));
   return pages.map((p) => `<div class="rp-page rp-staff">${p}</div>`).join('');
 }

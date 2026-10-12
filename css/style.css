@@ -1154,6 +1154,12 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .rs-gh span[style] { border-bottom: 2px solid var(--rp-navy); padding-bottom: 3px; }
 .rs-row { height: 25px; border-bottom: 1px solid var(--rp-rule); font-size: 12px; text-align: center; }
 .rs-row .rp-nm { text-align: left; }
+/* the staff report's last page: today's z + the microcycle bars (the site's Sessions table) */
+.rs-day .rs-th .l { text-align: left; padding-left: 4px; } .rs-day .rs-src { font-size: 10px; color: var(--rp-muted); white-space: nowrap; }
+.rs-day .rs-row .mz { min-width: 40px; padding: 2px 4px; font-size: 11.5px; border-radius: 6px; } .rs-day.rp-tight .rs-row .mz { padding: 1px 4px; font-size: 11px; }
+.rs-day .mcb { grid-template-columns: 40px minmax(60px, 1fr) 42px; gap: 6px; text-align: left; } .rs-day .mcb > b { font-size: 11.5px; }
+.rs-day .mcb-bar { height: 11px; background: #eef0f4; } .rs-day .mcb-bar i { box-shadow: inset -1.5px 0 0 #fff; } .rs-day .mcb-bar i.last { box-shadow: none; } .rs-day .mcb-bar em { background: #111; }
+.rs-day.rp-tight .mcb-bar { height: 9px; }
 .rs-v { font-size: 11.5px; font-weight: 700; }
 #view-reports .rp-msg { max-width: 640px; }
 .rp-data { max-width: 760px; margin: 0 auto; padding: 18px 20px; display: grid; gap: 14px; }
