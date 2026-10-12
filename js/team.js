@@ -230,6 +230,9 @@ function tmWeekOpen(start) {
   const far = ds.flatMap((d) => ['td', 'hit'].map((k) => ({ d, k, r: zDay(d, k) }))).filter((x) => x.r && x.r.z != null && Math.abs(x.r.z) >= 1.5).sort((a, b) => Math.abs(b.r.z) - Math.abs(a.r.z));
   [...new Set(far.map((x) => x.d))].slice(0, 3).forEach((d) => { const xs = far.filter((x) => x.d === d), x = B.sess[d];
     why.push(`<b>${fmtDay(d, { weekday: 'long', day: 'numeric', month: 'short' })} (${escapeHtml(x.md || '')})</b> ${xs[0].r.z > 0 ? 'above' : 'below'} its usual ${x.kind === 'match' ? 'match' : escapeHtml(x.md || 'day')}: ${xs.map((y) => `${y.k === 'td' ? 'distance' : '> 20 km/h'} ${fmtN(val(d, y.k))} vs ${fmtN(y.r.p25)}–${fmtN(y.r.p75)} (z ${tmS(y.r.z)})`).join(', ')}.`); });
+  // wellness: the week = the average of its mornings, against the other full weeks' averages
+  const wSt = tmStats(others.map((x) => B.wellOf(x.start, x.end)).filter(Boolean).map((o) => o.v)), wZ = W.done && wAvg != null ? tmZof(wAvg, wSt) : null;
+  if (wZ != null && Math.abs(wZ) >= 1) why.push(`<b>Wellness ${Math.round(wAvg)} %</b> ${wZ > 0 ? 'above' : 'below'} its usual week (${Math.round(wSt.p25)}–${Math.round(wSt.p75)} %, z ${tmS(wZ)}).`);
   const comps = ds.filter((d) => kindOf(d) === 'comp');
   if (comps.length) why.push(`${comps.map((d) => fmtDay(d, { weekday: 'short', day: 'numeric' })).join(', ')}: compensatory session for the players who did not play — the team (the starters, recovering) counts 0 that day, as in your Team rule.`);
 
@@ -240,6 +243,10 @@ function tmWeekOpen(start) {
       return `<i class="${d === live[live.length - 1] ? 'last' : ''}" style="left:${(left / scale * 100).toFixed(2)}%;width:${wd.toFixed(2)}%;background:${TM_ZCOL[tmZ(r ? r.z : null)]}" title="${escapeHtml(`${fmtDay(d, { weekday: 'short', day: 'numeric', month: 'short' })}${md ? ' · ' + md : ''}: ${fmtN(v)}${r ? ` · usual ${fmtN(r.p25)}–${fmtN(r.p75)}${r.z == null ? '' : ' · z ' + tmS(r.z)}` : ''}`)}"><span>${tag(d, wd)}</span></i>`; }).join('')}</div>`; };
   const chip = (z) => `<span class="mz ${tmZ(z)}">${z == null ? '—' : tmS(z)}</span>`;
   const rows = M.map((m) => `<div class="tw-m"><span class="n">${m.l}</span><span class="v">${tmK(m.v)}${m.u ? ` <small class="muted">${m.u}</small>` : ''}</span>${bar(m)}<span class="c">${chip(m.z)}</span><span class="u">${m.st.p25 == null ? '' : `usual ${tmK(m.st.p25)}–${tmK(m.st.p75)}`}</span><span class="c">${m.ac == null ? '—' : `<span class="tm-acchip" style="background:${tmZone(m.ac)[0]}">${m.ac.toFixed(2)}</span>`}</span></div>`).join('');
+  // wellness is not a sum: one cell per day (its MD and the team score of that morning, in the colour of its zone)
+  const mdOf = (d) => { const md = (B.sess[d] && B.sess[d].md) || ''; return kindOf(d) === 'match' ? 'G' : /^MD[+-]\d$/.test(md) ? md : ''; };
+  const wRow = !wv.length && wSt.p25 == null ? '' : `<div class="tw-m"><span class="n">Wellness</span><span class="v">${wAvg == null ? '—' : Math.round(wAvg)} <small class="muted">%</small></span><div class="tw-days">${ds.map((d) => { const o = B.well[d], md = mdOf(d);
+    return `<i class="${o ? '' : 'no'}"${o ? ` style="background:${tmWell(o.v)}"` : ''} title="${escapeHtml(`${fmtDay(d, { weekday: 'short', day: 'numeric', month: 'short' })}${md ? ' · ' + md : ''}: ${o ? `${Math.round(o.v)} % · ${o.n} check-ins` : 'no check-in'}`)}">${md ? `<small>${md}</small>` : ''}${o ? Math.round(o.v) : d > asOf ? '' : '–'}</i>`; }).join('')}</div><span class="c">${chip(wZ)}</span><span class="u">${wSt.p25 == null ? '' : `usual ${Math.round(wSt.p25)}–${Math.round(wSt.p75)} %`}</span><span class="c"></span></div>`;
   const cell = (d, k) => { const v = val(d, k), r = zDay(d, k); return `<td>${v > 0 ? fmtN(v) : '—'}${r && r.z != null ? chip(r.z) : v > 0 ? '<span class="mz na">—</span>' : ''}</td>`; };
   const KL = { train: 'Training', match: 'Match', comp: 'Compensatory', off: 'No team session', later: 'Not yet' };
   const dayRows = ds.map((d) => { const x = B.sess[d], k = kindOf(d), o = B.well[d];
@@ -255,7 +262,8 @@ function tmWeekOpen(start) {
       <div class="sv-nav"><button type="button" data-wk="${prev ? prev.start : ''}" ${prev ? '' : 'disabled'}>‹ ${prev ? prev.label : ''}</button><button type="button" data-wk="${next ? next.start : ''}" ${next ? '' : 'disabled'}>${next ? next.label : ''} ›</button><button type="button" class="sv-x" aria-label="Close">×</button></div></div>
     <div class="tw-why"><b class="t">Why this week is where it is</b>${head}${why.length ? `<ul>${why.map((x) => `<li>${x}</li>`).join('')}</ul>` : ''}</div>
     <div class="tw-card"><h4>The week on each metric<small>the bar = the week, one piece per day: its MD, in the colour of that day vs its usual MD · between the two black lines = usual week · G = match</small></h4>
-      <div class="tw-scroll"><div class="tw-m h"><span>Metric</span><span class="r">Week</span><span>MD by MD</span><span class="c">z</span><span>Usual week</span><span class="c">A:C ${W.done ? 'end' : 'now'}</span></div>${rows}</div></div>
+      <div class="tw-scroll"><div class="tw-m h"><span>Metric</span><span class="r">Week</span><span>MD by MD</span><span class="c">z</span><span>Usual week</span><span class="c">A:C ${W.done ? 'end' : 'now'}</span></div>${rows}${wRow}</div>
+      ${wRow ? '<p class="tw-note">Wellness: one cell per morning, Sunday to Saturday — the team score, green 70 % or more · orange 50–70 · red under 50; the week = the average of its mornings.</p>' : ''}</div>
     <div class="tw-card"><h4>Make-up of the week<small>compared with the season's other full weeks</small></h4><div class="tw-mk">
       <div class="${cls(nM, uM)}"><span>Matches</span><b>${nM}</b><em>usual ${u1(uM)}</em></div><div class="${cls(nT, uT)}"><span>Training days</span><b>${nT}</b><em>usual ${u1(uT)}</em></div>
       <div><span>Days without a team session</span><b>${nO}</b><em>usual ${u1(uO)}</em></div><div><span>Wellness</span><b>${wAvg == null ? '—' : Math.round(wAvg) + ' %'}</b><em>${pl(wv.length, 'morning')}</em></div></div></div>
