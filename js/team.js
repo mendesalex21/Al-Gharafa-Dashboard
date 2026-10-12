@@ -10,7 +10,8 @@
  * (TM.cw) so the type keeps its size; TM.fit = the number of bars that still take a value and a date each.
  */
 const TM = { view: 'week', color: 'z', from: null, to: null };
-const TM_KEYS = [['td', 'Total distance', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr_n', 'Sprints', ''], ['acc_dec', 'High Acc + Dec', ''], ['srpe', 'sRPE', 'AU']];
+// the sprints are judged on their distance (> 25 km/h), not their number (his choice, 2026-10-12); the number stays in the week table
+const TM_KEYS = [['td', 'Total distance', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Sprint distance', 'm'], ['acc_dec', 'High Acc + Dec', ''], ['srpe', 'sRPE', 'AU']];
 const TM_ZCOL = { vlow: '#1d5fae', low: '#7fb0ea', ok: '#34c759', up: '#ff9f0a', vup: '#e5484d', na: '#aeaeb2' };
 const tmZone = (r) => (r == null ? ['#aeaeb2', 'no ratio yet'] : r < 0.5 ? ['#1d5fae', 'under 0.5'] : r < 0.78 ? ['#7fb0ea', 'under 0.78'] : r <= 1.37 ? ['#34c759', 'in the zone 0.78–1.37'] : r <= 1.5 ? ['#ff9f0a', 'above 1.37'] : ['#e5484d', 'above 1.5']);
 const tmZ = (z) => (z == null || Number.isNaN(z) ? 'na' : z <= -2 ? 'vlow' : z <= -1 ? 'low' : z < 1 ? 'ok' : z < 2 ? 'up' : 'vup');
