@@ -1500,6 +1500,11 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .tm-tbl th { font-size: 10.5px; font-weight: 700; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .04em; text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--hairline); }
 .tm-tbl td { text-align: right; padding: 7px 8px; border-bottom: 1px solid var(--hairline); } .tm-tbl th:first-child, .tm-tbl td:first-child, .tm-tbl .l { text-align: left; }
 .tm-tbl .g { padding-right: 16px; } .tm-tbl td .mz { min-width: 40px; padding: 2px 6px; font-size: 12px; } .tm-tbl tr.now td { background: rgba(42, 120, 214, .06); }
+/* the page takes the whole width (two charts per row); its week table in four groups */
+#view-team.wrap { max-width: 1928px; }
+.tm-wide .grp th { text-align: center; color: var(--ink-2); border-bottom: 0; padding-bottom: 0; letter-spacing: .08em; }
+.tm-wide .grp th:not(:first-child), .tm-wide .b { border-left: 1px solid var(--hairline); } .tm-wide .u3 { text-align: left; padding-left: 14px; }
+.tm-wide tr.usu td { color: var(--ink-2); border-bottom: 0; } .tm-wide tr.usu td b { color: var(--ink); }
 .tm-acchip { display: inline-block; min-width: 40px; text-align: center; border-radius: 7px; padding: 2px 6px; font-weight: 700; font-size: 12px; color: #fff; }
 .tm-share { display: flex; height: 11px; border-radius: 4px; overflow: hidden; min-width: 130px; margin-bottom: 2px; } .tm-share i { display: block; }
 /* a week opened (the drawer of the Sessions page's player sheet): why, one bar per metric cut by MD, make-up, day by day */

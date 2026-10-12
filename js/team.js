@@ -6,6 +6,8 @@
  *             a month's average week vs the season's weeks;
  *   A:C     — the ratio that day, at the end of the week, on average over the month.
  * Plus the team's wellness (wellness_history payload), with the number of check-ins under it. A match day has a "G".
+ * The page takes the whole width (his choice, 2026-10-12): two charts per row, each drawn at the real width of its card
+ * (TM.cw) so the type keeps its size; TM.fit = the number of bars that still take a value and a date each.
  */
 const TM = { view: 'week', color: 'z', from: null, to: null };
 const TM_KEYS = [['td', 'Total distance', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr_n', 'Sprints', ''], ['acc_dec', 'High Acc + Dec', ''], ['srpe', 'sRPE', 'AU']];
@@ -38,16 +40,17 @@ function renderTeam() {
   bindSeg('tm-view', (v) => { TM.view = v; drawTeam(); });
   const pick = (id, f) => { document.getElementById(id).onchange = (e) => { if (e.target.value) { tmRange(); TM[f] = e.target.value; if (TM.from > TM.to) TM[f === 'from' ? 'to' : 'from'] = e.target.value; TM.custom = true; drawTeam(); } }; };
   pick('tm-from', 'from'); pick('tm-to', 'to');
+  if (!TM.bound) { TM.bound = true; let timer; window.addEventListener('resize', () => { clearTimeout(timer); timer = setTimeout(drawTeam, 150); }); }
   document.getElementById('tm-reset').onclick = () => { TM.custom = false; TM.from = TM.to = null; drawTeam(); };
   withData('workload', (d) => { WL.data = d; drawTeam(); }, (err) => { root.innerHTML = loadError(err); });
   withData('sessions', (d) => { TR.sessions = d; drawTeam(); }, () => {}); // each day's MD and its usual (z-score)
   withData('wellness_history', (d) => { TM.well = d; drawTeam(); }, () => {});
 }
 
-/** The dates shown: his choice, else the last 5 weeks (Day), the last 12 weeks (Week), the season (Month). */
+/** The dates shown: his choice, else the last 5 weeks (Day), the weeks that fit — 12 or more (Week), the season (Month). */
 function tmRange() {
   const t = WL.data.team, asOf = WL.data.as_of;
-  if (!TM.custom) { TM.to = asOf; TM.from = TM.view === 'day' ? addDays(asOf, -34) : TM.view === 'week' ? addDays(asOf, -7 * 12 + 1) : t.start; }
+  if (!TM.custom) { TM.to = asOf; TM.from = TM.view === 'day' ? addDays(asOf, -34) : TM.view === 'week' ? addDays(asOf, -7 * Math.max(12, TM.fit || 12) + 1) : t.start; }
   if (TM.from < t.start) TM.from = t.start;
   if (TM.to > asOf) TM.to = asOf;
   return [TM.from, TM.to];
@@ -68,7 +71,7 @@ function tmBuild() {
 }
 /** One chart: bars, and under them on the same x a strip — the A:C line in its zones, or small bars (check-ins). */
 function tmChart(o) {
-  const W = 548, padL = 44, padR = 12, H1 = 168, top = 20, gap = 30, H2 = 60, n = o.items.length || 1, bw = (W - padL - padR) / n;
+  const W = o.W || TM.cw || 548, cap = W > 700 ? 40 : 34, padL = 44, padR = 12, H1 = W > 700 ? 180 : 168, top = 20, gap = 30, H2 = 60, n = o.items.length || 1, bw = (W - padL - padR) / n;
   const max = o.max || Math.max(...o.items.map((x) => Math.max(x.v || 0, x.hi || 0)), o.band ? o.band[1] : 0) * 1.14 || 1;
   const Y = (v) => top + H1 - (v / max) * H1, X = (i) => padL + i * bw + bw / 2, y2 = top + H1 + gap, R = (r) => y2 + H2 - (Math.min(r, 2) / 2) * H2;
   const raw = max / 4, mag = 10 ** Math.floor(Math.log10(raw)), st = [1, 2, 2.5, 5, 10].map((f) => f * mag).find((f) => f >= raw);
@@ -76,7 +79,7 @@ function tmChart(o) {
   for (let g = 0; g <= max + 1e-9; g += st) s += `<line x1="${padL}" x2="${W - padR}" y1="${Y(g)}" y2="${Y(g)}" class="tm-gl"/><text x="${padL - 6}" y="${Y(g) + 3.5}" class="tm-ax" text-anchor="end">${tmK(g)}</text>`;
   if (o.band) s += `<rect x="${padL}" y="${Y(o.band[1])}" width="${W - padL - padR}" height="${Y(o.band[0]) - Y(o.band[1])}" class="tm-band"/>`;
   o.items.forEach((x, i) => {
-    const w = Math.max(3, Math.min(34, bw * 0.68)), cx = X(i);
+    const w = Math.max(3, Math.min(cap, bw * 0.68)), cx = X(i);
     if (x.sep) s += `<line x1="${cx - bw / 2}" x2="${cx - bw / 2}" y1="${top}" y2="${y2 + H2}" class="tm-sep"/>`;
     if (x.hi != null) s += `<rect x="${cx - w / 2 - 2}" y="${Y(x.hi)}" width="${w + 4}" height="${Math.max(1.5, Y(x.lo) - Y(x.hi))}" class="tm-usual"/>`;
     if (x.v > 0) s += `<rect x="${cx - w / 2}" y="${Y(x.v)}" width="${w}" height="${top + H1 - Y(x.v)}" rx="${Math.min(4, w / 3)}" fill="${x.col}"${x.soft ? ' opacity=".55"' : ''}><title>${escapeHtml(x.tip || '')}</title></rect>`;
@@ -89,7 +92,7 @@ function tmChart(o) {
   if (o.strip === 'count') { // the check-ins of each day (wellness)
     const mx = Math.max(1, ...o.items.map((x) => x.n || 0));
     s += `<text x="${padL}" y="${y2 - 8}" class="tm-cap">CHECK-INS</text><line x1="${padL}" x2="${W - padR}" y1="${y2 + H2}" y2="${y2 + H2}" class="tm-gl"/>`;
-    o.items.forEach((x, i) => { if (x.n > 0) { const w = Math.max(3, Math.min(34, bw * 0.68)), h = (x.n / mx) * (H2 - 14); s += `<rect x="${X(i) - w / 2}" y="${y2 + H2 - h}" width="${w}" height="${h}" rx="2" class="tm-cnt"><title>${Math.round(x.n)} check-ins</title></rect>`;
+    o.items.forEach((x, i) => { if (x.n > 0) { const w = Math.max(3, Math.min(cap, bw * 0.68)), h = (x.n / mx) * (H2 - 14); s += `<rect x="${X(i) - w / 2}" y="${y2 + H2 - h}" width="${w}" height="${h}" rx="2" class="tm-cnt"><title>${Math.round(x.n)} check-ins</title></rect>`;
       if (o.dots) s += `<text x="${X(i)}" y="${y2 + H2 - h - 4}" class="tm-pt" text-anchor="middle">${Math.round(x.n)}</text>`; } });
     return s + '</svg>';
   }
@@ -128,7 +131,12 @@ function tmTiles(B) {
 function drawTeam() {
   const root = document.getElementById('view-team');
   if (!WL.data || !WL.data.team || !root || root.hidden || !document.getElementById('tm-charts')) return;
-  const B = tmBuild(), [from, to] = tmRange(), z = TM.color === 'z', view = TM.view, asOf = B.d.as_of;
+  // the charts are drawn at the width of their card: two per row, one on a phone
+  // (a window without a size yet — a tab opened in the background — keeps the standard chart; the resize redraws it)
+  const two = window.matchMedia('(min-width: 761px)').matches, gridW = document.getElementById('tm-charts').clientWidth;
+  TM.cw = gridW ? Math.max(480, Math.round((gridW - (two ? 16 : 0)) / (two ? 2 : 1) - 36)) : 548;
+  TM.fit = Math.max(8, Math.floor((TM.cw - 56) / 30));
+  const B = tmBuild(), [from, to] = tmRange(), z = TM.color === 'z', view = TM.view, asOf = B.d.as_of, fit = TM.fit;
   document.getElementById('tm-sub').textContent = `Your Team rule (ProTraining, whole-game players, 0 on days off) · data up to ${fmtDay(asOf, { weekday: 'long', day: 'numeric', month: 'long' })} · ${fmtUpdated(B.d.generated_at)}`;
   const fi = document.getElementById('tm-from'), ti = document.getElementById('tm-to');
   fi.min = ti.min = B.t.start; fi.max = ti.max = asOf; fi.value = from; ti.value = to;
@@ -138,7 +146,7 @@ function drawTeam() {
   let cards = '', table = '';
 
   if (view === 'day') {
-    const ds = B.days.filter((x) => x >= from && x <= to), few = ds.length <= 16;
+    const ds = B.days.filter((x) => x >= from && x <= to), few = ds.length <= fit;
     const tick = (x, i) => { const dow = dateOf(x).getUTCDay(); return few ? fmtDay(x, { weekday: 'short', day: 'numeric' }) : dow === 0 || (i === 0 && ds.length < 8) ? fmtDay(x, { day: 'numeric', month: 'short' }) : ''; };
     cards = B.keys.map(([k, l, u]) => `<div class="tm-card">${head(l, `per day${u ? ' · ' + u : ''} · grey box = usual for that MD`)}${tmChart({ title: l, dots: few,
       items: ds.map((x, i) => { const j = B.idx[x], v = B.t.daily[k][j], s = B.sess[x], ok = s && s.group !== 'compensatory' && !(s.kind === 'training' && s.md === 'MD'), r = ok && s.team_ref ? s.team_ref[k] : null, zz = r && v > 0 ? r.z : null, ac = B.t.acwr[k][j];
@@ -153,18 +161,35 @@ function drawTeam() {
   } else if (view === 'week') {
     const ws = B.weeks.filter((w) => w.end >= from && w.start <= to);
     cards = B.keys.map(([k, l, u]) => { const st = tmStats(B.real(k).map((w) => w[k]));
-      return `<div class="tm-card">${head(l, `per week${u ? ' · ' + u : ''}${st.p25 == null ? '' : ` · usual ${tmK(st.p25)}–${tmK(st.p75)}`}`)}${tmChart({ title: l, dots: ws.length <= 16, band: st.p25 == null ? null : [st.p25, st.p75],
+      return `<div class="tm-card">${head(l, `per week${u ? ' · ' + u : ''}${st.p25 == null ? '' : ` · usual ${tmK(st.p25)}–${tmK(st.p75)}`}`)}${tmChart({ title: l, dots: ws.length <= fit, band: st.p25 == null ? null : [st.p25, st.p75],
         items: ws.map((w) => { const ac = w[k] > 0 ? B.acAt(k, w.done ? w.end : asOf) : null, zz = tmZof(w[k], tmStats(B.real(k).filter((x) => x.start !== w.start).map((x) => x[k])));
-          return { v: w[k], go: w.start, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, label: w[k] > 0 ? tmK(w[k]) : ws.length <= 16 ? 'no GPS' : '', tick: ws.length <= 16 || w === ws[ws.length - 1] ? w.label : '', now: !w.done, soft: !w.done,
+          return { v: w[k], go: w.start, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, label: w[k] > 0 ? tmK(w[k]) : ws.length <= fit ? 'no GPS' : '', tick: ws.length <= fit || w === ws[ws.length - 1] ? w.label : '', now: !w.done, soft: !w.done,
             tip: `${w.label} · ${fmtDay(w.start, { day: 'numeric', month: 'short' })}: ${fmtN(w[k])}${zz == null ? '' : ' · z ' + tmS(zz)}${ac == null ? '' : ' · A:C ' + ac.toFixed(2)}` }; }) })}</div>`; }).join('');
     const wst = tmStats(B.weeks.filter((w) => w.done).map((w) => B.wellOf(w.start, w.end)).filter(Boolean).map((o) => o.v));
-    cards += `<div class="tm-card">${head('Wellness', 'average team score of the week · % · green band = 70 % or more')}${tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'count', dots: ws.length <= 16,
-      items: ws.map((w) => { const o = B.wellOf(w.start, w.end), zz = o ? tmZof(o.v, wst) : null; return { v: o ? o.v : 0, n: o ? o.n : 0, go: w.start, col: !o ? '#aeaeb2' : z ? TM_ZCOL[tmZ(zz)] : tmWell(o.v), label: o ? Math.round(o.v) : '', tick: ws.length <= 16 || w === ws[ws.length - 1] ? w.label : '', now: !w.done, soft: !w.done,
+    cards += `<div class="tm-card">${head('Wellness', 'average team score of the week · % · green band = 70 % or more')}${tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'count', dots: ws.length <= fit,
+      items: ws.map((w) => { const o = B.wellOf(w.start, w.end), zz = o ? tmZof(o.v, wst) : null; return { v: o ? o.v : 0, n: o ? o.n : 0, go: w.start, col: !o ? '#aeaeb2' : z ? TM_ZCOL[tmZ(zz)] : tmWell(o.v), label: o ? Math.round(o.v) : '', tick: ws.length <= fit || w === ws[ws.length - 1] ? w.label : '', now: !w.done, soft: !w.done,
         tip: o ? `${w.label}: ${Math.round(o.v)} % on ${o.days} mornings · ${Math.round(o.n)} check-ins a day` : '' }; }) })}</div>`;
-    const rows = ws.slice().reverse().map((w) => `<tr class="tm-go${w.done ? '' : ' now'}" data-wk="${w.start}" tabindex="0" title="Open the detail of ${w.label}"><td><b>${w.label}</b> <span class="muted">${fmtDay(w.start, { day: 'numeric', month: 'short' })}${w.done ? '' : ' · in progress'}</span></td>${B.keys.map(([k]) => { const zz = w[k] > 0 ? tmZof(w[k], tmStats(B.real(k).filter((x) => x.start !== w.start).map((x) => x[k]))) : null, ac = w[k] > 0 ? B.acAt(k, w.done ? w.end : asOf) : null;
-      return `<td>${w[k] > 0 ? tmK(w[k]) : '—'}</td><td>${zz == null ? '' : `<span class="mz ${tmZ(zz)}">${tmS(zz)}</span>`}</td><td class="g">${ac == null ? '' : `<span class="tm-acchip" style="background:${tmZone(ac)[0]}">${ac.toFixed(2)}</span>`}</td>`; }).join('')}<td>${(() => { const o = B.wellOf(w.start, w.end); return o ? `<b style="color:${tmWell(o.v)}">${Math.round(o.v)} %</b>` : '—'; })()}</td></tr>`).join('');
-    table = `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Week by week</h2><span class="panel-note">load · z vs the other full weeks of the season · A:C 7:28 at the end of the week · click a week for its detail day by day</span></div>
-      <div class="table-wrap"><table class="tm-tbl"><thead><tr><th>Week</th>${B.keys.map(([, l]) => `<th>${l.replace('Distance ', '').replace('Total distance', 'Distance').replace('High ', '')}</th><th>z</th><th class="g">A:C</th>`).join('')}<th>Wellness</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+    // the table (his columns, 2026-10-12): the make-up of the week, then each load with its z and A:C — the sprints are
+    // judged on their distance (> 25 km/h), their number beside it
+    const TK = [['td', 'Distance'], ['hit', '&gt; 20 km/h'], ['spr', 'Sprint distance'], ['acc_dec', 'Acc + Dec'], ['srpe', 'sRPE']].filter(([k]) => B.t.daily[k]), has = (k) => TK.some(([x]) => x === k);
+    const mk = (w) => { const ss = Array.from({ length: 7 }, (_, i) => addDays(w.start, i)).filter((x) => x <= asOf).map((x) => B.sess[x]).filter(Boolean);
+      return { train: ss.filter((x) => x.kind !== 'match').length, games: ss.filter((x) => x.kind === 'match').length, min: ss.filter((x) => x.group !== 'compensatory').reduce((a, x) => a + (x.minutes || 0), 0) }; };
+    const main = (w, k) => { if (!has(k)) return ''; const zz = w[k] > 0 ? tmZof(w[k], tmStats(B.real(k).filter((x) => x.start !== w.start).map((x) => x[k]))) : null, ac = w[k] > 0 ? B.acAt(k, w.done ? w.end : asOf) : null;
+      return `<td class="b">${w[k] > 0 ? tmK(w[k]) : '—'}</td><td>${zz == null ? '' : `<span class="mz ${tmZ(zz)}">${tmS(zz)}</span>`}</td><td class="g">${ac == null ? '' : `<span class="tm-acchip" style="background:${tmZone(ac)[0]}">${ac.toFixed(2)}</span>`}</td>`; };
+    const rows = ws.slice().reverse().map((w) => { const e = mk(w), o = B.wellOf(w.start, w.end);
+      return `<tr class="tm-go${w.done ? '' : ' now'}" data-wk="${w.start}" tabindex="0" title="Open the detail of ${w.label}"><td><b>${w.label}</b> <span class="muted">${fmtDay(w.start, { day: 'numeric', month: 'short' })}${w.done ? '' : ' · in progress'}</span></td>
+        <td class="b">${e.train || '—'}</td><td>${e.games || '—'}</td><td>${e.min ? fmtN(e.min) : '—'}</td>${main(w, 'td')}${main(w, 'hit')}${main(w, 'spr')}<td>${w.spr_n > 0 ? fmtN(w.spr_n) : '—'}</td>${main(w, 'acc_dec')}${main(w, 'srpe')}
+        <td class="b">${o ? `<b style="color:${tmWell(o.v)}">${Math.round(o.v)} %</b>` : '—'}</td><td>${o ? Math.round(o.n) : '—'}</td></tr>`; }).join('');
+    const full = B.weeks.filter((w) => w.done && w.td > 0), rng = (xs, f) => { const st = tmStats(xs); return st.p25 == null ? '—' : `${(f || tmK)(st.p25)}–${(f || tmK)(st.p75)}`; };
+    const uM = (k) => (has(k) ? `<td class="b u3" colspan="3">${rng(full.map((w) => w[k]))}</td>` : ''), uE = (f) => rng(full.map((w) => mk(w)[f]), (v) => fmtN(v)), wf = full.map((w) => B.wellOf(w.start, w.end)).filter(Boolean);
+    const usual = full.length < 3 ? '' : `<tr class="usu"><td><b>Usual week</b> <span class="muted">middle half of the ${full.length} full weeks</span></td><td class="b">${uE('train')}</td><td>${uE('games')}</td><td>${uE('min')}</td>${uM('td')}${uM('hit')}${uM('spr')}<td>${rng(full.map((w) => w.spr_n || 0), (v) => fmtN(v))}</td>${uM('acc_dec')}${uM('srpe')}
+        <td class="b">${wf.length ? rng(wf.map((o) => o.v), (v) => Math.round(v)) + ' %' : '—'}</td><td>${wf.length ? rng(wf.map((o) => o.n), (v) => Math.round(v)) : '—'}</td></tr>`;
+    const m3 = (k, l) => (has(k) ? `<th class="b">${l}</th><th>z</th><th class="g">A:C</th>` : ''), n3 = (...ks) => 3 * ks.filter(has).length;
+    table = `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Week by week</h2><span class="panel-note">z vs the other full weeks of the season · A:C 7:28 at the end of the week · sprints: z and A:C on their distance (&gt; 25 km/h) · click a week for its detail day by day</span></div>
+      <div class="table-wrap"><table class="tm-tbl tm-wide"><thead>
+        <tr class="grp"><th></th><th colspan="${3 + n3('td')}">Volume</th><th colspan="${1 + n3('hit', 'spr')}">Speed</th><th colspan="${n3('acc_dec')}">Accelerations</th><th colspan="${2 + n3('srpe')}">Internal load &amp; wellness</th></tr>
+        <tr><th>Week</th><th class="b">Sessions</th><th>Matches</th><th>Minutes</th>${m3('td', 'Distance')}${m3('hit', '&gt; 20 km/h')}${m3('spr', 'Sprint distance')}<th>Sprints</th>${m3('acc_dec', 'Acc + Dec')}${m3('srpe', 'sRPE')}<th class="b">Wellness</th><th>Check-ins</th></tr></thead>
+        <tbody>${rows}${usual}</tbody></table></div></section>`;
   } else {
     const months = [...new Set(B.days.filter((x) => x >= from && x <= to).map((x) => x.slice(0, 7)))], cur = asOf.slice(0, 7);
     const lab = (m) => fmtDay(m + '-15', { month: 'short' }) + (m === cur ? ' · so far' : '');
