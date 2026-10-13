@@ -33,6 +33,10 @@ const header = (kicker) => rpHeader(kicker, title, meta);
 const reading = (f) => (f ? f.reading : null);
 const RD = { drop: ['dropped more than usual', '#c4282d', '#fde8e8'], usual: ['as usual', '#5b6072', '#eef0f4'], held: ['held better than usual', '#17753a', '#d9f5e1'] };
 const dropped = PL.filter((p) => reading(p.fat) === 'drop'), held = PL.filter((p) => reading(p.fat) === 'held');
+/** The opponent's crest in a chart (the club logos of the site), or his initials in a grey disc. */
+const crest = (opp, cx, y, sz = 26) => { const slug = typeof clubSlug === 'function' ? clubSlug(opp) : null;
+  return slug && typeof CLUB_LOGOS !== 'undefined' && CLUB_LOGOS.has(slug) ? `<image href="img/clubs/${slug}.png" x="${cx - sz / 2}" y="${y}" width="${sz}" height="${sz}" preserveAspectRatio="xMidYMid meet"/>`
+    : `<circle cx="${cx}" cy="${y + sz / 2}" r="${sz / 2 - 1}" fill="#eef0f4"/><text x="${cx}" y="${y + sz / 2 + sz * 0.13}" font-size="${(sz * 0.33).toFixed(1)}" font-weight="800" fill="#6a6f80" text-anchor="middle">${esc(typeof clubInitials === 'function' ? clubInitials(opp) : '?')}</text>`; };
 const STOP = new Set((M.stop || []).map((i) => i - 1)), stopLab = [...STOP].map((i) => L[i] + '\'').join(', ');
 const nocuts = PL.filter((p) => !p.cuts && p.min >= 20), partcuts = PL.filter((p) => p.cuts && p.min - p.cuts_min >= 15);
 
@@ -197,9 +201,6 @@ function pageL5() {
   const MET = [['td', 'TOTAL DISTANCE', '#6fb0ee', 'm'], ['hit', 'DISTANCE > 20 KM/H', '#ea8a63', 'm'], ['acc_dec', 'ACCELERATION + DECELERATION', '#6fcf4b', ''], ['spr_n', 'NUMBER OF SPRINTS > 25 KM/H', '#ee8f9c', '']];
   const G = M.team5, prev = G.filter((g) => !g.cur), cur = G.find((g) => g.cur);
   const ZC = { below: '#2a78d6', on: '#34c759', above: '#ff9f0a', high: '#e5484d' }, lvl = (z) => (z == null ? null : z <= -1 ? 'below' : z < 1 ? 'on' : z < 2 ? 'above' : 'high');
-  const crest = (g, cx, y) => { const slug = typeof clubSlug === 'function' ? clubSlug(g.opp) : null;
-    return slug && typeof CLUB_LOGOS !== 'undefined' && CLUB_LOGOS.has(slug) ? `<image href="img/clubs/${slug}.png" x="${cx - 13}" y="${y}" width="26" height="26" preserveAspectRatio="xMidYMid meet"/>`
-      : `<circle cx="${cx}" cy="${y + 13}" r="12" fill="#eef0f4"/><text x="${cx}" y="${y + 16.5}" font-size="8.5" font-weight="800" fill="#6a6f80" text-anchor="middle">${esc(typeof clubInitials === 'function' ? clubInitials(g.opp) : '?')}</text>`; };
   const chart = ([k, label, , unit]) => { const W = 593, H = 168, x0 = 20, y0 = 40, step = (W - x0 * 2) / G.length, bw = Math.min(54, step * 0.6);
     const avg = prev.reduce((a, g) => a + (g[k] || 0), 0) / (prev.length || 1), d = avg ? Math.round(100 * (cur[k] / avg - 1)) : null;
     const mx = Math.max(1, avg, ...G.map((g) => g[k] || 0)) * 1.2, Y = (v) => y0 + H - (v / mx) * H, f = (v) => (k === 'td' || k === 'hit' ? N(Math.round(v)) : N(v, Number.isInteger(v) ? 0 : 1));
@@ -211,12 +212,12 @@ function pageL5() {
       bars.push(`<rect x="${cx - bw / 2}" y="${Y(v)}" width="${bw}" height="${y0 + H - Y(v)}" rx="3" fill="${col}"/>`);
       labels.push(`<text x="${cx}" y="${Y(v) - (lv && lv !== 'on' ? 16 : 5)}" font-size="11" font-weight="${g.cur ? 800 : 600}" fill="${g.cur ? '#111' : '#5b6072'}" stroke="#fff" stroke-width="3.5" paint-order="stroke" text-anchor="middle">${f(v)}</text>`
         + (lv && lv !== 'on' ? `<text x="${cx}" y="${Y(v) - 4}" font-size="9.5" font-weight="800" fill="${col}" stroke="#fff" stroke-width="3" paint-order="stroke" text-anchor="middle">${sg(z, 1)}</text>` : ''));
-      s += crest(g, cx, y0 + H + 6) + `<text x="${cx}" y="${y0 + H + 46}" font-size="10" font-weight="${g.cur ? 800 : 700}" fill="#16269e" text-anchor="middle">${dlab(g.date)}</text><text x="${cx}" y="${y0 + H + 59}" font-size="9.5" fill="${g.cur ? '#111' : '#8a90a2'}" font-weight="${g.cur ? 700 : 400}" text-anchor="middle">${esc(g.opp)}</text>`; });
+      s += crest(g.opp, cx, y0 + H + 6) + `<text x="${cx}" y="${y0 + H + 46}" font-size="10" font-weight="${g.cur ? 800 : 700}" fill="#16269e" text-anchor="middle">${dlab(g.date)}</text><text x="${cx}" y="${y0 + H + 59}" font-size="9.5" fill="${g.cur ? '#111' : '#8a90a2'}" font-weight="${g.cur ? 700 : 400}" text-anchor="middle">${esc(g.opp)}</text>`; });
     // bars, then the average line, then the values on top of it
     return s + bars.join('') + `<line x1="${x0 + 4}" x2="${W - x0 + 6}" y1="${Y(avg)}" y2="${Y(avg)}" stroke="#16269e" stroke-width="2" stroke-dasharray="5 3"/>` + labels.join('') + `<line x1="0" x2="${W}" y1="${y0 + H}" y2="${y0 + H}" stroke="#dfe2ea"/></svg>`; };
   return `<div class="rp-page">${header('MATCH REPORT · STAFF · THE TEAM AND ITS LAST 5 MATCHES')}
     <div class="mp-row" style="grid-template-columns:1fr 1fr;gap:14px 40px;flex:1;align-content:start;padding-top:4px">${MET.map(chart).join('')}</div>
-    <div class="mp-legend"><span>Colour = the team's z vs its usual match:</span>${[['below', 'below usual'], ['on', 'usual'], ['above', 'above'], ['high', 'well above']].map(([c, l]) => `<span><b style="background:${ZC[c]}"></b>${l}</span>`).join('')}
+    <div class="mp-legend"><span>Colour = each match against the team's usual match of today (z):</span>${[['below', 'below usual'], ['on', 'usual'], ['above', 'above'], ['high', 'well above']].map(([c, l]) => `<span><b style="background:${ZC[c]}"></b>${l}</span>`).join('')}
       <span>· z printed when not usual · last bar = this match · dashed line = the average of the last ${prev.length} matches · team = the players who played the whole match (your Team rule)</span></div></div>`;
 }
 
@@ -249,18 +250,18 @@ function pageTrend() {
   if (!ps.length) return '';
   const tall = ps.length <= 9;
   const mini = (p, k, label) => { const W = 178, H = tall ? 92 : 62, y0 = 16, xs = p.trend, n = xs.length, step = (W - 8) / 6, u = p.fat.usual[k], lo = -45, Y = (v) => y0 + (Math.max(lo, Math.min(0, v)) / lo) * H;
-    let g = `<svg class="mp-svg" width="${W}" height="${y0 + H + 16}" viewBox="0 0 ${W} ${y0 + H + 16}"><text x="0" y="9" font-size="9" font-weight="800" fill="#a52a2a">${label}</text><line x1="0" x2="${W}" y1="${y0}" y2="${y0}" stroke="#c4c7cf"/>`;
+    let g = `<svg class="mp-svg" width="${W}" height="${y0 + H + 24}" viewBox="0 0 ${W} ${y0 + H + 24}"><text x="0" y="9" font-size="9" font-weight="800" fill="#a52a2a">${label}</text><line x1="0" x2="${W}" y1="${y0}" y2="${y0}" stroke="#c4c7cf"/>`;
     xs.forEach((m, i) => { const v = m[k], cx = 4 + step * (6 - n + i) + step / 2, last = i === n - 1; if (v == null) return;
       const z = u && u.sd ? (v - u.mean) / u.sd : 0, col = last ? (z <= -1 ? '#e5484d' : z >= 1 ? '#34a853' : '#5b6072') : '#c9cdd8';
       g += `<rect x="${cx - 9}" y="${y0}" width="18" height="${Math.max(1, Y(v) - y0)}" rx="2" fill="${col}"/><text x="${cx}" y="${Y(v) + 10}" font-size="8.5" font-weight="${last ? 800 : 600}" fill="${last ? '#111' : '#8a90a2'}" text-anchor="middle">${Math.round(v)}</text>
-        <text x="${cx}" y="${y0 + H + 13}" font-size="8" fill="${last ? '#16269e' : '#9aa0ae'}" font-weight="${last ? 800 : 400}" text-anchor="middle">${dlab(m.date).replace(' ', '')}</text>`; });
+        ${crest(m.opp, cx, y0 + H + 4, 18)}`; });
     if (u) g += `<line x1="0" x2="${W}" y1="${Y(u.mean)}" y2="${Y(u.mean)}" stroke="#16269e" stroke-width="1.5" stroke-dasharray="4 2"/>`;
     return g + '</svg>'; };
   const slide = (p) => { const u = p.fat.usual.lchg, xs = p.trend.map((m) => m.lchg).filter((v) => v != null).slice(-3); return u && xs.length === 3 && xs.every((v) => v < u.mean - 1) ? '<span class="mp-pill" style="color:#c4282d;background:#fde8e8">3 matches under his usual</span>' : ''; };
   const card = (p) => `<div class="mp-card"><div class="h"><span class="mp-nm" style="padding:0">${face(p.id)}${esc(p.name)}<small>${p.trend.length} matches</small></span>${slide(p)}</div><div class="g">${mini(p, 'lchg', "LAST 20' vs FIRST 20' · M/MIN · %")}${mini(p, 'adchg', "LAST 20' vs FIRST 20' · ACC + DEC · %")}</div></div>`;
   return `<div class="rp-page">${header(idea(4, 'HIS END OF MATCH, MATCH AFTER MATCH'))}
     <div class="mp-cards">${ps.map(card).join('')}</div>
-    <div class="mp-legend"><span>Each bar = one of his last whole matches (the deeper, the bigger his drop at the end) · dashed line = his usual · last bar = this match: red when he dropped more than his usual, green when less · a red label = three matches in a row under his usual</span></div></div>`;
+    <div class="mp-legend"><span>Each bar = one of his last whole matches, oldest first, with the opponent's crest (the deeper, the bigger his drop at the end) · dashed line = his usual · last bar = this match: red when he dropped more than his usual, green when less · a red label = three matches in a row under his usual</span></div></div>`;
 }
 
 /* ---------------------------------------------------------------- his staff pages 1-3 for the match, then the halves */
