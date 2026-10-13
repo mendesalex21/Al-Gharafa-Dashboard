@@ -366,7 +366,11 @@ function rpHash() {
  * who did not play) as it is — he keeps it in the Staff section too (2026-10-13); a B-team game: none. */
 function rpStaffState(D) {
   const s = RP.data.sessions[RP.idx];
-  if (RP.part === 'x' && D.session.extra) return { html: rpPages(D), extra: true };
+  if (RP.part === 'x' && D.session.extra) { // the players who did not play: the staff report of a training session, on their session
+    if (!RP.staff) return { wait: 'staff_report' };
+    const X = RP.staff.extra && RP.staff.extra[D.session.date];
+    return X ? { html: rpStaffPages(D, { ...RP.staff, days: { [D.session.date]: X } }), extra: true, staffx: true } : { html: rpPages(D), extra: true };
+  }
   if (s.type === 'match' && RP.part !== 'b' && RP.part !== 'x') {
     if (!RP.match) return { wait: 'match_report' };
     const html = rpMatchStaffPages(D, RP.match);
@@ -697,9 +701,9 @@ async function rpPrint() {
   let host = null;
   try {
     const D = rpDoc(RP.data, RP.idx, RP.part);
-    const ready = !!D.session.extra; // a match day's extra session is printed online too (the same report in Players and in Staff)
-    const game = RP.version === 'staff' && !!rpStaffState(D).game; // a match day's staff report: Game 10min
-    const file = ready ? `${D.session.id}_${D.session.date}_Extra_session.pdf` : game ? `${D.session.id}_${D.session.date}_Game_10min.pdf`
+    const ready = !!D.session.extra; // a match day's extra session is printed online too
+    const st = RP.version === 'staff' ? rpStaffState(D) : {}, game = !!st.game; // a match day's staff report: Game 10min
+    const file = ready ? `${D.session.id}_${D.session.date}_Extra_session${st.staffx ? '_Staff_report' : ''}.pdf` : game ? `${D.session.id}_${D.session.date}_Game_10min.pdf`
       : `${D.session.id}_${D.session.date}${D.session.part ? '_' + D.session.part.replace(/\s+/g, '') : ''}_${RP.version === 'staff' ? 'Staff' : 'Training'}_report.pdf`;
     if ((ready || game || !D.session.part) && await rpReadyPdf(file)) return; // ready on the server: no picture of each page to take
     await Promise.all(RP_JS.map(rpScript));

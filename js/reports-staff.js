@@ -221,7 +221,7 @@ function rpStaffPages(D, S) {
   const title = `${s.id} · ${s.dateLabel}`, short = (iso) => stDay(iso, { day: 'numeric', month: 'short' });
   const meta = [['WEEK', s.week], ['MD', s.md], ['TIME', s.time + "'"], ['N EXERCICE', s.exercise], ['AM/PM', s.ampm]];
   const comp = X.group === 'compensatory', anyComp = Object.values(X.players).some((p) => p.comp);
-  const kicker = (comp ? 'COMPENSATORY SESSION' : 'FULL SESSION') + ' · STAFF' + (s.part ? ' · ' + s.part.toUpperCase() : '');
+  const kicker = s.extra ? 'EXTRA SESSION · MATCH DAY · STAFF' : (comp ? 'COMPENSATORY SESSION' : 'FULL SESSION') + ' · STAFF' + (s.part ? ' · ' + s.part.toUpperCase() : '');
   const cycle = (X.cycle || '—').toUpperCase(), pages = [];
   const strip = rsTeamStrip(C, s.md);
   pages.push(rpHeader(kicker, title, meta) + strip + rpTable(D, D.fullSession, ['time', 'rpe', 'mpm', 'td', 'd15', 'd20', 'vmax', 'pmax', 'days', 'sprints', 'accdec'], {}, RP_TABLE_H - (strip ? 73 : 0)));
