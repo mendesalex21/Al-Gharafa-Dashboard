@@ -308,7 +308,7 @@ function renderReports(opts) {
     <div class="rp-preview" id="rp-preview"><div class="panel"><div class="empty">Loading…</div></div></div>`;
   const step = (d) => {
     if (RP.version === 'weekly') { const ws = rwWeeks(RP.data && RP.data.weekly).map((w) => w.ws), k = ws.indexOf(RP.week) - d; if (ws[k]) { RP.week = ws[k]; rpHash(); drawReports(); } return; }
-    const o = (RP.opts || [])[rpOptIndex() + d]; if (o) rpGo(o[0], o[1]);
+    const o = rpOptsNow()[rpOptIndex() + d]; if (o) rpGo(o[0], o[1]);
   };
   document.getElementById('rp-prev').onclick = () => step(-1);
   document.getElementById('rp-next').onclick = () => step(1);
@@ -332,13 +332,18 @@ function renderReports(opts) {
     RP.part = list[RP.idx] ? rpPartOk(list[RP.idx], RP.part) : 'all';
     // newest session first; within a day: all players, the session, the B game
     const byDay = shown.slice().reverse().flatMap((i) => RP.opts.filter((o) => o[0] === i));
-    RP.sessOpts = byDay.map(([i, part]) => `<option value="${i}|${part}">${rpEsc(rpOption(list[i], part))}</option>`).join('');
-    document.getElementById('rp-pick').innerHTML = RP.sessOpts;
+    const opt = ([i, part]) => `<option value="${i}|${part}">${rpEsc(rpOption(list[i], part))}</option>`;
+    RP.sessOpts = byDay.map(opt).join('');
+    RP.staffOpts = byDay.filter(([, part]) => part !== 'x').map(opt).join(''); // the Staff version: no entry for a match day's extra session
+    document.getElementById('rp-pick').dataset.mode = ''; // drawReports fills the list for the version shown
     drawReports();
   }, (err) => { document.getElementById('rp-preview').innerHTML = loadError(err); });
 }
 
-function rpOptIndex() { return (RP.opts || []).findIndex(([i, part]) => i === RP.idx && part === RP.part); }
+/** The entries of the picker for the version shown: the Staff version has nothing for a match day's extra session
+ * (the players who did not play) — its match report, Game 10min, is the match's. */
+function rpOptsNow() { return (RP.opts || []).filter(([, part]) => !(RP.version === 'staff' && part === 'x')); }
+function rpOptIndex() { return rpOptsNow().findIndex(([i, part]) => i === RP.idx && part === RP.part); }
 
 function rpOption(s, part = 'all') {
   const d = new Date(s.date + 'T12:00:00Z');
@@ -391,14 +396,16 @@ function drawReports() {
   if (data) { if (!box.querySelector('.rp-data')) rpDataDraw(); return; } // (re)drawn once: a late reports load must not reset the form
   if (!RP.data) return;
   if (weekly) { rwDraw(); return; }
-  if (pick.dataset.mode !== 'sessions' && RP.sessOpts) { pick.innerHTML = RP.sessOpts; pick.dataset.mode = 'sessions'; }
+  const mode = RP.version === 'staff' ? 'staff' : 'sessions';
+  if (pick.dataset.mode !== mode && RP.sessOpts) { pick.innerHTML = mode === 'staff' ? RP.staffOpts : RP.sessOpts; pick.dataset.mode = mode; }
   const list = RP.data.sessions;
   if (!list.length) { box.innerHTML = `<div class="panel">${emptyState('No sessions this season yet.')}</div>`; return; }
+  if (RP.version === 'staff' && RP.part === 'x') { RP.part = rpPartOk(list[RP.idx], 't'); rpHash(); } // Staff on an extra session → the match of that day
   const D = rpDoc(RP.data, RP.idx, RP.part);
   document.getElementById('rp-pick').value = `${RP.idx}|${RP.part}`;
   const k = rpOptIndex();
   document.getElementById('rp-prev').disabled = k <= 0;
-  document.getElementById('rp-next').disabled = k < 0 || k >= RP.opts.length - 1;
+  document.getElementById('rp-next').disabled = k < 0 || k >= rpOptsNow().length - 1;
   const drillPages = Math.ceil(rpDrillColumns(D.drills.filter((d) => d.rows.length)).length / 4);
   let html, n, game = false;
   if (RP.version === 'staff') {
