@@ -14,11 +14,11 @@
  * "staff", re-read with the wellness): removing someone there cuts his access within 10 minutes.
  * Anything missing or failing here → an error status: the site then falls back to the Google script.
  */
-const UPLOADS = ['workload', 'sessions', 'objectives', 'calendar', 'tests', 'reports', 'staff_report', 'plan_lib', 'squad_stats'];
+const UPLOADS = ['workload', 'sessions', 'objectives', 'calendar', 'tests', 'reports', 'staff_report', 'plan_lib', 'squad_stats', 'match_report'];
 const FROM_SCRIPT = ['home', 'wellness', 'wellness_history']; // computed by the Google script from the kiosk check-ins
 const DATA = [...FROM_SCRIPT, ...UPLOADS];
 const KEY_ONLY = ['player_photos']; // kept for the online calculation, not served here (the site reads the photos from the script)
-const SNAPS = ['full', 'drills', 'calendar', 'players', 'config', 'gps', 'pdfs', 'min10']; // Update dashboard's copies (sync/cloud.py SNAPS)
+const SNAPS = ['full', 'drills', 'calendar', 'players', 'config', 'gps', 'pdfs', 'min10', 'peaks']; // Update dashboard's copies (sync/cloud.py SNAPS)
 const enc = new TextEncoder();
 
 export default {

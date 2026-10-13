@@ -361,12 +361,18 @@ function rpHash() {
   else if (s) history.replaceState(null, '', '#reports/' + s.date + (RP.version === 'staff' ? '/staff' : ''));
 }
 
-/** Staff version of this report: its pages, or why there is none (match days and B-team games: later). */
+/** Staff version of this report: its pages, or why there is none. A match day: the Game 10min report
+ * (js/reports-match.js, payload match_report); a B-team game or a match day's extra session: none. */
 function rpStaffState(D) {
-  if (!RP.staff) return { wait: true };
+  const s = RP.data.sessions[RP.idx];
+  if (s.type === 'match' && RP.part !== 'b' && RP.part !== 'x') {
+    if (!RP.match) return { wait: 'match_report' };
+    const html = rpMatchStaffPages(D, RP.match);
+    return html ? { html, game: true } : { msg: 'The Game 10min report of this match is not ready: it needs the match cut in 10-minute periods and three earlier matches to compare with — the Players version is ready.' };
+  }
+  if (!RP.staff) return { wait: 'staff_report' };
   if (RP.part === 'b' || RP.part === 'x' || !RP.staff.days[D.session.date]) {
-    const s = RP.data.sessions[RP.idx];
-    return { msg: s.type === 'match' || RP.part === 'b' ? 'The staff version of match reports is coming later — the Players version is ready.'
+    return { msg: s.type === 'match' || RP.part === 'b' ? 'No staff version for this part of the match day — the Players version is ready.'
       : 'No staff version for this session (no usual reference for this day yet).' };
   }
   return { html: rpStaffPages(D, RP.staff) };
@@ -394,13 +400,13 @@ function drawReports() {
   document.getElementById('rp-prev').disabled = k <= 0;
   document.getElementById('rp-next').disabled = k < 0 || k >= RP.opts.length - 1;
   const drillPages = Math.ceil(rpDrillColumns(D.drills.filter((d) => d.rows.length)).length / 4);
-  let html, n;
+  let html, n, game = false;
   if (RP.version === 'staff') {
     const st = rpStaffState(D);
     if (st.wait) {
       box.innerHTML = '<div class="panel"><div class="empty">Loading the staff data…</div></div>';
       document.getElementById('rp-pdf').disabled = true;
-      withData('staff_report', (d) => { RP.staff = d; if (RP.version === 'staff') drawReports(); },
+      withData(st.wait, (d) => { if (st.wait === 'match_report') RP.match = d; else RP.staff = d; if (RP.version === 'staff') drawReports(); },
         (err) => { if (RP.version === 'staff') box.innerHTML = loadError(err); });
       return;
     }
@@ -410,12 +416,13 @@ function drawReports() {
       document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel}${D.session.part ? ' · ' + D.session.part : ''} · Staff`;
       return;
     }
-    html = st.html; n = 6 + drillPages;
+    html = st.html; n = st.game ? (html.match(/class="rp-page/g) || []).length : 6 + drillPages;
+    game = !!st.game;
   } else {
     html = rpPages(D); n = (html.match(/class="rp-page"/g) || []).length;
   }
   document.getElementById('rp-pdf').disabled = false;
-  document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel}${D.session.part ? ' · ' + D.session.part : ''}${RP.version === 'staff' ? ' · Staff' : ''} · ${n} pages · ${D.fullSession.length} players`;
+  document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel}${D.session.part ? ' · ' + D.session.part : ''}${RP.version === 'staff' ? ' · Staff' : ''}${game ? ' · Game 10min' : ''} · ${n} pages · ${D.fullSession.length} players`;
   box.innerHTML = `<div class="rp rp-doc">${html}</div>`;
   rpFit();
   // warm up in the background so "Download PDF" is quick: this session's photos and the PDF tools
@@ -689,9 +696,10 @@ async function rpPrint() {
   try {
     const D = rpDoc(RP.data, RP.idx, RP.part);
     const ready = D.session.extra && RP.version !== 'staff'; // a match day's extra session is printed online too
-    const file = ready ? `${D.session.id}_${D.session.date}_Extra_session.pdf`
+    const game = RP.version === 'staff' && !!rpStaffState(D).game; // a match day's staff report: Game 10min
+    const file = ready ? `${D.session.id}_${D.session.date}_Extra_session.pdf` : game ? `${D.session.id}_${D.session.date}_Game_10min.pdf`
       : `${D.session.id}_${D.session.date}${D.session.part ? '_' + D.session.part.replace(/\s+/g, '') : ''}_${RP.version === 'staff' ? 'Staff' : 'Training'}_report.pdf`;
-    if ((ready || !D.session.part) && await rpReadyPdf(file)) return; // ready on the server: no picture of each page to take
+    if ((ready || game || !D.session.part) && await rpReadyPdf(file)) return; // ready on the server: no picture of each page to take
     await Promise.all(RP_JS.map(rpScript));
     btn.textContent = 'Loading photos…';
     const photos = await rpPhotos(D), dims = await rpImageSizes(photos);
