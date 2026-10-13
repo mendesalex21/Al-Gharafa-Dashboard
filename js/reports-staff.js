@@ -137,7 +137,8 @@ function rsMicroBar(C, k) {
 function rsProfile(C, k, title, unit) {
   const days = [...C.X.profile.map((d) => ({ ...d, done: 1 })), ...(C.X.plan || [])], W = 380, H = 134, L = 34, R = 6, T = 16, B = 32;
   const n = days.length + 1, iw = W - L - R, ih = H - T - B, step = iw / n, bw = Math.min(36, step * 0.5);
-  const raw = Math.max(1, ...days.flatMap((d) => (d[k] ? [d[k][0] || 0, d[k][1] || 0, d[k][3] || 0] : [0]))) * 1.14;
+  const mt = C.X.match && C.X.match[k]; // the match itself, once played (the report of a match day's extra session)
+  const raw = Math.max(1, ...days.flatMap((d) => (d[k] ? [d[k][0] || 0, d[k][1] || 0, d[k][3] || 0] : [0])), ...(mt ? [mt[0] || 0, mt[3] || 0] : [])) * 1.14;
   const e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e, top = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e;
   const y = (v) => T + ih * (1 - Math.min(v, top) / top), base = y(0);
   let g = '';
@@ -163,8 +164,15 @@ function rsProfile(C, k, title, unit) {
     g += lab.join('') + `<text x="${x}" y="${H - 17}" text-anchor="middle" font-size="10.5" font-weight="800" fill="${d.done ? '#16269e' : ST_BLUE}">${rpEsc(d.md)}</text><text x="${x}" y="${H - 5}" text-anchor="middle" font-size="9" fill="#8a8f9e">${stDay(d.date, { weekday: 'short', day: 'numeric' })}</text>`;
   });
   const xm = L + step * (n - 0.5);
-  g += `<rect x="${xm - bw / 2}" y="${T}" width="${bw}" height="${ih}" rx="7" fill="none" stroke="#c9ccd6" stroke-dasharray="4 4"/><text x="${xm}" y="${T + ih / 2}" text-anchor="middle" font-size="10" font-weight="700" fill="#8a8f9e">match</text>`
-    + `<text x="${xm}" y="${H - 17}" text-anchor="middle" font-size="10.5" font-weight="800" fill="#16269e">MD</text>${C.X.next ? `<text x="${xm}" y="${H - 5}" text-anchor="middle" font-size="9" fill="#8a8f9e">${stDay(C.X.next.date, { weekday: 'short', day: 'numeric' })}</text>` : ''}`;
+  if (mt && mt[0] != null) { // the team's match (whole-game players): its value, in the colour of its z vs the usual match
+    const yy = Math.min(y(mt[0]), base - 2.5), col = stZCol(mt[4]);
+    if (mt[2] != null && mt[3] != null) g += `<rect x="${xm - bw / 2 - 6}" y="${y(mt[3])}" width="${bw + 12}" height="${Math.max(3, y(mt[2]) - y(mt[3]))}" rx="5" fill="#eef0f4"/>`;
+    g += `<rect x="${xm - bw / 2 + 2.5}" y="${yy}" width="${bw - 5}" height="${base - yy}" rx="4" fill="${col}"/>`
+      + (mt[1] != null ? `<line x1="${xm - bw / 2 - 6}" x2="${xm + bw / 2 + 6}" y1="${y(mt[1])}" y2="${y(mt[1])}" stroke="#111" stroke-width="2.2" stroke-linecap="round"/>` : '')
+      + `<text x="${xm}" y="${Math.max(11, Math.min(yy, mt[1] != null ? y(mt[1]) : yy) - 5)}" text-anchor="middle" font-size="10.5" font-weight="800" fill="#111" stroke="#fff" stroke-width="3" paint-order="stroke">${stK(mt[0])}</text>`
+      + (mt[4] != null && stLvl(mt[4]) !== 'on' ? `<text x="${xm + bw / 2 + 4}" y="${yy + 11}" font-size="9" font-weight="800" fill="${col}">${stSigned(mt[4])}</text>` : '');
+  } else g += `<rect x="${xm - bw / 2}" y="${T}" width="${bw}" height="${ih}" rx="7" fill="none" stroke="#c9ccd6" stroke-dasharray="4 4"/><text x="${xm}" y="${T + ih / 2}" text-anchor="middle" font-size="10" font-weight="700" fill="#8a8f9e">match</text>`;
+  g += `<text x="${xm}" y="${H - 17}" text-anchor="middle" font-size="10.5" font-weight="800" fill="#16269e">MD</text>${C.X.next ? `<text x="${xm}" y="${H - 5}" text-anchor="middle" font-size="9" fill="#8a8f9e">${stDay(C.X.next.date, { weekday: 'short', day: 'numeric' })}</text>` : ''}`;
   return `<div class="rs-prof"><div class="rs-proft">${title}<span>${unit}</span></div>${rsMicroBar(C, k)}<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${g}</svg></div>`;
 }
 function rsMicro(C) {
