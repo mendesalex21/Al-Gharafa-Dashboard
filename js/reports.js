@@ -308,7 +308,7 @@ function renderReports(opts) {
     <div class="rp-preview" id="rp-preview"><div class="panel"><div class="empty">Loading…</div></div></div>`;
   const step = (d) => {
     if (RP.version === 'weekly') { const ws = rwWeeks(RP.data && RP.data.weekly).map((w) => w.ws), k = ws.indexOf(RP.week) - d; if (ws[k]) { RP.week = ws[k]; rpHash(); drawReports(); } return; }
-    const o = rpOptsNow()[rpOptIndex() + d]; if (o) rpGo(o[0], o[1]);
+    const o = (RP.opts || [])[rpOptIndex() + d]; if (o) rpGo(o[0], o[1]);
   };
   document.getElementById('rp-prev').onclick = () => step(-1);
   document.getElementById('rp-next').onclick = () => step(1);
@@ -332,18 +332,13 @@ function renderReports(opts) {
     RP.part = list[RP.idx] ? rpPartOk(list[RP.idx], RP.part) : 'all';
     // newest session first; within a day: all players, the session, the B game
     const byDay = shown.slice().reverse().flatMap((i) => RP.opts.filter((o) => o[0] === i));
-    const opt = ([i, part]) => `<option value="${i}|${part}">${rpEsc(rpOption(list[i], part))}</option>`;
-    RP.sessOpts = byDay.map(opt).join('');
-    RP.staffOpts = byDay.filter(([, part]) => part !== 'x').map(opt).join(''); // the Staff version: no entry for a match day's extra session
-    document.getElementById('rp-pick').dataset.mode = ''; // drawReports fills the list for the version shown
+    RP.sessOpts = byDay.map(([i, part]) => `<option value="${i}|${part}">${rpEsc(rpOption(list[i], part))}</option>`).join('');
+    document.getElementById('rp-pick').innerHTML = RP.sessOpts;
     drawReports();
   }, (err) => { document.getElementById('rp-preview').innerHTML = loadError(err); });
 }
 
-/** The entries of the picker for the version shown: the Staff version has nothing for a match day's extra session
- * (the players who did not play) — its match report, Game 10min, is the match's. */
-function rpOptsNow() { return (RP.opts || []).filter(([, part]) => !(RP.version === 'staff' && part === 'x')); }
-function rpOptIndex() { return rpOptsNow().findIndex(([i, part]) => i === RP.idx && part === RP.part); }
+function rpOptIndex() { return (RP.opts || []).findIndex(([i, part]) => i === RP.idx && part === RP.part); }
 
 function rpOption(s, part = 'all') {
   const d = new Date(s.date + 'T12:00:00Z');
@@ -367,9 +362,11 @@ function rpHash() {
 }
 
 /** Staff version of this report: its pages, or why there is none. A match day: the Game 10min report
- * (js/reports-match.js, payload match_report); a B-team game or a match day's extra session: none. */
+ * (js/reports-match.js, payload match_report) for the match, and the training report of its extra session (the players
+ * who did not play) as it is — he keeps it in the Staff section too (2026-10-13); a B-team game: none. */
 function rpStaffState(D) {
   const s = RP.data.sessions[RP.idx];
+  if (RP.part === 'x' && D.session.extra) return { html: rpPages(D), extra: true };
   if (s.type === 'match' && RP.part !== 'b' && RP.part !== 'x') {
     if (!RP.match) return { wait: 'match_report' };
     const html = rpMatchStaffPages(D, RP.match);
@@ -396,16 +393,14 @@ function drawReports() {
   if (data) { if (!box.querySelector('.rp-data')) rpDataDraw(); return; } // (re)drawn once: a late reports load must not reset the form
   if (!RP.data) return;
   if (weekly) { rwDraw(); return; }
-  const mode = RP.version === 'staff' ? 'staff' : 'sessions';
-  if (pick.dataset.mode !== mode && RP.sessOpts) { pick.innerHTML = mode === 'staff' ? RP.staffOpts : RP.sessOpts; pick.dataset.mode = mode; }
+  if (pick.dataset.mode !== 'sessions' && RP.sessOpts) { pick.innerHTML = RP.sessOpts; pick.dataset.mode = 'sessions'; }
   const list = RP.data.sessions;
   if (!list.length) { box.innerHTML = `<div class="panel">${emptyState('No sessions this season yet.')}</div>`; return; }
-  if (RP.version === 'staff' && RP.part === 'x') { RP.part = rpPartOk(list[RP.idx], 't'); rpHash(); } // Staff on an extra session → the match of that day
   const D = rpDoc(RP.data, RP.idx, RP.part);
   document.getElementById('rp-pick').value = `${RP.idx}|${RP.part}`;
   const k = rpOptIndex();
   document.getElementById('rp-prev').disabled = k <= 0;
-  document.getElementById('rp-next').disabled = k < 0 || k >= rpOptsNow().length - 1;
+  document.getElementById('rp-next').disabled = k < 0 || k >= RP.opts.length - 1;
   const drillPages = Math.ceil(rpDrillColumns(D.drills.filter((d) => d.rows.length)).length / 4);
   let html, n, game = false;
   if (RP.version === 'staff') {
@@ -423,7 +418,7 @@ function drawReports() {
       document.getElementById('rp-sub').textContent = `${D.session.id} · ${D.session.dateLabel}${D.session.part ? ' · ' + D.session.part : ''} · Staff`;
       return;
     }
-    html = st.html; n = st.game ? (html.match(/class="rp-page/g) || []).length : 6 + drillPages;
+    html = st.html; n = st.game || st.extra ? (html.match(/class="rp-page/g) || []).length : 6 + drillPages;
     game = !!st.game;
   } else {
     html = rpPages(D); n = (html.match(/class="rp-page"/g) || []).length;
@@ -702,7 +697,7 @@ async function rpPrint() {
   let host = null;
   try {
     const D = rpDoc(RP.data, RP.idx, RP.part);
-    const ready = D.session.extra && RP.version !== 'staff'; // a match day's extra session is printed online too
+    const ready = !!D.session.extra; // a match day's extra session is printed online too (the same report in Players and in Staff)
     const game = RP.version === 'staff' && !!rpStaffState(D).game; // a match day's staff report: Game 10min
     const file = ready ? `${D.session.id}_${D.session.date}_Extra_session.pdf` : game ? `${D.session.id}_${D.session.date}_Game_10min.pdf`
       : `${D.session.id}_${D.session.date}${D.session.part ? '_' + D.session.part.replace(/\s+/g, '') : ''}_${RP.version === 'staff' ? 'Staff' : 'Training'}_report.pdf`;
