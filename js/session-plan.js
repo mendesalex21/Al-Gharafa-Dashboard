@@ -717,6 +717,26 @@ function splGameTitle(t) {
   if (SPL_GAME_DRILLS.includes(per)) return per;
   return /individual|rehab|session-?\s*\[training\]/i.test(t) ? 'INDIVIDUAL' : '';
 }
+/** Data recorded under the wrong player on StatSports (13 Oct: Rayan Al Ali's session under the athlete "RAYYAN HANI"):
+ * the export's rows renamed, as set in the import (p.swap = {name in the file: GPS name of the player it belongs to};
+ * two players exchanged = two corrections). */
+function splSwapText(text, swap) {
+  if (!text || !swap || !Object.keys(swap).length) return text;
+  return spToCsv(spParseCsv(text).map((r) => { const g = spName(r['Player First Name']); return swap[g] ? { ...r, 'Player First Name': swap[g] } : r; }));
+}
+/** The import's "recorded under the wrong player" line: the corrections set, and a new one. */
+function splSwapHtml(p) {
+  const swap = p.swap || {}, inFile = [...new Set([SPL.files.full, SPL.files.drills].filter(Boolean).flatMap((f) => spParseCsv(f.text).map((r) => spName(r['Player First Name']))).filter(Boolean))].sort();
+  if (!inFile.length) return '';
+  const name = (g) => (SPL.lib.players.find((q) => q.gps === g) || {}).name || g;
+  const both = Object.entries(swap).filter(([, to]) => inFile.includes(to) && !swap[to]); // the other player is in the file too: exchanged?
+  return `<div class="sp-swap"><span class="sp-note">Recorded under the wrong player?</span>
+    ${Object.entries(swap).map(([from, to]) => `<span class="sp-ng">recorded as ${escapeHtml(name(from))} → <b>${escapeHtml(name(to))}</b><button type="button" class="linkbtn" data-unswap="${escapeHtml(from)}" aria-label="Remove">✕</button></span>`).join('')}
+    <select id="spl-swap-from" aria-label="Name in the file"><option value="">Recorded as…</option>${inFile.filter((g) => !swap[g]).map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(name(g))}</option>`).join('')}</select>
+    <span>is in fact</span><select id="spl-swap-to" aria-label="The player it belongs to"><option value="">Player…</option>${SPL.lib.players.slice().sort((a, b) => a.name.localeCompare(b.name)).map((q) => `<option value="${escapeHtml(q.gps)}">${escapeHtml(q.name)}</option>`).join('')}</select>
+    <button type="button" class="btn-light" data-swap>Correct</button>
+    ${both.length ? `<p class="sp-note warn">${both.map(([, to]) => escapeHtml(name(to))).join(', ')} also in the file under his own name — if the two were exchanged, correct the other one too.</p>` : ''}</div>`;
+}
 /** The RPE of the day's rows: the players' kiosk answers, unless one was typed here. */
 function splRpe(date, p) {
   const kiosk = splKioskRpe(date, p.ampm || 'PM'), rpe = {}, fromKiosk = new Set();
@@ -739,7 +759,7 @@ function splHalves(drillRows) {
  * Rows "/" as in his Excel (sp-convert.js spOffDay); published apart from the club sessions (key date_OFF).
  */
 function splBuildOff(date, p) {
-  const lib = SPL.lib, fullRows = spParseCsv(SPL.files.full.text), drillRows = SPL.files.drills ? spParseCsv(SPL.files.drills.text) : [];
+  const lib = SPL.lib, fullRows = spParseCsv(splSwapText(SPL.files.full.text, p.swap)), drillRows = SPL.files.drills ? spParseCsv(splSwapText(SPL.files.drills.text, p.swap)) : [];
   const fileDate = spIsoDate((fullRows[0] || drillRows[0] || {})['Session Date']);
   const byGps = Object.fromEntries(lib.players.map((q) => [q.gps, q])), st = (q) => p.status[q.id] || 'Day_Off', chosen = p.offType || {};
   const halves = splHalves(drillRows), rows = {};
@@ -771,7 +791,8 @@ function splBuildOff(date, p) {
 function splBuild() {
   const date = SPL.date, p = splEnsure(date), lib = SPL.lib;
   if (p.off) return splBuildOff(date, p);
-  const allFull = spParseCsv(SPL.files.full.text), allDrills = SPL.files.drills ? spParseCsv(SPL.files.drills.text) : [];
+  const fullTxt = splSwapText(SPL.files.full.text, p.swap), drillTxt = SPL.files.drills ? splSwapText(SPL.files.drills.text, p.swap) : ''; // recorded under the wrong player
+  const allFull = spParseCsv(fullTxt), allDrills = spParseCsv(drillTxt);
   const fileDate = spIsoDate((allFull[0] || {})['Session Date']);
   const match = !!splMatchOn(date); // a match day (calendar): each player's halves add up to his match, his own minutes
   // a B-team game on a day without a club match (9 Oct: Chalpan's halves in the recording of the compensatory session):
@@ -837,7 +858,7 @@ function splBuild() {
   }));
   checks.left = checks.time.filter((x) => !x.fix).length + checks.drill.filter((x) => !x.done).length + checks.cut.filter((x) => !x.fix).length;
   const ownTime = new Set(Object.keys(fixT).filter((g) => fixT[g] === 'own')), cutOwn = new Set(Object.keys(fixC).filter((k) => fixC[k] === 'own'));
-  let fullText = hasB ? spToCsv(fullRows) : SPL.files.full.text, drillText = hasB ? spToCsv(drillRows) : SPL.files.drills ? SPL.files.drills.text : '';
+  let fullText = hasB ? spToCsv(fullRows) : fullTxt, drillText = hasB ? spToCsv(drillRows) : drillTxt;
   const halfInfo = {}; // a match: the halves' minutes written (shown in the drills column)
   if (skipped.size) drillText = spToCsv(drillRows.filter((r) => !skipped.has(titleOfRow(r))));
   let day = null; // a match day's rows (sp-convert.js spMatchDay)
@@ -936,7 +957,8 @@ function splImportHtml() {
       <div class="sp-ngs">${b.off.list.map((x) => { const c = col[x.type] || '#8e8e93', next = SPL_OFF_TYPES[(SPL_OFF_TYPES.indexOf(x.type) + 1) % SPL_OFF_TYPES.length];
         return `<button type="button" class="sp-ng" data-offtype="${escapeHtml(x.g)}" data-v="${x.type}" title="Click: ${escapeHtml(next === 'Day_Off' ? 'not counted' : lab[next] || next)}" style="border:0;cursor:pointer;${x.type === 'Day_Off' ? 'opacity:.6;text-decoration:line-through' : `background:${c}22;color:${c}`}">${escapeHtml(x.name)}<small>${x.type === 'Day_Off' ? 'not counted' : escapeHtml(lab[x.type] || x.type)} · ${Math.floor(x.t + 1e-9)}′${x.whole ? ' · whole recording' : ''}</small></button>`; }).join('') || '<span class="sp-note">nobody on StatSports</span>'}</div>
       <p class="sp-note">Click a player to switch: B-team training → individual → rehab → compensatory → not counted. His own minutes are written.${b.off.list.some((x) => x.whole) ? ' “Whole recording”: no session cut on StatSports, the pod’s whole time — check it, or cut the session in Sonra and get it again.' : ''}</p>
-      ${b.unknown.length ? `<p class="sp-note warn">Not in the squad list (kept with their GPS name): ${b.unknown.map(escapeHtml).join(', ')} — add them in Squad.</p>` : ''}</div>
+      ${b.unknown.length ? `<p class="sp-note warn">Not in the squad list (kept with their GPS name): ${b.unknown.map(escapeHtml).join(', ')} — add them in Squad.</p>` : ''}
+      ${splSwapHtml(p)}</div>
     <div class="sp-chk"><div class="sp-h3"><i class="n">2</i>B-team game · day off <small>${b.off.games.length ? `${b.off.games.length} on a B-team game · ` : ''}everyone else 0′</small></div>
       ${b.off.games.length ? `<div class="sp-ngs">${b.off.games.map((x) => `<span class="sp-ng" style="background:${col.Game_B}22;color:${col.Game_B}">${escapeHtml(x.name)}<small>Game_B · ${Math.floor(x.t + 1e-9)}′ · ${x.n} half${x.n > 1 ? 'ves' : ''}</small></span>`).join('')}</div><p class="sp-note">Game_B, MD, his two halves (Game_1stHalf, Game_2ndHalf) with his own minutes — as on 2 Oct in your Excel.</p>` : ''}
       <div class="sp-ngs">${b.full.filter((r) => !r.Time && r.DT == null).map((r) => `<span class="sp-ng">${escapeHtml(r.Players)}<small>${escapeHtml(lab[r.Type] || r.Type)}</small></span>`).join('') || '<span class="sp-note">nobody</span>'}</div></div>`;
@@ -955,6 +977,7 @@ function splImportHtml() {
       <div class="sp-chk"><div class="sp-h3"><i class="n">2</i>Players <small>${gpsRows.length} in the GPS file${b.unknown.length ? ` · ${b.unknown.length} unknown` : ' · all recognised ✓'}</small></div>
         ${b.unknown.length ? `<p class="sp-note warn">Not in the squad list (kept with their GPS name): ${b.unknown.map(escapeHtml).join(', ')} — add them in Squad.</p>` : ''}
         ${b.missing.length ? `<p class="sp-note warn">In the session in the plan but not in the GPS file: ${b.missing.map((q) => escapeHtml(q.name)).join(', ')} — change their status if they did not train.</p>` : ''}
+        ${splSwapHtml(p)}
         ${squadHtml}
         <p class="sp-note">${b.match ? 'Out (from the plan):' : 'Added from the plan, without GPS:'}</p><div class="sp-ngs">${b.full.filter((r) => !r.Time && r.DT == null && !(b.match && /^(Game|NC)$/.test(r.Type))).map((r) => `<span class="sp-ng">${escapeHtml(r.Players)}<small>${escapeHtml(r.Type)}</small></span>`).join('') || '<span class="sp-note">nobody</span>'}</div>
         <label class="sp-time">Session time <input type="number" min="1" max="200" value="${b.sessionTime}" data-f="time"> min <small>for the team-session players (the GPS's usual time)</small></label></div>`}
@@ -1016,6 +1039,12 @@ function splClick(e) {
     const pp = p(), i = SPL_OFF_TYPES.indexOf(t.dataset.v);
     pp.offType = { ...(pp.offType || {}), [t.dataset.offtype]: SPL_OFF_TYPES[(i + 1) % SPL_OFF_TYPES.length] }; splTouch(date); splDraw(); return;
   }
+  if (t.dataset.swap != null) { // data recorded under the wrong player on StatSports
+    const from = (document.getElementById('spl-swap-from') || {}).value, to = (document.getElementById('spl-swap-to') || {}).value;
+    if (from && to && from !== to) { const pp = p(); pp.swap = { ...(pp.swap || {}), [from]: to }; splTouch(date); splDraw(); }
+    return;
+  }
+  if (t.dataset.unswap) { const pp = p(), s = { ...(pp.swap || {}) }; delete s[t.dataset.unswap]; pp.swap = s; splTouch(date); splDraw(); return; }
   if (t.dataset.nogps != null) { SPL.files = { full: { name: 'No GPS this day', text: '' } }; SPL.view = 'import'; SPL.state = ''; splDraw(); return; }
   // correct a session in the data
   if (t.dataset.corrOpen != null) { splOpenCorrection(date); return; }

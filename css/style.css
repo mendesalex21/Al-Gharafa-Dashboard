@@ -1529,6 +1529,7 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .sp-note { font-size: 12px; color: var(--ink-muted); margin: 8px 0 4px; }
 .sp-ngs { display: flex; flex-wrap: wrap; gap: 6px; } .sp-ng { font-size: 12px; font-weight: 650; background: var(--surface-2); border-radius: 999px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 6px; } .sp-ng i { width: 8px; height: 8px; border-radius: 50%; } .sp-ng small { color: var(--ink-muted); font-weight: 500; }
 .sp-offcard { background: var(--surface-2); border-radius: 14px; padding: 12px 16px; font-size: 13.5px; line-height: 1.5; } .sp-offcard p { margin: 0 0 6px; } .sp-offcard ul { margin: 0 0 8px; padding-left: 18px; } .sp-offcard li { margin-bottom: 4px; }
+.sp-swap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 10px; font-size: 12.5px; } .sp-swap select { font: inherit; padding: 3px 6px; border-radius: 8px; } .sp-swap .sp-note { margin: 0; } .sp-swap p.sp-note { flex-basis: 100%; }
 .sp-rpe { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
 .sp-rpe span { display: flex; justify-content: space-between; align-items: center; font-size: 12px; background: var(--surface-2); border-radius: 8px; padding: 4px 8px; } .sp-rpe b { font-size: 12.5px; } .sp-rpe .miss { background: #fff4e5; color: #a55200; }
 .sp-tw { overflow-x: auto; border: 1px solid var(--hairline); border-radius: 12px; }
