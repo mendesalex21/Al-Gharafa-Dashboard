@@ -74,6 +74,7 @@ body {
 }
 .topbar-inner { display: flex; align-items: center; gap: 28px; height: 56px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+.brand-logo { height: 38px; width: auto; display: block; }
 .brand-dot { width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, #6e0d0d, #b21212); flex: none; }
 .nav { display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .nav::-webkit-scrollbar { display: none; }
@@ -222,6 +223,7 @@ main { padding: 32px 0 96px; }
   position: fixed; inset: 0; background: var(--bg); z-index: 50;
   display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 18px; text-align: center; padding: 24px;
 }
+#signin-gate .gate-logo { height: 88px; width: auto; }
 #signin-gate .club { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; }
 #signin-gate .desc { color: var(--ink-muted); font-size: 14px; max-width: 320px; }
 #g_id_signin_container { min-height: 40px; }
