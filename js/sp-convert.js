@@ -94,7 +94,8 @@ const SP_SESSION_TOTAL = /^session\s*-?\s*\[training\]$/i; // StatSports' own na
  * session = the drill "Entire Session - Live" (the export's), else "Session-[Training]", else "Entire Session"; drills =
  * the others. → { full, drills } CSV texts, date (yyyy-mm-dd), start time, players, live (false = only the whole recording).
  * opts.match (a match day): every recording of the day is read — the players not in the squad often train apart,
- * earlier, in their own recording; each row says which one it comes from ("Session Start"). */
+ * earlier, in their own recording; each row says which one it comes from ("Session Start"). opts.all (a team day off):
+ * every recording too, the session's total kept as each player's full row. */
 function spFromStatsports(sessions, ampm, opts = {}) {
   const list = (Array.isArray(sessions) ? sessions : [sessions]).filter((s) => s && (s.sessionPlayers || []).length);
   if (!list.length) return null;
@@ -103,7 +104,7 @@ function spFromStatsports(sessions, ampm, opts = {}) {
   const half = list.filter((x) => (hour(x) < 15 ? 'AM' : 'PM') === (ampm || 'PM'));
   const isGame = (x) => x.sessionPlayers.some((p) => (p.drills || []).some((dr) => /match|1st\s*h|2nd\s*h/i.test(dr.drillName)));
   const s = (opts.match && list.find(isGame)) || (half.length ? half : list).slice().sort((x, y) => y.sessionPlayers.length - x.sessionPlayers.length)[0];
-  const use = opts.match ? list : [s], startOf = (x) => String((x.sessionDetails || {}).startTime || '').slice(11, 16);
+  const use = opts.match || opts.all ? list : [s], startOf = (x) => String((x.sessionDetails || {}).startTime || '').slice(11, 16);
   const d = String((s.sessionDetails || {}).sessionDate || '').slice(0, 10), date = d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '';
   const head = ['Player First Name', 'Drill Title', 'Session Date', 'Session Start', ...SP_API_COLS.map(([c]) => c)];
   const cell = (v) => { const t = String(v ?? ''); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
@@ -166,6 +167,36 @@ function spMatchDay(a) {
   x.full.forEach((r) => { r['N°Exercice'] = 3; });
   const full = [...m.full, ...x.full].sort((p, q) => String(p.Players).localeCompare(String(q.Players)) || p['N°Exercice'] - q['N°Exercice']);
   return { full, squad, players: { ...game, ...solo } };
+}
+
+/**
+ * A day without a club session (a team day off) — and the B-team game of a few players on any day — as in the club's
+ * Excel (his MD+1 days off of 2026; 2 Oct: three players on a B-team game): session "/" and
+ *  - each player who worked: one full row and one drill row, both with his status (Training_TeamB, INDIVIDUAL, Rehab…),
+ *    his own minutes, exercise n° 1;
+ *  - a B-team game: "Game_B" = his halves added up (his own minutes), MD "MD", drill rows Game_1stHalf (#1) and
+ *    Game_2ndHalf (#2) with his own minutes in each;
+ *  - the rest of the list: his status (Day off, injured, national team…), 0 min.
+ * a = { work: {GPS: export row}, types: {GPS: status}, halves: {GPS: {h1: row, h2: row}}, rest: [{name, pos, type}],
+ * pos: {GPS: position}, rpe: {GPS: n}, ctx: spBuildRows' date, week, label, md, ampm } → { full: [rows], drills: [rows], issues }.
+ */
+function spOffDay(a) {
+  const ctx = { ...a.ctx, sid: '/' }, pos = a.pos || {}, pl = (g, type) => ({ name: g, pos: pos[g] || '', type });
+  const work = Object.entries(a.work || {}), wp = Object.fromEntries(work.map(([g]) => [g, pl(g, (a.types || {})[g] || 'Training_TeamB')]));
+  // his work: the same export row gives his full row and his one drill row, named after his status
+  const wcsv = spToCsv(work.map(([, r]) => ({ ...r, 'Drill Title': '__day' })));
+  const w = spBuildRows(wcsv, wcsv, { ...ctx, players: wp, extra: a.rest || [], rpe: a.rpe, drills: { __day: { no: 1, name: '', min: 0, own: true } }, drillName: (pn) => wp[pn].type });
+  const games = Object.entries(a.halves || {}).filter(([, h]) => h.h1 || h.h2);
+  let g = { full: [], drills: [], issues: [] };
+  if (games.length) {
+    const gp = Object.fromEntries(games.map(([n]) => [n, pl(n, 'Game_B')]));
+    const fcsv = spToCsv(games.map(([, h]) => (h.h1 && h.h2 ? spAddRows(spAddRows(null, h.h1), h.h2) : spAddRows(null, h.h1 || h.h2))));
+    const dcsv = spToCsv(games.flatMap(([, h]) => [h.h1 && { ...h.h1, 'Drill Title': 'Game_1stHalf' }, h.h2 && { ...h.h2, 'Drill Title': 'Game_2ndHalf' }].filter(Boolean)));
+    g = spBuildRows(fcsv, dcsv, { ...ctx, md: 'MD', players: gp, extra: [], rpe: a.rpe,
+      drills: { Game_1stHalf: { no: 1, name: 'Game_1stHalf', min: 0, own: true }, Game_2ndHalf: { no: 2, name: 'Game_2ndHalf', min: 0, own: true } } });
+  }
+  const by = (p, q) => String(p.Players).localeCompare(String(q.Players)) || p['N°Exercice'] - q['N°Exercice'];
+  return { full: [...w.full, ...g.full].sort(by), drills: [...w.drills, ...g.drills].sort(by), issues: [...w.issues, ...g.issues] };
 }
 
 /** The metric columns of one StatSports row, for `time` minutes (full session: whole minutes; drill: planned minutes). */
@@ -237,4 +268,4 @@ function spBuildRows(fullCsv, drillsCsv, ctx) {
   return { full: full.map(pick(SP_FULL_COLS)), drills: drills.map(pick(SP_DRILL_COLS)), issues: [...new Set(issues)] };
 }
 
-if (typeof module !== 'undefined') module.exports = { SP_FULL_COLS, SP_DRILL_COLS, spParseCsv, spMetrics, spBuildRows, spSessionTime, spIsoDate, spName, spNum, spRound, spFromStatsports, spMatchDay, spAddRows, spToCsv };
+if (typeof module !== 'undefined') module.exports = { SP_FULL_COLS, SP_DRILL_COLS, spParseCsv, spMetrics, spBuildRows, spSessionTime, spIsoDate, spName, spNum, spRound, spFromStatsports, spMatchDay, spOffDay, spAddRows, spToCsv };

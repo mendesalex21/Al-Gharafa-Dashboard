@@ -18,6 +18,9 @@ const SPL_STATUS = [['ProTraining', 'Team session', '#34c759'], ['Partial', 'Par
 const SPL_KEEP = new Set(['Injury', 'Injury_no_muscular', 'Rehab', 'NT', 'Sick']); // statuses carried over to the next session
 const SPL_IN_SESSION = new Set(['ProTraining', 'Partial', 'ProTraining+ExtraWork']); // expected in the GPS file
 const SPL_NOT_TEAM = /^(INDIVIDUAL|Individual|Rehab|GYM|STRENGTH)$/; // drills that are not the team's (left out of the forecast)
+// a team day off: what a player on StatSports did (one click to switch; Day off = not counted, e.g. a pod left on)
+const SPL_OFF_TYPES = ['Training_TeamB', 'INDIVIDUAL', 'Rehab', 'Compensatory', 'Day_Off'];
+const splHalf = (t) => /^Game_(1st|2nd)Half$/.test(splGameTitle(t)); // a match's halves on StatSports: a B-team game on a day without a club match
 // before publishing: a team-session player this far from the session time, a drill this far from its planned minutes,
 // a player this far from his teammates in the same drill (this season: about one session in five has one)
 const SPL_CHECK = { sessMin: 5, sessPct: 0.1, drillMin: 2, cutMin: 2, cutPct: 0.2 };
@@ -96,8 +99,9 @@ function splMatchOn(date) { return SPL.matches.find((x) => x.date === date); }
 function splSid(date) {
   const r = SPL.lib.recent[date], p = (SPL.saved.plans || {})[date];
   if (r && /^S\d+$/.test(r.sid)) return r.sid;
+  if (p && p.off) return '/'; // a team day off: no session number, as in his Excel
   if (p && p.sid) return p.sid;
-  const before = Object.keys(SPL.saved.plans || {}).filter((d) => d > SPL.lib.last_date && d < date && (SPL.saved.plans[d].drills || []).length && !splMatchOn(d)).length;
+  const before = Object.keys(SPL.saved.plans || {}).filter((d) => d > SPL.lib.last_date && d < date && (SPL.saved.plans[d].drills || []).length && !SPL.saved.plans[d].off && !splMatchOn(d)).length;
   return 'S' + (SPL.lib.last_sid + 1 + before);
 }
 
@@ -136,19 +140,20 @@ function splDrawWeek() {
     const corr = r && (SPL.saved.corrections || {})[`${d}_${r.sid}`];
     const badge = r && /^S\d+$/.test(r.sid) ? `<span class="sp-b done">${r.sid} · ${r.pub ? 'published' : 'in the data'} ✓${corr ? ' · ✎' : ''}</span>` : pub ? '<span class="sp-b done">Published ✓</span>'
       : m ? `<span class="sp-b match">${crestHtml(m.e.opponent, 16)}${escapeHtml([m.e.round || m.e.competition, m.e.opponent].filter(Boolean).join(' · '))}</span>`
-        : p && (p.drills || []).length ? '<span class="sp-b plan">Planned</span>' : '<span class="sp-b none">+ Plan</span>';
+        : p && p.off ? '<span class="sp-b plan">Day off</span>' : p && (p.drills || []).length ? '<span class="sp-b plan">Planned</span>' : '<span class="sp-b none">+ Plan</span>';
     return `<button type="button" class="sp-day${d === SPL.date ? ' on' : ''}${m ? ' m' : ''}" data-day="${d}"><b>${SPL_DAY(d, { weekday: 'short', day: 'numeric' })}</b>${tag ? `<span class="sp-md${tag === 'MD' ? ' mdm' : ''}">${tag}</span>` : '<span class="sp-md off">—</span>'}${badge}</button>`;
   }).join('');
   el.onclick = (e) => { const b = e.target.closest('[data-day]'); if (b) { SPL.date = b.dataset.day; SPL.view = 'plan'; SPL.files = {}; SPL.card = null; splDraw(); } };
 }
 
 function splHead(date, step) {
-  const p = splPlan(date), m = splMatchOn(date), next = SPL.matches.find((x) => x.date > date);
-  const dd = next ? daysBetween(date, next.date) : null;
-  return `<div class="sp-head"><div class="sp-id"><span class="sp-k">Session</span><b><input class="sp-sid" data-f="sid" value="${escapeHtml(p.sid || splSid(date))}" aria-label="Session number"> · ${SPL_DAY(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</b></div>
+  const p = splPlan(date), m = splMatchOn(date), next = SPL.matches.find((x) => x.date > date), r = SPL.lib.recent[date];
+  const dd = next ? daysBetween(date, next.date) : null, canOff = !m && !(r && /^S\d+$/.test(r.sid)); // a club match or a session in the data: never a day off
+  return `<div class="sp-head"><div class="sp-id"><span class="sp-k">${p.off ? 'Team day off' : 'Session'}</span><b>${p.off ? '<input class="sp-sid" value="/" disabled aria-label="No session number">' : `<input class="sp-sid" data-f="sid" value="${escapeHtml(p.sid || splSid(date))}" aria-label="Session number">`} · ${SPL_DAY(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</b></div>
     <div class="sp-auto"><span><small>Week</small>${splWeekNo(date)}</span><span><small>MD</small>${m ? 'MD' : `<select class="sp-md" data-md aria-label="MD of this day"><option value="">${DAY_MD[date] ? 'Automatic' : splTag(date) || '—'}</option>${DAY_MD_TAGS.map((t) => `<option ${DAY_MD[date] === t ? 'selected' : ''}>${t}</option>`).join('')}</select>`}</span><span><small>Week MD session</small><input class="sp-lbl" data-f="label" value="${escapeHtml(p.label || splLabel(date))}" aria-label="Week MD session"></span>
       ${m ? `<span><small>Match</small>${escapeHtml(m.e.opponent || '')}</span>` : next ? `<span><small>Next match</small>${SPL_DAY(next.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${dd === 1 ? 'tomorrow' : `in ${dd} days`}</span>` : ''}</div>
-    <div class="seg sp-ampm">${['AM', 'PM'].map((v) => `<button type="button" data-ampm="${v}" class="${(p.ampm || 'PM') === v ? 'active' : ''}">${v}</button>`).join('')}</div></div>
+    ${canOff ? `<div class="seg sp-ampm"><button type="button" data-off class="${p.off ? 'active' : ''}" aria-pressed="${!!p.off}" title="No team session: the players who worked (B team, individual, rehab) are written on their own, everyone else Day off">Team day off</button></div>` : ''}
+    ${p.off ? '' : `<div class="seg sp-ampm">${['AM', 'PM'].map((v) => `<button type="button" data-ampm="${v}" class="${(p.ampm || 'PM') === v ? 'active' : ''}">${v}</button>`).join('')}</div>`}</div>
     <div class="sp-steps">${['Plan', 'After the session', 'Published'].map((l, i) => `<span class="${i < step ? 'done' : i === step ? 'on' : ''}"><i>${i < step ? '✓' : i + 1}</i>${l}</span>`).join('<u></u>')}<em id="spl-state">${escapeHtml(SPL.state || 'Filled in from the calendar · saved as you type')}</em></div>`;
 }
 
@@ -284,8 +289,9 @@ async function splCardDelete() {
 function splPlanHtml() {
   const date = SPL.date, p = splPlan(date), lib = SPL.lib.library, tag = splTag(date);
   // in the data from the Excel files: nothing to do. Published from this page: can be published again (it replaces) or removed
-  const r = SPL.lib.recent[date], pub = Object.values(SPL.saved.published || {}).find((x) => x.date === date && x.sid !== 'NT');
+  const r = SPL.lib.recent[date], pubs = Object.values(SPL.saved.published || {}).filter((x) => x.date === date && x.sid !== 'NT'), pub = pubs[0];
   const inData = !!(r && /^S\d+$/.test(r.sid) && !r.pub), live = !!(r && r.pub);
+  const pubWhat = (x) => `${x.sid === 'OFF' ? 'day off · B team (session “/”)' : escapeHtml(x.sid)} · ${escapeHtml(x.rows || '')} <button type="button" class="linkbtn" data-unpub="${escapeHtml(date + '_' + x.sid)}">Unpublish</button>`;
   const team = p.drills.filter((d) => !SPL_NOT_TEAM.test(splName(d.name))), tot = team.reduce((a, d) => a + (Number(d.min) || 0), 0);
   const titleOf = {}; Object.entries({ ...SPL.lib.titles, ...SPL.saved.titles }).forEach(([t, n]) => { if (!titleOf[splName(n)]) titleOf[splName(n)] = t; });
   const ch = splChoices(), opt = (n, cur) => `<option ${splKey(n) === splKey(cur) ? 'selected' : ''}>${escapeHtml(n)}</option>`;
@@ -302,18 +308,28 @@ function splPlanHtml() {
   const sugg = lib.filter((x) => x.md.includes(tag) && !p.drills.some((d) => splName(d.name) === splName(x.name))).slice(0, 4);
   const line = team.map((d) => `<i style="flex:${d.min || 1};background:${splColor(d.name)}" title="${escapeHtml(d.name)}"><b>${d.min || ''}'</b></i>`).join('');
   return `${splHead(date, inData || pub ? 2 : 0)}
-    ${inData ? `<p class="sp-banner ok">This session is already in the data (${r.sid}, from the Excel files). Nothing to import.</p>` : pub ? `<p class="sp-banner ok">Published ✓ ${escapeHtml(pub.rows || '')} · by ${escapeHtml(String(pub.by || '').split('@')[0])} — ${live ? 'in the dashboard' : 'added to the dashboard in a few minutes'}. To correct it, drop the files again and publish: the new version replaces it a few minutes later. <button type="button" class="linkbtn" data-unpub="${escapeHtml(date + '_' + pub.sid)}">Unpublish</button></p>` : live ? `<p class="sp-banner warn">Unpublished — ${escapeHtml(r.sid)} leaves the dashboard at the next update.</p>` : ''}
+    ${inData ? `<p class="sp-banner ok">This session is already in the data (${r.sid}, from the Excel files). Nothing to import.</p>` : pub ? `<p class="sp-banner ok">Published ✓ ${pubs.map(pubWhat).join(' · ')} · by ${escapeHtml(String(pub.by || '').split('@')[0])} — ${live || p.off ? 'in the dashboard (or in a few minutes)' : 'added to the dashboard in a few minutes'}. To correct it, get the session again and publish: the new version replaces it a few minutes later.</p>` : live ? `<p class="sp-banner warn">Unpublished — ${escapeHtml(r.sid)} leaves the dashboard at the next update.</p>` : ''}
     ${inData || live ? splCorrLineHtml(date) : ''}
     ${splNoRpeHtml(date)}
-    <div class="sp-two"><div class="sp-col">
+    <div class="sp-two">${p.off ? splOffCardHtml(date, p) : `<div class="sp-col">
       <div class="sp-h3">Drills <small>${tot}' of team work${p.drills.length ? ' · ▲▼ to reorder' : ''}</small>${last ? `<button type="button" class="btn-light sp-copy" data-copy="${last}">⟲ Copy last ${tag} · ${SPL_DAY(last, { weekday: 'short', day: 'numeric', month: 'short' })}</button>` : ''}</div>
       ${team.length ? `<div class="sp-line">${line}</div>` : ''}${rows || '<p class="sp-note">No drill yet — copy the last session of this MD or add drills below.</p>'}
       <div class="sp-add"><select data-add aria-label="Add a drill"><option value="">+ Add a drill…</option>${list('')}<option value="__new">+ Create a new drill…</option></select>${sugg.length ? `<small>Often on ${tag}:</small>${sugg.map((x) => `<button type="button" data-sugg="${escapeHtml(splName(x.name))}">${escapeHtml(splName(x.name))} <small>${x.min}'</small></button>`).join('')}` : ''}</div>
       ${splCardHtml()}
-      ${splLoadHtml(date, p)}</div>
+      ${splLoadHtml(date, p)}</div>`}
       ${splPlayersHtml(p)}</div>
-    ${inData ? '' : `<div class="sp-after">${typeof cfOn === 'function' && cfOn() ? `<button type="button" class="btn-primary sp-api" data-statsports><b>After the session</b>⇣ Get it from StatSports</button>` : ''}<label class="sp-drop mini" id="spl-drop"><input type="file" accept=".csv,text/csv" multiple hidden data-files>${typeof cfOn === 'function' && cfOn() ? '' : '<b>After the session</b>'}<span>${typeof cfOn === 'function' && cfOn() ? 'or drop' : 'Drop'} <code>${escapeHtml(p.sid || splSid(date))}_Full.csv</code> and <code>${escapeHtml(p.sid || splSid(date))}_Drills.csv</code> here, or click to choose — the rows are built from this plan</span></label></div>`}
+    ${inData ? '' : `<div class="sp-after">${typeof cfOn === 'function' && cfOn() ? `<button type="button" class="btn-primary sp-api" data-statsports><b>After the ${p.off ? 'day' : 'session'}</b>⇣ Get it from StatSports</button>` : ''}${p.off ? '<button type="button" class="btn-light" data-nogps>Nobody worked — publish the day off as it is</button>' : ''}<label class="sp-drop mini" id="spl-drop"><input type="file" accept=".csv,text/csv" multiple hidden data-files>${typeof cfOn === 'function' && cfOn() ? '' : '<b>After the session</b>'}<span>${typeof cfOn === 'function' && cfOn() ? 'or drop' : 'Drop'} ${p.off ? 'the day’s StatSports exports (Full and Drills) here, or click to choose' : `<code>${escapeHtml(p.sid || splSid(date))}_Full.csv</code> and <code>${escapeHtml(p.sid || splSid(date))}_Drills.csv</code> here, or click to choose — the rows are built from this plan`}</span></label></div>`}
     ${splNtHtml()}`;
+}
+/** A team day off, in place of the drills: what the import will write (his MD+1 days off in the Excel). */
+function splOffCardHtml(date, p) {
+  const md = splTag(date) || '/', label = p.label || splLabel(date);
+  return `<div class="sp-col"><div class="sp-h3">Team day off <small>no team session · no session number (“/”) · ${escapeHtml(md)} · ${escapeHtml(label)}</small></div>
+    <div class="sp-offcard"><p><b>After the day</b>, “Get it from StatSports” reads every recording of the day:</p>
+      <ul><li>each player on StatSports: <b>B-team training</b> by default — one click to switch to individual, rehab or compensatory (or not counted);</li>
+        <li>a player with the halves of a match: <b>B-team game</b> (Game_B, MD, his two halves);</li>
+        <li>everyone else: <b>Day off</b>, or his status (injured, national team…), 0 min.</li></ul>
+      <p class="sp-note">Written as on your MD+1 days off: session “/”, his own minutes, one drill row with his status. No staff report or e-mail — each player's work counts in his week and his A:C. Set the players you already know (B-team training, rehab…) on the right.</p></div></div>`;
 }
 /** A session in the data: its players still without an RPE — the answers given since on the RPE page, or a value typed
  * here (saved like a player's answer); both are added to the data at the next update, a value there is never replaced. */
@@ -639,7 +655,7 @@ async function splFromStatsports(btn) {
   try {
     const r = await fetch(`/api/statsports?date=${date}`, { headers: cfHeaders() });
     if (!r.ok) throw new Error(r.status === 401 ? 'sign in again' : `StatSports did not answer (${r.status}) — try again, or drop the files`);
-    const out = spFromStatsports(await r.json(), p.ampm || 'PM', { match: !!splMatchOn(date) });
+    const out = spFromStatsports(await r.json(), p.ampm || 'PM', { match: !!splMatchOn(date), all: !!p.off }); // a day off: every recording of the day
     if (!out) throw new Error('no session on StatSports for this day yet');
     const tag = `StatSports · ${out.start.slice(11, 16)} · ${out.players} players${out.recordings > 1 ? ` · ${out.recordings} recordings` : ''}`;
     SPL.files = { full: { name: `${tag} · full session`, text: out.full }, drills: { name: `${tag} · drills`, text: out.drills } };
@@ -701,21 +717,77 @@ function splGameTitle(t) {
   if (SPL_GAME_DRILLS.includes(per)) return per;
   return /individual|rehab|session-?\s*\[training\]/i.test(t) ? 'INDIVIDUAL' : '';
 }
+/** The RPE of the day's rows: the players' kiosk answers, unless one was typed here. */
+function splRpe(date, p) {
+  const kiosk = splKioskRpe(date, p.ampm || 'PM'), rpe = {}, fromKiosk = new Set();
+  SPL.lib.players.forEach((q) => { if (kiosk[q.id] != null) { rpe[q.gps] = kiosk[q.id]; fromKiosk.add(q.gps); } });
+  Object.entries(p.rpe || {}).forEach(([g, v]) => { if (v != null && v !== '') { rpe[g] = v; fromKiosk.delete(g); } });
+  return { rpe, fromKiosk };
+}
+/** Each player's halves of a match in the drills export (a B-team game on a day without a club match): {GPS: {h1, h2}}. */
+function splHalves(drillRows) {
+  const out = {};
+  drillRows.forEach((r) => {
+    const g = spName(r['Player First Name']), t = String(r['Drill Title'] || '').trim();
+    if (g && splHalf(t)) (out[g] = out[g] || {})[splGameTitle(t) === 'Game_1stHalf' ? 'h1' : 'h2'] = r;
+  });
+  return out;
+}
+/**
+ * A team day off (his MD+1 days off, 2026): every recording of the day — each player on StatSports with his work (B-team
+ * training by default, individual, rehab…; "Day off" = not counted), a B-team game from its halves, everyone else Day off.
+ * Rows "/" as in his Excel (sp-convert.js spOffDay); published apart from the club sessions (key date_OFF).
+ */
+function splBuildOff(date, p) {
+  const lib = SPL.lib, fullRows = spParseCsv(SPL.files.full.text), drillRows = SPL.files.drills ? spParseCsv(SPL.files.drills.text) : [];
+  const fileDate = spIsoDate((fullRows[0] || drillRows[0] || {})['Session Date']);
+  const byGps = Object.fromEntries(lib.players.map((q) => [q.gps, q])), st = (q) => p.status[q.id] || 'Day_Off', chosen = p.offType || {};
+  const halves = splHalves(drillRows), rows = {};
+  // one row per player: the live recording, else the session's total, else the whole recording (the longest of two)
+  const rank = (r) => { const t = String(r['Drill Title'] || ''); return /live/i.test(t) ? 3 : SP_SESSION_TOTAL.test(t) ? 2 : 1; };
+  fullRows.forEach((r) => {
+    const g = spName(r['Player First Name']), o = rows[g];
+    if (g && !halves[g] && (!o || rank(r) > rank(o) || (rank(r) === rank(o) && spNum(r['Total Time']) > spNum(o['Total Time'])))) rows[g] = r;
+  });
+  // what he did: his choice here, else his status of the plan when it is work, else B-team training
+  const typeOf = (g) => { const q = byGps[g], s = q ? st(q) : ''; return chosen[g] || (SPL_OFF_TYPES.includes(s) && s !== 'Day_Off' ? s : 'Training_TeamB'); };
+  const work = {}, types = {}, list = [];
+  Object.entries(rows).forEach(([g, r]) => {
+    const type = typeOf(g), q = byGps[g];
+    list.push({ g, id: q ? q.id : null, name: q ? q.name : g, type, t: spNum(r['Total Time']), whole: rank(r) === 1 });
+    if (type !== 'Day_Off') { work[g] = r; types[g] = type; }
+  });
+  const games = Object.entries(halves).map(([g, h]) => ({ g, name: (byGps[g] || {}).name || g, t: spNum((h.h1 || {})['Total Time']) + spNum((h.h2 || {})['Total Time']), n: (h.h1 ? 1 : 0) + (h.h2 ? 1 : 0) }));
+  // the rest of the list: his status (injured, national team, B-team training without a pod…), Day off when he was
+  // planned in a team session or not counted here
+  const rest = lib.players.filter((q) => !work[q.gps] && !halves[q.gps]).map((q) => ({ name: q.gps, pos: q.pos, type: SPL_IN_SESSION.has(st(q)) || chosen[q.gps] === 'Day_Off' ? 'Day_Off' : st(q) }));
+  const { rpe, fromKiosk } = splRpe(date, p);
+  const out = spOffDay({ work, types, halves, rest, rpe, pos: Object.fromEntries(lib.players.map((q) => [q.gps, q.pos])),
+    ctx: { date, week: splWeekNo(date), label: p.label || splLabel(date), md: splTag(date) || '/', ampm: p.ampm || 'PM' } });
+  const seen = new Set([...Object.keys(rows), ...Object.keys(halves)]);
+  return { ...out, fileDate, off: { list: list.sort((a, b) => a.name.localeCompare(b.name)), games }, missing: [], mapping: [], sessionTime: 0, unknown: [...seen].filter((g) => g && !byGps[g]),
+    plan: [], fromKiosk, checks: { time: [], drill: [], cut: [], left: 0 }, match: false, halfInfo: {}, squad: null };
+}
 function splBuild() {
   const date = SPL.date, p = splEnsure(date), lib = SPL.lib;
-  const fullRows = spParseCsv(SPL.files.full.text), drillRows = SPL.files.drills ? spParseCsv(SPL.files.drills.text) : [];
-  const fileDate = spIsoDate((fullRows[0] || {})['Session Date']);
+  if (p.off) return splBuildOff(date, p);
+  const allFull = spParseCsv(SPL.files.full.text), allDrills = SPL.files.drills ? spParseCsv(SPL.files.drills.text) : [];
+  const fileDate = spIsoDate((allFull[0] || {})['Session Date']);
+  const match = !!splMatchOn(date); // a match day (calendar): each player's halves add up to his match, his own minutes
+  // a B-team game on a day without a club match (9 Oct: Chalpan's halves in the recording of the compensatory session):
+  // those players are written apart, as in his Excel (Game_B, session "/", MD), and published with the session (date_OFF)
+  const bHalves = match ? {} : splHalves(allDrills), hasB = Object.keys(bHalves).length > 0, notB = (r) => !bHalves[spName(r['Player First Name'])];
+  const fullRows = allFull.filter(notB), drillRows = allDrills.filter(notB);
   const byGps = Object.fromEntries(lib.players.map((q) => [q.gps, q])), inGps = new Set(fullRows.map((r) => spName(r['Player First Name'])));
   const st = (q) => p.status[q.id] || 'ProTraining';
   const players = {};
   inGps.forEach((g) => { const q = byGps[g]; players[g] = q ? { name: q.gps, pos: q.pos, type: st(q) } : { name: g, pos: '', type: 'ProTraining' }; });
-  const extra = lib.players.filter((q) => !inGps.has(q.gps) && !SPL_IN_SESSION.has(st(q))).map((q) => ({ name: q.gps, pos: q.pos, type: st(q) }));
-  const missing = lib.players.filter((q) => !inGps.has(q.gps) && SPL_IN_SESSION.has(st(q)));
+  const extra = lib.players.filter((q) => !inGps.has(q.gps) && !bHalves[q.gps] && !SPL_IN_SESSION.has(st(q))).map((q) => ({ name: q.gps, pos: q.pos, type: st(q) }));
+  const missing = lib.players.filter((q) => !inGps.has(q.gps) && !bHalves[q.gps] && SPL_IN_SESSION.has(st(q)));
   const titles = { ...lib.titles, ...SPL.saved.titles }, map = p.titlemap || {};
   // minutes written in the rows: the planned ones, or the ones set after the session (the drill really lasted longer)
   const plan = p.drills.map((d, i) => ({ i, no: i + 1, name: splName(d.name), planned: Number(d.min) || 0, min: Number(d.act) || Number(d.min) || 0, chk: !!d.chk, own: SPL_NOT_TEAM.test(splName(d.name)) }));
   const titleOfRow = (r) => String(r['Drill Title'] || '').trim();
-  const match = !!splMatchOn(date); // a match day (calendar): each player's halves add up to his match, his own minutes
   if (match) plan.splice(0, plan.length, ...SPL_GAME_DRILLS.map((name, k) => ({ i: -1, no: k + 1, name, planned: 0, min: 0, chk: false, own: true })));
   // individual work in the export ("Individual-Training") but none in the plan: an INDIVIDUAL drill after the team drills,
   // each player's own minutes (his Excel: INDIVIDUAL, or Rehab for a player in rehab, numbered after the team drills)
@@ -738,11 +810,13 @@ function splBuild() {
     const times = drillRows.filter((r) => titleOfRow(r) === t).map((r) => ({ g: spName(r['Player First Name']), t: spNum(r['Total Time']) })).filter((x) => x.g);
     mapping.push({ title: t, d, n: times.length, times, min: Math.max(0, ...times.map((x) => x.t)), med: splMedian(times.map((x) => x.t)) });
   });
+  [...new Set(allDrills.filter((r) => !notB(r) && splHalf(titleOfRow(r))).map(titleOfRow))].forEach((t) => { // the B-team game's halves: recognised
+    const h1 = splGameTitle(t) === 'Game_1stHalf';
+    mapping.push({ title: t, d: { no: h1 ? 1 : 2, name: `B-team game · ${h1 ? '1st' : '2nd'} half`, own: true }, b: true, n: allDrills.filter((r) => titleOfRow(r) === t).length, times: [], min: 0, med: 0 });
+  });
   const sessionTime = Number(p.time) || spSessionTime(fullRows);
   // RPE: the players' kiosk answers, unless one was typed here
-  const kiosk = splKioskRpe(date, p.ampm || 'PM'), rpe = {}, fromKiosk = new Set();
-  lib.players.forEach((q) => { if (kiosk[q.id] != null) { rpe[q.gps] = kiosk[q.id]; fromKiosk.add(q.gps); } });
-  Object.entries(p.rpe || {}).forEach(([g, v]) => { if (v != null && v !== '') { rpe[g] = v; fromKiosk.delete(g); } });
+  const { rpe, fromKiosk } = splRpe(date, p);
   // before publishing: GPS times far from the session, from the plan, or from the teammates in the same drill
   const fix = p.fix || {}, fixT = fix.t || {}, fixC = fix.c || {}, checks = { time: [], drill: [], cut: [] }, gpsTime = {};
   fullRows.forEach((r) => { const g = spName(r['Player First Name']); if (g) gpsTime[g] = spNum(r['Total Time']); });
@@ -763,7 +837,7 @@ function splBuild() {
   }));
   checks.left = checks.time.filter((x) => !x.fix).length + checks.drill.filter((x) => !x.done).length + checks.cut.filter((x) => !x.fix).length;
   const ownTime = new Set(Object.keys(fixT).filter((g) => fixT[g] === 'own')), cutOwn = new Set(Object.keys(fixC).filter((k) => fixC[k] === 'own'));
-  let fullText = SPL.files.full.text, drillText = SPL.files.drills ? SPL.files.drills.text : '';
+  let fullText = hasB ? spToCsv(fullRows) : SPL.files.full.text, drillText = hasB ? spToCsv(drillRows) : SPL.files.drills ? SPL.files.drills.text : '';
   const halfInfo = {}; // a match: the halves' minutes written (shown in the drills column)
   if (skipped.size) drillText = spToCsv(drillRows.filter((r) => !skipped.has(titleOfRow(r))));
   let day = null; // a match day's rows (sp-convert.js spMatchDay)
@@ -800,7 +874,14 @@ function splBuild() {
   });
   out.drills.forEach((r) => { r['Drill info'] = splDrillInfo(r.Type); }); // the drill card, after its name in Data_Drills
   if (day) out.full = day.full;
-  return { ...out, fileDate, missing: day ? [] : missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk, checks, match, halfInfo, squad: day ? day.squad : null };
+  let bList = null;
+  if (hasB) { // the B-team game, apart: session "/", Game_B, MD, his two halves (sp-convert.js spOffDay)
+    const bo = spOffDay({ halves: bHalves, rpe, pos: Object.fromEntries(lib.players.map((q) => [q.gps, q.pos])),
+      ctx: { date, week: splWeekNo(date), label: p.label || splLabel(date), md: splTag(date) || '/', ampm: p.ampm || 'PM' } });
+    out.full.push(...bo.full); out.drills.push(...bo.drills);
+    bList = bo.full.map((r) => ({ name: (byGps[r.Players] || {}).name || r.Players, t: r.Time }));
+  }
+  return { ...out, fileDate, missing: day ? [] : missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk, checks, match, halfInfo, squad: day ? day.squad : null, bList };
 }
 /** The checks above the three columns: each flagged time with its one-click fixes (the chosen one stays highlighted). */
 function splChecksHtml(b) {
@@ -849,15 +930,26 @@ function splImportHtml() {
   const rows = SPL.show === 'drills' ? b.drills : b.full, cols = SPL.show === 'drills' ? SP_DRILL_COLS : SP_FULL_COLS;
   const auto = new Set(['Date', 'N° Session', 'Week', 'WeeK MD Session', 'MD Session', 'Position', 'Type', 'N°Exercice', 'AMPM', 'Carga RPE', 'RPE', 'Time']);
   const fmtv = (v) => (v == null ? '' : typeof v === 'number' ? (Number.isInteger(v) ? v : +v.toFixed(2)) : escapeHtml(v));
-  const ready = !unmapped.length && b.fileDate === date;
+  const ready = b.off ? !b.fileDate || b.fileDate === date : !unmapped.length && b.fileDate === date;
+  const status = splStatusList(), col = Object.fromEntries(status.map(([k, , c]) => [k, c])), lab = Object.fromEntries(status.map(([k, l]) => [k, l]));
+  const offCols = !b.off ? '' : `<div class="sp-chk"><div class="sp-h3"><i class="n">1</i>Who worked <small>${b.off.list.filter((x) => x.type !== 'Day_Off').length} on StatSports${b.unknown.length ? ` · ${b.unknown.length} unknown` : ''}</small></div>
+      <div class="sp-ngs">${b.off.list.map((x) => { const c = col[x.type] || '#8e8e93', next = SPL_OFF_TYPES[(SPL_OFF_TYPES.indexOf(x.type) + 1) % SPL_OFF_TYPES.length];
+        return `<button type="button" class="sp-ng" data-offtype="${escapeHtml(x.g)}" data-v="${x.type}" title="Click: ${escapeHtml(next === 'Day_Off' ? 'not counted' : lab[next] || next)}" style="border:0;cursor:pointer;${x.type === 'Day_Off' ? 'opacity:.6;text-decoration:line-through' : `background:${c}22;color:${c}`}">${escapeHtml(x.name)}<small>${x.type === 'Day_Off' ? 'not counted' : escapeHtml(lab[x.type] || x.type)} · ${Math.floor(x.t + 1e-9)}′${x.whole ? ' · whole recording' : ''}</small></button>`; }).join('') || '<span class="sp-note">nobody on StatSports</span>'}</div>
+      <p class="sp-note">Click a player to switch: B-team training → individual → rehab → compensatory → not counted. His own minutes are written.${b.off.list.some((x) => x.whole) ? ' “Whole recording”: no session cut on StatSports, the pod’s whole time — check it, or cut the session in Sonra and get it again.' : ''}</p>
+      ${b.unknown.length ? `<p class="sp-note warn">Not in the squad list (kept with their GPS name): ${b.unknown.map(escapeHtml).join(', ')} — add them in Squad.</p>` : ''}</div>
+    <div class="sp-chk"><div class="sp-h3"><i class="n">2</i>B-team game · day off <small>${b.off.games.length ? `${b.off.games.length} on a B-team game · ` : ''}everyone else 0′</small></div>
+      ${b.off.games.length ? `<div class="sp-ngs">${b.off.games.map((x) => `<span class="sp-ng" style="background:${col.Game_B}22;color:${col.Game_B}">${escapeHtml(x.name)}<small>Game_B · ${Math.floor(x.t + 1e-9)}′ · ${x.n} half${x.n > 1 ? 'ves' : ''}</small></span>`).join('')}</div><p class="sp-note">Game_B, MD, his two halves (Game_1stHalf, Game_2ndHalf) with his own minutes — as on 2 Oct in your Excel.</p>` : ''}
+      <div class="sp-ngs">${b.full.filter((r) => !r.Time && r.DT == null).map((r) => `<span class="sp-ng">${escapeHtml(r.Players)}<small>${escapeHtml(lab[r.Type] || r.Type)}</small></span>`).join('') || '<span class="sp-note">nobody</span>'}</div></div>`;
   return `${splHead(date, 1)}
+    ${b.off ? `<p class="sp-banner ok">Team day off, as on your MD+1 days off: session “/” (no session number), ${escapeHtml(splTag(date) || '/')}, ${escapeHtml(p.label || splLabel(date))}. Each player who worked: his own minutes and one drill row with his status; a B-team game: Game_B and its halves; everyone else Day off. No staff report or e-mail — the work counts in each player's week and A:C.</p>` : ''}
+    ${b.bList ? `<p class="sp-banner ok">B-team game: ${b.bList.map((x) => `${escapeHtml(x.name)} ${x.t}′`).join(', ')} — written apart, as in your Excel (Game_B, session “/”, MD, his two halves) and published with ${escapeHtml(p.sid || splSid(date))}.</p>` : ''}
     ${b.match ? '<p class="sp-banner ok">Match day, as in your Excel: a match row per player (“Game” = his two halves added up, 0′ if he did not come on; “NC” if not called) and a second row for the session he did that day. One RPE per player: on his match row, or on his session row if he did not play. The 10-minute cuts go to Data_10min on their own.</p>' : ''}
     ${b.fileDate && b.fileDate !== date ? `<p class="sp-banner warn">These files are from ${SPL_DAY(b.fileDate, { weekday: 'long', day: 'numeric', month: 'long' })}, not from this day. <button type="button" class="linkbtn" data-goto="${b.fileDate}">Open ${SPL_DAY(b.fileDate, { weekday: 'short', day: 'numeric', month: 'short' })}</button></p>` : ''}
-    <div class="sp-files"><div class="sp-file ok"><span class="ic">CSV</span><div><b>${escapeHtml(SPL.files.full.name)}</b><small>${gpsRows.length} players · ${b.fileDate ? SPL_DAY(b.fileDate, { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'no date'} · session ${b.sessionTime}'</small></div></div>
-      <div class="sp-file ${SPL.files.drills ? 'ok' : 'miss'}"><span class="ic">CSV</span><div><b>${SPL.files.drills ? escapeHtml(SPL.files.drills.name) : 'Drills file missing'}</b><small>${SPL.files.drills ? `${b.mapping.length} drills · ${b.drills.length} rows` : 'drop S##_Drills.csv too'}</small></div></div>
+    <div class="sp-files"><div class="sp-file ok"><span class="ic">CSV</span><div><b>${escapeHtml(SPL.files.full.name)}</b><small>${gpsRows.length} players · ${b.fileDate ? SPL_DAY(b.fileDate, { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'no date'}${b.off ? '' : ` · session ${b.sessionTime}'`}</small></div></div>
+      ${b.off ? '' : `<div class="sp-file ${SPL.files.drills ? 'ok' : 'miss'}"><span class="ic">CSV</span><div><b>${SPL.files.drills ? escapeHtml(SPL.files.drills.name) : 'Drills file missing'}</b><small>${SPL.files.drills ? `${b.mapping.length} drills · ${b.drills.length} rows` : 'drop S##_Drills.csv too'}</small></div></div>`}
       <label class="sp-drop small"><input type="file" accept=".csv,text/csv" multiple hidden data-files>Drop other files to replace</label></div>
-    ${SPL.files.drills || b.checks.time.length ? splChecksHtml(b) : ''}
-    <div class="sp-three">
+    ${!b.off && (SPL.files.drills || b.checks.time.length) ? splChecksHtml(b) : ''}
+    <div class="sp-three">${b.off ? offCols : `
       <div class="sp-chk"><div class="sp-h3"><i class="n">1</i>Drills <small>StatSports title → the drill of the plan</small></div>${mapRows || '<p class="sp-note">No drills file yet.</p>'}
         <p class="sp-note">Minutes written = the planned ones (a 2 × 10' game is 20', not the 22' of the GPS); type the real minutes if the drill lasted longer. A title you name once, or written exactly like the drill, is recognised.</p></div>
       <div class="sp-chk"><div class="sp-h3"><i class="n">2</i>Players <small>${gpsRows.length} in the GPS file${b.unknown.length ? ` · ${b.unknown.length} unknown` : ' · all recognised ✓'}</small></div>
@@ -865,36 +957,41 @@ function splImportHtml() {
         ${b.missing.length ? `<p class="sp-note warn">In the session in the plan but not in the GPS file: ${b.missing.map((q) => escapeHtml(q.name)).join(', ')} — change their status if they did not train.</p>` : ''}
         ${squadHtml}
         <p class="sp-note">${b.match ? 'Out (from the plan):' : 'Added from the plan, without GPS:'}</p><div class="sp-ngs">${b.full.filter((r) => !r.Time && r.DT == null && !(b.match && /^(Game|NC)$/.test(r.Type))).map((r) => `<span class="sp-ng">${escapeHtml(r.Players)}<small>${escapeHtml(r.Type)}</small></span>`).join('') || '<span class="sp-note">nobody</span>'}</div>
-        <label class="sp-time">Session time <input type="number" min="1" max="200" value="${b.sessionTime}" data-f="time"> min <small>for the team-session players (the GPS's usual time)</small></label></div>
+        <label class="sp-time">Session time <input type="number" min="1" max="200" value="${b.sessionTime}" data-f="time"> min <small>for the team-session players (the GPS's usual time)</small></label></div>`}
       <div class="sp-chk"><div class="sp-h3"><i class="n">3</i>RPE <small>${nRpe} / ${rpeRows.length} · Carga RPE = RPE × time</small><button type="button" class="linkbtn sp-rpe-ref" data-rpe-refresh>↻ Kiosk</button></div><div class="sp-rpe">${rpeGrid}</div>
         <p class="sp-note">${nKiosk ? `<span class="sp-key k"></span>${nKiosk} from the players' kiosk answers` : 'No kiosk answer yet for this session'}${nRpe < rpeRows.length ? ` · <span class="sp-key miss"></span>${rpeRows.length - nRpe} missing: you can publish now — answers given later on the RPE page are added overnight (or type them: added a few minutes later)` : ''} · type a value to correct it.</p></div>
     </div>
     <div class="sp-h3">Preview <span class="seg sp-show"><button type="button" data-show="full" class="${SPL.show === 'full' ? 'active' : ''}">Data_Full · ${b.full.length}</button><button type="button" data-show="drills" class="${SPL.show === 'drills' ? 'active' : ''}">Data_Drills · ${b.drills.length}</button></span><small>same columns and order as your Excel · blue = from the plan</small></div>
     <div class="sp-tw"><table class="sp-tbl"><thead><tr>${cols.map((c) => `<th class="${auto.has(c) ? 'a' : ''}">${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${cols.map((c) => `<td class="${auto.has(c) ? 'a' : ''}">${fmtv(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
     ${b.issues.length ? `<p class="sp-note warn">${b.issues.map(escapeHtml).join(' · ')}</p>` : ''}
-    <div class="sp-actions"><button type="button" class="btn-primary" data-publish ${ready ? '' : 'disabled'}>Publish ${escapeHtml(p.sid || splSid(date))}</button><button type="button" class="btn-light" data-xlsx>Download Excel · Full + Drills</button><button type="button" class="btn-light" data-back>Back to the plan</button>
-      <span>${ready ? (b.checks.left ? `${b.checks.left} time${b.checks.left > 1 ? 's' : ''} not checked above — you can still publish: the preview shows what is written.` : 'Publishing adds the rows to the season: the dashboard, the PDF reports and the staff e-mail (with the players’ report) follow on their own, a few minutes later.') : unmapped.length ? 'Name every drill first.' : 'The files are not from this day.'}</span></div>`;
+    <div class="sp-actions"><button type="button" class="btn-primary" data-publish ${ready ? '' : 'disabled'}>${b.off ? 'Publish the day off' : `Publish ${escapeHtml(p.sid || splSid(date))}${b.bList ? ' + B-team game' : ''}`}</button><button type="button" class="btn-light" data-xlsx>Download Excel · Full + Drills</button><button type="button" class="btn-light" data-back>Back to the plan</button>
+      <span>${ready && b.off ? 'Publishing adds the rows to the season: each player’s load and the dashboard follow a few minutes later — no report, no e-mail.' : ready ? (b.checks.left ? `${b.checks.left} time${b.checks.left > 1 ? 's' : ''} not checked above — you can still publish: the preview shows what is written.` : 'Publishing adds the rows to the season: the dashboard, the PDF reports and the staff e-mail (with the players’ report) follow on their own, a few minutes later.') : unmapped.length ? 'Name every drill first.' : 'The files are not from this day.'}</span></div>`;
 }
 
 async function splPublish() {
-  const date = SPL.date, p = splEnsure(date), b = splBuild(), sid = p.sid || splSid(date);
-  const body = { date, sid, cols_full: SP_FULL_COLS, full: b.full.map((r) => SP_FULL_COLS.map((c) => r[c])), cols_drills: SP_DRILL_COLS, drills: b.drills.map((r) => SP_DRILL_COLS.map((c) => r[c])) };
+  const date = SPL.date, p = splEnsure(date), b = splBuild(), sid = p.off ? 'OFF' : p.sid || splSid(date);
+  const pack = (key, f, d) => ({ date, sid: key, cols_full: SP_FULL_COLS, full: f.map((r) => SP_FULL_COLS.map((c) => r[c])), cols_drills: SP_DRILL_COLS, drills: d.map((r) => SP_DRILL_COLS.map((c) => r[c])) });
+  // rows "/" (a day off, a B-team game) are published apart from the club session, under the key date_OFF
+  const slash = (r) => r['N° Session'] === '/', team = (r) => !slash(r);
+  const bodies = p.off ? [pack('OFF', b.full, b.drills)]
+    : [pack(sid, b.full.filter(team), b.drills.filter(team)), ...(b.full.some(slash) ? [pack('OFF', b.full.filter(slash), b.drills.filter(slash))] : [])];
   SPL.state = 'Publishing…'; splStateLine();
   let saved = false, started = null;
   try {
-    if (AUTH.demo) { SPL.saved.published[`${date}_${sid}`] = { date, sid, rows: `${body.full.length} full · ${body.drills.length} drills`, by: 'demo', at: new Date().toISOString() }; splDemoStore(); }
+    if (AUTH.demo) { bodies.forEach((x) => { SPL.saved.published[`${date}_${x.sid}`] = { date, sid: x.sid, rows: `${x.full.length} full · ${x.drills.length} drills`, by: 'demo', at: new Date().toISOString() }; }); splDemoStore(); }
     else {
-      await callApi('session_publish', null, body);
+      for (const body of bodies) await callApi('session_publish', null, body);
       saved = true; started = typeof cfRebuild === 'function' ? cfRebuild() : null; // the rows are saved: the online calculation starts now
       SPL.state = 'Published ✓ — saving the plan…'; splStateLine();
       await splLoadSaved();
     }
-    p.sid = sid; await splSavePlan(date);
+    if (!p.off) p.sid = sid;
+    await splSavePlan(date);
     SPL.state = 'Published ✓ — in the dashboard at the next update'; SPL.view = 'plan'; SPL.files = {}; splDraw(); splRebuilt(started);
   } catch (err) { SPL.state = (saved ? 'Published ✓ — but the plan was not refreshed: ' : 'Not published — ') + (err.message || err); splStateLine(); }
 }
 async function splXlsx() {
-  const date = SPL.date, p = splEnsure(date), b = splBuild(), sid = p.sid || splSid(date);
+  const date = SPL.date, p = splEnsure(date), b = splBuild(), sid = p.off ? 'Day_off' : p.sid || splSid(date);
   await rpScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
   const sheet = (cols, rows) => window.XLSX.utils.aoa_to_sheet([cols, ...rows.map((r) => cols.map((c) => (c === 'Date' && r[c] ? new Date(r[c] + 'T00:00:00') : r[c])))], { cellDates: true, dateNF: 'dd/mm/yyyy' });
   const wb = window.XLSX.utils.book_new();
@@ -909,6 +1006,17 @@ function splClick(e) {
   if (!t || !SPL.date) return;
   const date = SPL.date, p = () => splEnsure(date);
   if (t.dataset.ampm) { p().ampm = t.dataset.ampm; splTouch(date); splDraw(); return; }
+  // a team day off: the players planned in the session go Day off (and come back when it is switched off)
+  if (t.dataset.off != null) {
+    const pp = p(); pp.off = !pp.off;
+    SPL.lib.players.forEach((q) => { const s = pp.status[q.id] || 'ProTraining'; if (pp.off && SPL_IN_SESSION.has(s)) pp.status[q.id] = 'Day_Off'; else if (!pp.off && s === 'Day_Off') pp.status[q.id] = 'ProTraining'; });
+    SPL.view = 'plan'; SPL.files = {}; SPL.card = null; splTouch(date); splDraw(); return;
+  }
+  if (t.dataset.offtype) { // what a player on StatSports did that day: the next one
+    const pp = p(), i = SPL_OFF_TYPES.indexOf(t.dataset.v);
+    pp.offType = { ...(pp.offType || {}), [t.dataset.offtype]: SPL_OFF_TYPES[(i + 1) % SPL_OFF_TYPES.length] }; splTouch(date); splDraw(); return;
+  }
+  if (t.dataset.nogps != null) { SPL.files = { full: { name: 'No GPS this day', text: '' } }; SPL.view = 'import'; SPL.state = ''; splDraw(); return; }
   // correct a session in the data
   if (t.dataset.corrOpen != null) { splOpenCorrection(date); return; }
   if (t.dataset.corrCancel != null) { SPL.view = 'plan'; SPL.corr = null; splDraw(); return; }
