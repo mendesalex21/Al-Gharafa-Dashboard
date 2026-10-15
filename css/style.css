@@ -1772,3 +1772,14 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .rwc-foot { margin-top: auto; display: flex; justify-content: space-between; gap: 20px; font-size: 10px; color: var(--rp-muted); font-weight: 600; }
 .rwc-leg { display: flex; gap: 10px; align-items: center; white-space: nowrap; flex: none; }
 .rwc-leg span { display: inline-flex; align-items: center; gap: 4px; } .rwc-leg i { display: inline-block; width: 20px; height: 10px; border-radius: 3px; }
+
+/* ---------- WCS pages (staff report · Game 10min): rules strip, drill cards, two charts / tables side by side ---------- */
+.cq-rule { display: flex; gap: 10px; align-items: stretch; }
+.cq-rule > div { background: var(--rp-band); border-radius: 8px; padding: 7px 12px; font-size: 11px; color: var(--rp-muted); font-weight: 600; line-height: 1.35; }
+.cq-rule b { color: var(--rp-navy); font-size: 12.5px; display: block; } .cq-rule .tg { background: #eef1fb; } .cq-rule .tg b { color: #16269e; }
+.cq-svg text { font-family: "Open Sans", sans-serif; }
+.cq-g3, .cq-g2t { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.ts-cards { display: grid; gap: 10px; }
+.ts-card { border: 1px solid var(--rp-rule); border-radius: 10px; padding: 7px 10px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; }
+.ts-card b { font-size: 12.5px; color: var(--rp-navy); } .ts-card .w { font-size: 9.5px; font-weight: 800; color: #fff; background: #16269e; border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+.ts-card .m { grid-column: 1 / -1; display: flex; gap: 12px; font-size: 11px; color: var(--rp-muted); font-weight: 600; flex-wrap: wrap; } .ts-card .m b { font-size: 15px; }

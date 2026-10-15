@@ -239,8 +239,10 @@ function splCardHtml() {
     ${isNew ? `<label class="sp-f"><span>Name</span><input data-card="name" value="${escapeHtml(c.name)}" maxlength="50" placeholder="e.g. RONDO, SSG + GK" autocomplete="off"></label>` : ''}
     <div class="sp-fr"><label class="sp-f"><span>Players</span><input data-card="players" value="${escapeHtml(c.players)}" maxlength="15" placeholder="e.g. 4vs1, 3vs0, 10" autocomplete="off"${lockP ? ' readonly title="Written in its name"' : ''}></label>
       <label class="sp-f"><span>Pitch (m)</span><span class="sp-xy"><input type="number" min="5" max="150" data-card="length" value="${c.length}" placeholder="length" aria-label="Pitch length"${lockD ? ' readonly' : ''}>×<input type="number" min="5" max="150" data-card="width" value="${c.width}" placeholder="width" aria-label="Pitch width"${lockD ? ' readonly' : ''}></span></label>
-      <span class="sp-area">${area ? `${area} m² per player` : ''}</span></div>
+      <span class="sp-area">${area ? `${area} m² per player` : ''}</span>
+      <label class="sp-f"><span>Repetitions</span><input data-card="reps" value="${escapeHtml(c.reps || '')}" maxlength="15" placeholder="e.g. 4 × 3'" autocomplete="off" style="width:96px"></label></div>
     <div class="sp-dyn">${splCardDyn()}</div>
+    ${splCardWcs()}
     <div class="sp-card-a"><button type="button" class="btn-primary" data-card-save>${isNew ? 'Create and add' : 'Save'}</button><button type="button" class="btn-light" data-card-cancel>Cancel</button><em class="sp-card-msg"></em>${!isNew && !hasData && splDef(c.name) ? '<button type="button" class="linkbtn sp-del" data-card-del>Delete this drill</button>' : ''}</div></div>`;
 }
 /** The part of the card that follows what is typed: what a new drill is compared with (its name in Data_Drills) and the
@@ -256,6 +258,32 @@ function splCardDyn() {
   return `${opts.length > 1 ? `<div class="sp-f"><span>Compared with <small>its history = the sessions with exactly this name in Data_Drills</small></span><div class="sp-cmps">${opts.map(([k, nm]) => `<label class="sp-cmp${(c.cmp || '') === k ? ' on' : ''}"><input type="radio" name="sp-cmp" data-card="cmp" value="${k}"${(c.cmp || '') === k ? ' checked' : ''}><b>${escapeHtml(nm)}</b><small>${escapeHtml(what[k])} · ${hist(nm)}</small></label>`).join('')}</div></div>` : ''}
     ${hasData ? '' : `<label class="sp-f"><span>Forecast like <small>until it has data of its own (after its first session)</small></span><select data-card="like"><option value="">— not in the forecast —</option>${lib.map((x) => `<option ${splKey(x.name) === splKey(c.like) ? 'selected' : ''}>${escapeHtml(splName(x.name))}</option>`).join('')}</select></label>`}`;
 }
+/** The WCS window the staff report compares the drill with (his physical coach's rules, 2026-10-15): speed / acc-dec /
+ * duels → 1 min, 8 a side or more → 5 min, other games → 3 min, warm-up / strength → not judged (sync/wcs.py auto_window). */
+function splAutoWin(name, players) {
+  const t = `${name || ''} ${players || ''}`;
+  if (/warm|strength|gym|activation|individual|rehab/i.test(t)) return null;
+  if (/speed|sprint|velocid|\bacc|\bdec|agil/i.test(t)) return 0;
+  const m = /(\d+)\s*vs?\s*(\d+)/i.exec(t), side = m ? Math.max(Number(m[1]), Number(m[2])) : 0;
+  return side >= 8 ? 2 : side && side <= 2 ? 0 : 1;
+}
+const SPL_WIN = ['1 min', '3 min', '5 min'];
+/** The drill's WCS window as written in the plan: "WCS 3′" (chosen in its card) or "WCS 3′ · auto". */
+function splWcsTxt(name) {
+  const d = splDef(name) || {}, w = { 1: 0, 3: 1, 5: 2 }[d.wcs];
+  if (d.wcs === 'off') return 'WCS: not judged';
+  if (w != null) return `WCS ${SPL_WIN[w].replace(' min', '′')}`;
+  const a = splAutoWin(name, d.players);
+  return a == null ? 'WCS: not judged · auto' : `WCS ${SPL_WIN[a].replace(' min', '′')} · auto`;
+}
+/** The card's "compared with the match" choice: automatic (the rule), 1, 3 or 5 min, or not judged. */
+function splCardWcs() {
+  const c = SPL.card, a = splAutoWin(c.name, c.players), cur = c.wcs || '';
+  const opts = [['', `Automatic · ${a == null ? 'not judged' : SPL_WIN[a]}`, 'from its name and players'], ['1', '1 min', 'speed · acc / dec · duels · repetitions under 3′'],
+    ['3', '3 min', 'small-sided games'], ['5', '5 min', 'larger games (8 a side +)'], ['off', 'Not judged', 'warm-up · strength']];
+  return `<div class="sp-f"><span>Compared with the match (WCS) <small>his best passage of this length in the drill vs his match WCS of the same length · the peaks always use the 1-min WCS</small></span>
+    <div class="sp-cmps">${opts.map(([v, b, sm]) => `<label class="sp-cmp${cur === v ? ' on' : ''}"><input type="radio" name="sp-wcs" data-card="wcs" value="${v}"${cur === v ? ' checked' : ''}><b>${escapeHtml(b)}</b><small>${escapeHtml(sm)}</small></label>`).join('')}</div></div>`;
+}
 /** As the card is typed in: the area per player, what it can be compared with and the guessed "forecast like". */
 function splCardRefresh() {
   const c = SPL.card, isNew = c.edit == null;
@@ -269,7 +297,8 @@ async function splCardSave() {
   if (!splName(c.name)) { const el = document.querySelector('.sp-card-msg'); if (el) el.textContent = 'Write the name of the drill.'; return; }
   const num = (v, lo, hi) => { const x = Math.round(Number(v)); return v === '' || v == null || !Number.isFinite(x) || !x ? null : Math.max(lo, Math.min(hi, x)); };
   const prev = splDef(name), inLib = splLibOf(name), key = prev ? prev.name : inLib ? splName(inLib.name) : name; // one card per drill, whatever the spelling
-  const def = { name: key, length: num(c.length, 1, 150), width: num(c.width, 1, 150), players: splName(c.players).slice(0, 15) || null, like: inLib ? '' : c.like || '' };
+  const def = { name: key, length: num(c.length, 1, 150), width: num(c.width, 1, 150), players: splName(c.players).slice(0, 15) || null, like: inLib ? '' : c.like || '',
+    wcs: ['1', '3', '5', 'off'].includes(c.wcs) ? c.wcs : '', reps: splName(c.reps).slice(0, 15) };
   SPL.saved.drills = { ...splDefs(), [key]: def };
   if (c.edit == null) { const r8 = splRateOf(key); splEnsure(date).drills.push({ name: key, min: r8 ? r8.l.min : 10 }); splTouch(date); }
   SPL.card = null; splDraw();
@@ -298,7 +327,7 @@ function splPlanHtml() {
   const list = (cur) => ch.names.map((n) => opt(n, cur)).join('') + (ch.extra.length ? `<optgroup label="Created here · no data yet">${ch.extra.map((n) => opt(n, cur)).join('')}</optgroup>` : '');
   const opts = (cur) => `<option value="">Choose a drill…</option>${list(cur)}${cur && ![...ch.names, ...ch.extra].some((n) => splKey(n) === splKey(cur)) ? `<option selected>${escapeHtml(cur)}</option>` : ''}`;
   const rows = p.drills.map((d, i) => { const r8 = splRateOf(d.name), own = SPL_NOT_TEAM.test(splName(d.name)), ss = titleOf[splName(d.name)];
-    const cap = own ? 'individual / rehab work' : [ss ? 'StatSports: ' + escapeHtml(ss) : '', escapeHtml(splDefTxt(splDef(d.name))),
+    const cap = own ? 'individual / rehab work' : [ss ? 'StatSports: ' + escapeHtml(ss) : '', escapeHtml(splDefTxt(splDef(d.name))), escapeHtml(splWcsTxt(d.name)),
       !r8 ? '<span class="sp-warn">no data yet — not in the forecast</span>' : r8.own ? '' : `forecast like ${escapeHtml(splName(r8.l.name))}`].filter(Boolean).join(' · ');
     return `<div class="sp-dr"><span class="sp-ord"><button type="button" data-up="${i}" ${i ? '' : 'disabled'} aria-label="Move up">▲</button><button type="button" data-down="${i}" ${i < p.drills.length - 1 ? '' : 'disabled'} aria-label="Move down">▼</button></span><span class="no" style="background:${splColor(d.name)}">${i + 1}</span>
       <span class="nm"><select data-drill="${i}">${opts(d.name)}</select><small>${cap}${own ? '' : `<button type="button" class="sp-ed" data-card-edit="${i}">${splDef(d.name) ? '✎ card' : '+ pitch / players'}</button>`}</small></span>
@@ -1073,7 +1102,7 @@ function splClick(e) {
   if (t.dataset.cardEdit != null) {
     const d = p().drills[Number(t.dataset.cardEdit)], def = splDef(d.name) || {}, inLib = !!splLibOf(d.name);
     const pl = def.players == null ? '' : String(def.players);
-    SPL.card = { edit: Number(t.dataset.cardEdit), name: splName(d.name), length: def.length || '', width: def.width || '', players: pl, like: def.like || (inLib ? '' : splGuessLike(d.name, pl)), auto: !def.like };
+    SPL.card = { edit: Number(t.dataset.cardEdit), name: splName(d.name), length: def.length || '', width: def.width || '', players: pl, like: def.like || (inLib ? '' : splGuessLike(d.name, pl)), auto: !def.like, wcs: def.wcs || '', reps: def.reps || '' };
     splDraw(); const el = document.querySelector('.sp-card'); if (el) el.scrollIntoView({ block: 'nearest' }); return;
   }
   if (t.dataset.cardSave != null) { splCardSave(); return; }
@@ -1130,6 +1159,7 @@ function splChange(e) {
   if (t.dataset.card) {
     if (t.dataset.card === 'like' && SPL.card) { SPL.card.like = t.value; SPL.card.auto = false; }
     if (t.dataset.card === 'cmp' && SPL.card) { SPL.card.cmp = t.value; splCardRefresh(); } // what a new drill is compared with
+    if (t.dataset.card === 'wcs' && SPL.card) { SPL.card.wcs = t.value; document.querySelectorAll('[data-card="wcs"]').forEach((x) => x.closest('.sp-cmp').classList.toggle('on', x.checked)); } // its WCS window
     return;
   }
   if (t.dataset.actmin != null) { splDraw(); return; } // minutes written: refresh the checks and the preview when done
@@ -1145,7 +1175,7 @@ function splChange(e) {
 }
 function splInput(e) {
   const t = e.target, date = SPL.date;
-  if (t.dataset.card && t.dataset.card !== 'like' && t.dataset.card !== 'cmp' && SPL.card) { // the card follows what is typed
+  if (t.dataset.card && t.dataset.card !== 'like' && t.dataset.card !== 'cmp' && t.dataset.card !== 'wcs' && SPL.card) { // the card follows what is typed
     SPL.card[t.dataset.card] = t.value;
     splCardRefresh();
     return;

@@ -5,7 +5,8 @@
  * minutes (m/min, Acc + Dec, > 20 km/h against the usual band; reading; the season's matches with their micro-cycle) ·
  * 6 the players (output vs their usual match, m/min every 10') · 7 the end of the match (who held, who dropped, against
  * each player's own usual) · 8 the peaks of intensity (best 1, 3, 5 minutes vs his record) · 9 each player's end of match
- * over his last matches · 10 the team and its last 5 matches.
+ * over his last matches · 10 the team and its last 5 matches · + the peaks every 10 minutes (the times at 80 % of the
+ * 1-min WCS, sync/wcs.py) after the peaks of intensity.
  * Data: the `match_report` payload (sync/match_report.py), one block per match cut in 10-minute periods. The measures of
  * fatigue are m/min and Acc + Dec (they fall with the minutes in every match); distance > 20 km/h and sprints follow
  * the game and are shown as output only.
@@ -244,6 +245,37 @@ function pagePeaks() {
     <div class="mp-legend"><span>From the raw 10 Hz GPS of the match · his record = his best in the season's ${M.peaks_n} earlier official matches · the small number = the minute of the match where it happened · orange = 90 % of his record or more, red = a new record</span></div></div>`;
 }
 
+/* ---------------------------------------------------------------- the peaks every 10 minutes (his physical coach's rule,
+   2026-10-15): the times the players' minute reached 80 % · 90 % of their 1-min WCS, by 10-minute period (sync/wcs.py) */
+function pageWcs() {
+  const X = M.wcs;
+  if (!X || !X.players || !Object.keys(X.players).length) return '';
+  const LB = ['0-10', '10-20', '20-30', '30-40', '40-HT', '45-55', '55-65', '65-75', '75-85', '85-FT'];
+  const who = (n) => { const id = D.pids[n], p = PL.find((q) => q.id === id); return { id, name: p ? p.name : n }; };
+  const chart = (k, label) => {
+    const a = X.team[k], u = X.usual[k] || [[], []], top = Math.max(4, ...a[0], ...u[0].filter((v) => v != null)) * 1.15;
+    const Wd = 590, H = 190, x0 = 26, y0 = 22, ph = 128, bw = 34, st = (Wd - x0 - 12) / 10, Y = (v) => y0 + ph - (v / top) * ph;
+    let s = `<svg class="cq-svg" width="${Wd}" height="${H}"><text x="0" y="12" font-size="10.5" font-weight="800" fill="#a52a2a">${label}</text>`;
+    a[0].forEach((v, i) => { const cx = x0 + i * st + (i >= 5 ? 8 : 0);
+      s += `<rect x="${cx}" y="${Y(v)}" width="${bw}" height="${y0 + ph - Y(v)}" rx="3" fill="#bfeccc"/><rect x="${cx}" y="${Y(a[1][i])}" width="${bw}" height="${y0 + ph - Y(a[1][i])}" rx="3" fill="#1f7a3d"/>
+        ${u[0][i] == null ? '' : `<line x1="${cx - 3}" x2="${cx + bw + 3}" y1="${Y(u[0][i])}" y2="${Y(u[0][i])}" stroke="#16269e" stroke-width="2" stroke-dasharray="4 2"/>`}
+        <text x="${cx + bw / 2}" y="${Y(v) - 4}" font-size="11" font-weight="800" fill="#111" text-anchor="middle">${v}</text>
+        <text x="${cx + bw / 2}" y="${y0 + ph + 13}" font-size="9" font-weight="700" fill="#16269e" text-anchor="middle">${LB[i]}</text>`; });
+    const hx = x0 + 5 * st - (st - bw) / 2 + 4;
+    return s + `<line x1="${hx}" x2="${hx}" y1="${y0}" y2="${y0 + ph}" stroke="#c4c7cf" stroke-dasharray="2 3"/><text x="${Wd / 2}" y="${H - 8}" font-size="9.5" fill="#6a6f80" text-anchor="middle">team peaks at 80 % (light) · of which at 90 % (dark)${X.n_usual ? ' · dash = usual' : ''}</text></svg>`;
+  };
+  const P = Object.entries(X.players).filter(([, x]) => x.min >= 20).sort((a, b) => b[1].min - a[1].min);
+  const h = Math.max(15, Math.min(21, Math.floor(260 / Math.max(1, P.length)))), cols = '120px repeat(5, minmax(0, 1fr)) 4px repeat(5, minmax(0, 1fr)) 36px';
+  const cell = (v) => `<span class="rwc-h ${v >= 3 ? 'rq5' : v === 2 ? 'rq4' : v === 1 ? 'rq3' : 'rq1'}" style="height:${h - 4}px">${v || '–'}</span>`;
+  const tbl = (k) => `<div class="rwc-tbl"><div class="rwc-ti" style="margin-bottom:4px">${k === 'td' ? 'm/min' : 'Acc/Dec + sprints'} · each player's peaks at 80 %</div><div class="rwc-tr rwc-th" style="grid-template-columns:${cols}"><span class="l">PLAYER</span>${LB.slice(0, 5).map((l) => `<span>${l}</span>`).join('')}<span></span>${LB.slice(5).map((l) => `<span>${l}</span>`).join('')}<span>TOT</span></div>
+    ${P.map(([n, x]) => { const w = who(n); return `<div class="rwc-tr rwc-r" style="grid-template-columns:${cols};height:${h}px"><span class="rwc-nm">${face(w.id)}${esc(w.name)}</span>${x.per[k][0].slice(0, 5).map(cell).join('')}<span></span>${x.per[k][0].slice(5).map(cell).join('')}<span class="rwc-c"><b>${x.cnt[k][0]}</b></span></div>`; }).join('')}</div>`;
+  return `<div class="rp-page">${header('MATCH · PEAKS EVERY 10 MINUTES · WCS')}
+    <div class="rwc-ti">How many times the players' minute reached 80 % · 90 % of their 1-minute WCS, every 10 minutes<small>the whole team${X.n_usual ? ` · dash = the usual of the season's ${X.n_usual} other matches (same number of players)` : ''} · fewer peaks late in a half = fatigue, or the game slowed down</small></div>
+    <div class="cq-g3">${chart('td', 'M/MIN')}${chart('hi', 'ACC/DEC + SPRINTS > 20 KM/H · PER MINUTE')}</div>
+    <div class="cq-g2t">${tbl('td')}${tbl('hi')}</div>
+    <div class="rwc-foot"><span>WCS = his most intense minute of the matches (mean of his 3 best) · periods of the match clock: the 5th of each half holds its last minutes and the added time · a peak counts in the period where it starts · players of 20 min or more</span></div></div>`;
+}
+
 /* ---------------------------------------------------------------- idea 4: his end of match, match after match */
 function pageTrend() {
   const ps = PL.filter((p) => p.trend && p.trend.length >= 2 && p.fat);
@@ -283,5 +315,5 @@ const staff = [
 // (two pages when the squad is too big for one; the team total and the one-half tables are left out — his choice)
 const hv = rpHalves(D), halves = hv[0].length || hv[1].length ? rpMatchPages(D, stitle).filter((p) => /GAME · 1ST HALF &(amp;)? 2ND HALF/.test(p) && !/TOTAL TEAM/.test(p)).map((p) => `<div class="rp-page">${p}</div>`).join('') : '';
 // his order (2026-10-13): staff pages · halves · the match by 10' · players · end of match · peaks · trends · the team's last 5 matches
-return staff + halves + page1() + page2() + page3() + pagePeaks() + pageTrend() + pageL5();
+return staff + halves + page1() + page2() + page3() + pagePeaks() + pageWcs() + pageTrend() + pageL5();
 }

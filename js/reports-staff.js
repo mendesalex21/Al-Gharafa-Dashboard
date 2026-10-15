@@ -247,83 +247,50 @@ function rpStaffPages(D, S) {
     `${short(first)}${toMatch ? ' – ' + short(toMatch) : ''} · ${X.profile.length ? `done up to ${s.md} (${stDay(s.date, { weekday: 'short', day: 'numeric' })})` : 'objectives until the match'}`,
     [['MICROCYCLE', cycle], ['WEEK', s.week], ['NEXT', X.next ? [X.next.competition, X.next.opponent].filter(Boolean).join(' · ') : '—']]) + rsMicro(C));
   pages.push(rpHeader('TODAY & MICROCYCLE · PLAYER BY PLAYER', title, [['MD', s.md], ['MICROCYCLE', cycle], ['PLAYERS', String(D.fullSession.length)]]) + rsToday(D, C, s, S));
-  if (X.wcs) pages.push(...rsWcsPages(D, X.wcs, s, title)); // the session against the matches' worst case scenarios (his ask, 2026-10-15)
+  const wcsPage = X.wcs ? rsWcsPage(D, X.wcs, s, title) : ''; // the session against the matches' worst case scenarios (his ask, 2026-10-15)
+  if (wcsPage) pages.push(wcsPage);
   return pages.map((p) => `<div class="rp-page rp-staff">${p}</div>`).join('');
 }
 
 // ---------------------------------------------------------------- WCS: the session against each player's worst case scenarios
-// of the matches (sync/wcs.py, raw GPS): A each player's best passage, B each drill, C the times at 80 / 90 % of his WCS
-const RW_MET = [['td', 'DISTANCE', 'DIST'], ['hsr', '> 20 KM/H', '>20'], ['vhsr', '> 25 KM/H', '>25'], ['spr', 'SPRINTS', 'SPR'], ['ad', 'ACC + DEC', 'A+D']];
-const RW_QC = { rq5: '#1f7a3d', rq4: '#34c759', rq3: '#bfeccc', rq2: '#ffe2b8', rq1: '#eef0f4' };
-const rwQ = (p) => (p == null ? 'rq0' : p >= 100 ? 'rq5' : p >= 90 ? 'rq4' : p >= 80 ? 'rq3' : p >= 60 ? 'rq2' : 'rq1');
+// of the matches (sync/wcs.py, raw GPS) — his physical coach's rules (2026-10-15): m/min and Acc/Dec + sprints > 20 km/h per
+// minute, threshold 80 %, each drill's best window of its kind (1 / 3 / 5 min) vs his WCS of the same length, his max minute
+// and the times his minute reached 80 % of his 1-min WCS, in the session and in a match
+const RW_K = ['td', 'hi'], RW_KL = { td: 'm/min', hi: 'A/D+spr' }, RW_WL = ['1 min', '3 min', '5 min'];
+const RW_QC = { rq5: '#1f7a3d', rq4: '#34c759', rq2: '#ffe2b8', rq1: '#eef0f4' };
+const rwQ = (p) => (p == null ? 'rq0' : p >= 100 ? 'rq5' : p >= 80 ? 'rq4' : p >= 60 ? 'rq2' : 'rq1');
 const rwMed = (xs) => { const v = xs.filter((x) => x != null).sort((a, b) => a - b), n = v.length; return n ? Math.round(n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2) : null; };
-/** A StatSports drill title, short: "LSG 10v10", "Tech 1v1 · speed", "Physical · Warm Up". */
-const rwShort = (t) => { const m = String(t).match(/^\s*([A-Za-z]+)\s*-\s*(\d+v\d+)/i); return m ? `${m[1]} ${m[2]}${/speed/i.test(t) ? ' · speed' : ''}` : String(t).replace(/\s*-\s*/g, ' · ').trim(); };
+/** A StatSports drill title, short: "LSG 10v10", "Poss 7v7+4J", "Tech 1v1 · speed", "Physical · Warm Up". */
+const rwShort = (t) => { const m = String(t).match(/^\s*([A-Za-z]+)\s*-\s*(\d+v\d+)(\+[1-9]\d*J)?/i); return m ? `${m[1]} ${m[2]}${m[3] || ''}${/speed/i.test(t) ? ' · speed' : ''}` : String(t).replace(/\s*-\s*/g, ' · ').trim(); };
 
-function rsWcsPages(D, W, s, title) {
+function rsWcsPage(D, W, s, title) {
   const P = W.players || {}, names = rpByPosition(D, D.fullSession.filter((r) => P[r.name]));
-  if (!names.length) return [];
+  if (!names.length) return '';
   const drills = (W.drills || []).filter((d) => names.some((n) => d.players[n]));
-  const meta = [['WEEK', s.week], ['MD', s.md], ['MATCHES', String(W.matches || '–')], ['PLAYERS', String(names.length)]];
   const order = D.positions.order, rest = names.filter((n) => !order.includes(D.players[n]));
   const G = [...order.map((p) => [p, D.positions.labels[p], names.filter((n) => D.players[n] === p)]), ['—', 'Others', rest]].filter((g) => g[2].length);
-  const rowH = (space) => Math.max(15, Math.min(26, Math.floor((space - G.length * 19) / names.length)));
+  const h = Math.max(15, Math.min(24, Math.floor((420 - G.length * 19) / names.length)));
+  const src = { auto: 'auto', card: 'its card', reps: 'short repetitions' };
+  // the drills: the squad's median % of their WCS of the drill's length, and the players at 80 % or more
+  const cards = drills.map((d) => { const ps = Object.values(d.players), m = Object.fromEntries(RW_K.map((k) => [k, rwMed(ps.map((p) => p[k]))])), n80 = Object.fromEntries(RW_K.map((k) => [k, ps.filter((p) => (p[k] || 0) >= 80).length]));
+    return `<div class="ts-card"><b>${rpEsc(rwShort(d.name))} <small style="color:#6a6f80;font-weight:600">${d.min}' · ${ps.length} pl.</small></b><span class="w" title="${rpEsc(src[d.src] || '')}">VS ${RW_WL[d.win].toUpperCase()} WCS</span>
+      <div class="m">${RW_K.map((k) => `<span><b style="color:${(m[k] || 0) >= 80 ? '#1f7a3d' : '#16269e'}">${m[k] == null ? '–' : m[k] + ' %'}</b> ${RW_KL[k]} · ${n80[k]}/${ps.length} at 80 %+</span>`).join('')}</div></div>`; }).join('');
+  const cols = `150px 30px ${drills.map(() => '48px 48px').join(' 8px ')} 14px 50px 50px 8px 56px 56px 8px 56px 56px`;
   const nm = (n) => `<span class="rwc-nm">${rpFace(D, n)}${rpEsc(n)}${P[n].pos ? '<small class="pr">pos. WCS</small>' : ''}</span>`;
-  const body = (row) => G.map(([p, l, ns]) => `<div class="rwc-grp">${rpEsc(p)}<small>${rpEsc(l)}</small></div>${ns.map(row).join('')}`).join('');
+  const cell = (v, x = true) => `<span class="rwc-h ${x ? rwQ(v) : 'rq0'}" style="height:${h - 4}px">${x ? (v == null ? '–' : v) : '·'}</span>`;
+  const row = (n) => { const x = P[n], m = (W.mref || {})[n];
+    return `<div class="rwc-tr rwc-r" style="grid-template-columns:${cols};height:${h}px">${nm(n)}<span class="rwc-c rwc-mu">${x.min}'</span>
+      ${drills.map((d) => RW_K.map((k) => cell(d.players[n] ? d.players[n][k] : null, !!d.players[n])).join('')).join('<span></span>')}
+      <span></span>${RW_K.map((k) => cell(x.max1[k])).join('')}
+      <span></span>${RW_K.map((k) => `<span class="rwc-c"><b>${x.cnt[k][0] ?? '–'}</b></span>`).join('')}<span></span>${RW_K.map((k) => `<span class="rwc-c rwc-mu">${m ? m[k][0].toFixed(1) : '–'}</span>`).join('')}</div>`; };
+  const gh = `<div class="rwc-tr rwc-gh" style="grid-template-columns:${cols}"><span></span><span></span>${drills.map((d) => `<span style="grid-column:span 2">${rpEsc(rwShort(d.name).toUpperCase())} · ${RW_WL[d.win].replace(' min', "'")}</span>`).join('<span></span>')}<span></span>
+    <span class="g" style="grid-column:span 2">MAX 1 MIN</span><span></span><span class="g" style="grid-column:span 2">≥ 80 % · SESSION</span><span></span><span class="g" style="grid-column:span 2">≥ 80 % · A MATCH</span></div>
+    <div class="rwc-tr rwc-th" style="grid-template-columns:${cols}"><span class="l">PLAYER</span><span>MIN</span>${drills.map(() => RW_K.map((k) => `<span>${RW_KL[k]}</span>`).join('')).join('<span></span>')}<span></span>${[0, 1, 2].map(() => RW_K.map((k) => `<span>${RW_KL[k]}</span>`).join('')).join('<span></span>')}</div>`;
   const day = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  const note = `WCS = his most intense 1, 3 and 5 minutes in the matches since ${W.since ? day(W.since) : 'August'} (the mean of his 3 best, 30 min or more) · under 3 matches → his position's${(W.idle || []).length ? ` · not shown, GPS on without training: ${W.idle.join(', ')}` : ''}`;
-  const legend = `<span class="rwc-leg">${[['rq5', '100 % +'], ['rq4', '90–100'], ['rq3', '80–90'], ['rq2', '60–80'], ['rq1', 'under 60']].map(([c, l]) => `<span><i style="background:${RW_QC[c]}"></i>${l}</span>`).join('')}</span>`;
-  const foot = (txt, leg = legend) => `<div class="rwc-foot"><span>${rpEsc(txt)}</span>${leg}</div>`;
-  const pages = [];
-
-  // A · each player's best passage of the session, as a % of his WCS
-  const sum = (f, k) => names.reduce((a, n) => a + ((P[n][f] || {})[k] || 0), 0);
-  const tile = (k, v, s2, cls = '') => `<div class="rwc-tile ${cls}"><span class="k">${k}</span><span class="v">${v}</span><span class="s">${s2}</span></div>`;
-  const tiles = RW_MET.map(([k, l]) => {
-    const v = names.map((n) => P[n].pct[k][0]), m = rwMed(v), n90 = v.filter((x) => x != null && x >= 90).length;
-    const bd = drills.map((d) => [d, rwMed(Object.values(d.players).map((x) => x[k]))]).sort((a, b) => (b[1] ?? -1) - (a[1] ?? -1))[0];
-    return tile(`${l} · 1 MIN`, `${m == null ? '–' : m + ' %'}<small>squad median</small>`, `${n90}/${names.length} at 90 %+${bd ? ' · ' + rpEsc(rwShort(bd[0].name)) : ''}`);
-  }).join('') + tile('TIME AT MATCH INTENSITY · SQUAD', `${sum('t80', 'td').toFixed(1)}<small>min dist.</small> ${sum('t80', 'hsr').toFixed(1)}<small>min &gt; 20</small>`,
-    `≥ 80 % of the 1-min WCS · ≥ 90 %: ${sum('t90', 'td').toFixed(1)} · ${sum('t90', 'hsr').toFixed(1)}`, 'tm');
-  const ca = `170px 30px ${RW_MET.map(() => '50px 62px').join(' ')} 40px 40px 40px 40px minmax(0, 1fr)`, ha = rowH(452);
-  const tm = (v, c) => (v == null || v < 0.05 ? '<span class="rwc-t z">0</span>' : `<span class="rwc-t ${c}">${v.toFixed(1)}</span>`);
-  const rowA = (n) => { const x = P[n]; return `<div class="rwc-tr rwc-r" style="grid-template-columns:${ca};height:${ha}px">${nm(n)}<span class="rwc-c rwc-mu">${x.min}'</span>
-    ${RW_MET.map(([k]) => `<span class="rwc-c"><span class="rwc-p ${rwQ(x.pct[k][0])}" style="height:${ha - 5}px">${x.pct[k][0] == null ? '–' : x.pct[k][0] + ' %'}</span></span><span class="rwc-c"><small>${[1, 2].map((i) => (x.pct[k][i] == null ? '–' : x.pct[k][i] + '%')).join(' · ')}</small></span>`).join('')}
-    <span class="rwc-c">${tm((x.t80 || {}).td, 't8')}</span><span class="rwc-c">${tm((x.t90 || {}).td, 't9')}</span><span class="rwc-c">${tm((x.t80 || {}).hsr, 't8')}</span><span class="rwc-c">${tm((x.t90 || {}).hsr, 't9')}</span>
-    <span class="rwc-c l">${x.best_in ? rpEsc(rwShort(x.best_in)) : '–'}</span></div>`; };
-  pages.push(rpHeader('TRAINING · WCS · THE SESSION AGAINST THE MATCH', title, meta) + `<div class="rwc-tiles">${tiles}</div>
-    <div class="rwc-ti">Each player's best passage of the session, as a % of his match WCS<small>1, 3 and 5 minutes · time at match intensity = the minutes when the minute just played reached 80 % / 90 % of his 1-minute WCS</small></div>
-    <div class="rwc-tbl"><div class="rwc-tr rwc-gh" style="grid-template-columns:${ca}"><span></span><span></span>${RW_MET.map(([, l]) => `<span style="grid-column:span 2">${l}</span>`).join('')}<span class="g" style="grid-column:span 4">MATCH INTENSITY · MIN</span><span></span></div>
-      <div class="rwc-tr rwc-th" style="grid-template-columns:${ca}"><span class="l">PLAYER</span><span>MIN</span>${RW_MET.map(() => '<span>1 MIN</span><span>3 · 5 MIN</span>').join('')}<span>DIST.<br>≥ 80 %</span><span>DIST.<br>≥ 90 %</span><span>&gt; 20<br>≥ 80 %</span><span>&gt; 20<br>≥ 90 %</span><span class="l">HIS BEST<br>MINUTE IN</span></div>
-      ${body(rowA)}</div>${foot(note)}`);
-
-  if (drills.length) {
-    // B · each drill: his best minute in it, as a % of his 1-minute WCS
-    const cb = `170px ${drills.map(() => RW_MET.map(() => 'minmax(0, 1fr)').join(' ')).join(' 8px ')}`, hb = rowH(520);
-    const rowB = (n) => `<div class="rwc-tr rwc-r" style="grid-template-columns:${cb};height:${hb}px">${nm(n)}${drills.map((d) => RW_MET.map(([k]) => { const x = d.players[n], v = x ? x[k] : null;
-      return `<span class="rwc-h ${x ? rwQ(v) : 'rq0'}" style="height:${hb - 4}px">${x ? (v == null ? '–' : v) : '·'}</span>`; }).join('')).join('<span></span>')}</div>`;
-    const med = `<div class="rwc-tr rwc-r team" style="grid-template-columns:${cb};height:${hb + 2}px"><span class="rwc-nm">Squad median</span>${drills.map((d) => RW_MET.map(([k]) => { const v = rwMed(names.map((n) => (d.players[n] || {})[k]));
-      return `<span class="rwc-h ${rwQ(v)}" style="height:${hb - 4}px">${v == null ? '–' : v}</span>`; }).join('')).join('<span></span>')}</div>`;
-    pages.push(rpHeader('TRAINING · WCS · EACH DRILL AGAINST THE MATCH', title, meta) + `<div class="rwc-ti">Each drill: his best minute in it, as a % of his 1-minute match WCS<small>distance, > 20 km/h, > 25 km/h, sprints, Acc + Dec · 100 = his most intense minute of a match</small></div>
-      <div class="rwc-tbl"><div class="rwc-tr rwc-gh" style="grid-template-columns:${cb}"><span></span>${drills.map((d) => `<span style="grid-column:span ${RW_MET.length}">${rpEsc(rwShort(d.name).toUpperCase())} · ${d.min}'</span>`).join('<span></span>')}</div>
-        <div class="rwc-tr rwc-th" style="grid-template-columns:${cb}"><span class="l">PLAYER</span>${drills.map(() => RW_MET.map(([, , a]) => `<span>${a}</span>`).join('')).join('<span></span>')}</div>
-        ${body(rowB)}${med}</div>${foot(note + ' · “·” = not in the drill')}`);
-  }
-
-  // C · how many times the minute just played reached 80 % / 90 % of his 1-minute WCS: m/min, > 20 km/h per minute, Acc + Dec per minute
-  const CK = [['td', 'M/MIN'], ['hsr', '>20/MIN'], ['ad', 'A+D/MIN']], parts = [['all', `WHOLE SESSION · ${Math.max(...names.map((n) => P[n].min || 0))}'`], ...drills.map((d) => [d.name, `${rwShort(d.name).toUpperCase()} · ${d.min}'`])];
-  const cc = `170px ${parts.map(() => CK.map(() => 'minmax(0, 1fr)').join(' ')).join(' 8px ')}`, hc = rowH(520);
-  const cnt = (n, part) => (part === 'all' ? ((P[n].cnt || {}).all || {}) : (((P[n].cnt || {}).d || {})[part] || null));
-  const cell = (c, k) => { if (!c) return `<span class="rwc-h rq0" style="height:${hc - 4}px">·</span>`; const [a, b] = c[k] || [];
-    return `<span class="rwc-h ${b ? 'rq5' : a ? 'rq3' : 'rq1'}" style="height:${hc - 4}px">${a ? `${a}<small>&nbsp;·&nbsp;${b || 0}</small>` : '–'}</span>`; };
-  const rowC = (n) => `<div class="rwc-tr rwc-r" style="grid-template-columns:${cc};height:${hc}px">${nm(n)}${parts.map(([p]) => CK.map(([k]) => cell(cnt(n, p), k)).join('')).join('<span></span>')}</div>`;
-  const tot = `<div class="rwc-tr rwc-r team" style="grid-template-columns:${cc};height:${hc + 2}px"><span class="rwc-nm">Squad total</span>${parts.map(([p]) => CK.map(([k]) => {
-    const a = names.reduce((t, n) => t + (((cnt(n, p) || {})[k] || [])[0] || 0), 0), b = names.reduce((t, n) => t + (((cnt(n, p) || {})[k] || [])[1] || 0), 0);
-    return `<span class="rwc-h ${b ? 'rq5' : a ? 'rq3' : 'rq1'}" style="height:${hc - 4}px">${a ? `${a}<small>&nbsp;·&nbsp;${b}</small>` : '–'}</span>`; }).join('')).join('<span></span>')}</div>`;
-  const legC = `<span class="rwc-leg"><span><i style="background:${RW_QC.rq5}"></i>reached 90 %</span><span><i style="background:#d9f5e1"></i>reached 80 %</span><span><i style="background:${RW_QC.rq1}"></i>never</span><span>cell = times at 80 % · of which at 90 %</span></span>`;
-  pages.push(rpHeader('TRAINING · WCS · TIMES AT MATCH INTENSITY', title, meta) + `<div class="rwc-ti">Times the minute just played reached 80 % · 90 % of his 1-minute WCS<small>m/min · > 20 km/h per minute · Acc + Dec per minute · each passage counts once · whole session, then each drill</small></div>
-    <div class="rwc-tbl"><div class="rwc-tr rwc-gh" style="grid-template-columns:${cc}"><span></span>${parts.map(([p, l]) => `<span class="${p === 'all' ? 'g' : ''}" style="grid-column:span ${CK.length}">${rpEsc(l)}</span>`).join('<span></span>')}</div>
-      <div class="rwc-tr rwc-th" style="grid-template-columns:${cc}"><span class="l">PLAYER</span>${parts.map(() => CK.map(([, l]) => `<span>${l}</span>`).join('')).join('<span></span>')}</div>
-      ${body(rowC)}${tot}</div>${foot(note + ' · “·” = not in the drill', legC)}`);
-  return pages;
+  const note = `% of his WCS (mean of his 3 best matches since ${W.since ? day(W.since) : 'August'}, the window of the drill's kind; under 3 matches → his position's) · A/D + spr = high accelerations + decelerations + efforts above 20 km/h · “·” = not in the drill · a match = his matches of 60 min or more${(W.idle || []).length ? ` · not shown, GPS on without training: ${W.idle.join(', ')}` : ''}`;
+  return rpHeader('TRAINING · WCS · THE SESSION AGAINST THE MATCH', title, [['WEEK', s.week], ['MD', s.md], ['DRILLS', String(drills.length)], ['PLAYERS', String(names.length)]])
+    + `<div class="cq-rule"><div class="tg"><b>Threshold 80 %</b>green = 80 % of his WCS or more</div><div><b>1-min peaks</b>his max minute, and how many times it reached 80 % — in training and in a match</div><div><b>Small-sided games</b>his best 3 min of the drill vs his 3-min WCS</div><div><b>Larger games</b>his best 5 min vs his 5-min WCS</div><div><b>Speed · acc–dec · duels</b>his best minute vs his 1-min WCS</div></div>
+    ${drills.length ? `<div class="ts-cards" style="grid-template-columns:repeat(${Math.max(drills.length, 3)}, minmax(0, 1fr))">${cards}</div>` : ''}
+    <div class="rwc-tbl">${gh}${G.map(([p, l, ns]) => `<div class="rwc-grp">${rpEsc(p)}<small>${rpEsc(l)}</small></div>${ns.map(row).join('')}`).join('')}</div>
+    <div class="rwc-foot"><span>${rpEsc(note)}</span><span class="rwc-leg">${[['rq5', '100 % +'], ['rq4', '80–100'], ['rq2', '60–80'], ['rq1', 'under 60']].map(([c, l]) => `<span><i style="background:${RW_QC[c]}"></i>${l}</span>`).join('')}</span></div>`;
 }
