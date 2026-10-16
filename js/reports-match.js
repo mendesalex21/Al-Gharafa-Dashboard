@@ -395,5 +395,6 @@ const staff = [
 // (two pages when the squad is too big for one; the team total and the one-half tables are left out — his choice)
 const hv = rpHalves(D), halves = hv[0].length || hv[1].length ? rpMatchPages(D, stitle).filter((p) => /GAME · 1ST HALF &(amp;)? 2ND HALF/.test(p) && !/TOTAL TEAM/.test(p)).map((p) => `<div class="rp-page">${p}</div>`).join('') : '';
 // his order (2026-10-13): staff pages · halves · the match by 10' · players · end of match · peaks · trends · the team's last 5 matches
-return staff + halves + page1() + page2() + page3() + pagePeaks() + pageWcs() + pageSeason() + pageRhie() + pageTrend() + pageL5();
+const RH_MATCH_PAGES = false; // "this match against the season" and the match's RHIE: on once he has validated the match report mockup
+return staff + halves + page1() + page2() + page3() + pagePeaks() + pageWcs() + (RH_MATCH_PAGES ? pageSeason() + pageRhie() : '') + pageTrend() + pageL5();
 }

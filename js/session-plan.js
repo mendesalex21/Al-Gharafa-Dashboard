@@ -262,7 +262,8 @@ function splCardDyn() {
  * duels → 1 min, 8 a side or more → 5 min, other games → 3 min, warm-up / strength → not judged (sync/wcs.py auto_window). */
 function splAutoWin(name, players) {
   const t = `${name || ''} ${players || ''}`;
-  if (/warm|strength|gym|activation|individual|rehab/i.test(t)) return null;
+  if (/individual/i.test(t)) return 0; // individual work: his best minute (2026-10-16)
+  if (/warm|strength|gym|activation|rehab/i.test(t)) return null;
   if (/speed|sprint|velocid|\bacc|\bdec|agil/i.test(t)) return 0;
   const m = /(\d+)\s*vs?\s*(\d+)/i.exec(t), side = m ? Math.max(Number(m[1]), Number(m[2])) : 0;
   return side >= 8 ? 2 : side && side <= 2 ? 0 : 1;
