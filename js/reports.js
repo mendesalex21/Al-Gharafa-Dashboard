@@ -249,12 +249,10 @@ function rpPages(D) {
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'accdec', 'Acceleration + Deceleration', 'HI Acc+Dec', 'accdec') + rpChart(D, 'sprints', 'Number of Sprints >25kmh', 'SPRINTS', 'sprints'));
   const halves = rpHalves(D);
   if (s.type === 'match' && (halves[0].length || halves[1].length)) pages.push(...rpMatchPages(D, title)); // a match: his halves pages
-  else {
-    // drills: rankings by m/min (+ High Acc+Dec), up to 4 drills per page — high-speed running is rare in drills
-    const drills = (D.drills || []).filter((d) => d.rows.length), cols = rpDrillColumns(drills);
-    for (let k = 0; k < cols.length; k += 4) {
-      pages.push(rpHeader('DRILLS SUMMARY', title, [['WEEK', s.week], ['MD', s.md], ['DRILLS', drills.length], ['N SESSION', s.id]]) + rpDrillBoards(D, cols.slice(k, k + 4)));
-    }
+  // drills: rankings by m/min (+ High Acc+Dec), up to 4 drills per page — a match too, after its halves pages (his ask, 2026-10-16)
+  const drills = (D.drills || []).filter((d) => d.rows.length), cols = rpDrillColumns(drills);
+  for (let k = 0; k < cols.length; k += 4) {
+    pages.push(rpHeader('DRILLS SUMMARY', title, [['WEEK', s.week], ['MD', s.md], ['DRILLS', drills.length], ['N SESSION', s.id]]) + rpDrillBoards(D, cols.slice(k, k + 4)));
   }
   // the total week load is the last page (the user's order)
   if (D.weekLoad && D.weekLoad.rows.length) pages.push(rpHeader('TOTAL WEEK LOAD', D.weekLoad.label, [['WEEK', s.week], ['FROM', D.weekLoad.from], ['TO', D.weekLoad.to]]) + rpTable(D, D.weekLoad.rows, ['min', 'td', 'd15', 'd20', 'vmax', 'pmax', 'sprints', 'accdec']));
