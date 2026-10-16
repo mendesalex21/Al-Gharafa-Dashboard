@@ -55,7 +55,7 @@ function rpDoc(data, i, part = 'all') {
   const inPart = (r) => { const m = r[12] || 0; return m !== 3 && (part === 'all' ? m < 2 : m === mark); };
   const fullSession = s.full.filter((r) => known(r[0]) && inPart(r)).map(([name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro, , rec]) =>
     ({ name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro: part === 'b' ? 1 : pro, rec: rec === 1 }));
-  const inX = new Set(extra ? fullSession.map((r) => r.name) : []);
+  const inX = new Set(part !== 'all' ? fullSession.map((r) => r.name) : []); // a part's drills: its own players only
   const pm = (s.parts && s.parts[part]) || {};
   const gameAvg = {};
   for (const k of ['td', 'd20', 'accdec', 'sprints']) {
@@ -84,8 +84,9 @@ function rpDoc(data, i, part = 'all') {
     positions: data.positions, players: data.pos, pids: data.pid || {}, fullSession, gameAvg,
     weekLoad: { from, to: s.date, label: rpRangeLabel(from, s.date), rows: Object.values(acc) },
     // the extra session's drills: the day's drills that are not the match, for its own players
-    drills: (part === 'b' ? [] : extra ? s.drills.filter((d) => !/^Game_/.test(d.name)) : s.drills).map((d) => ({ n: d.n, name: d.name, time: d.time,
-      rows: d.rows.filter((r) => known(r[0]) && (!extra || inX.has(r[0]))).map(([name, mpm, td, d15, d20, vmax, sprints, accdec, pro, time, hitn]) => ({ name, mpm, td, d15, d20, vmax, sprints, accdec, pro: extra ? 1 : pro,
+    // the B-team game: its halves with its players (his ask, 2026-10-16); the session: its drills without them
+    drills: (extra ? s.drills.filter((d) => !/^Game_/.test(d.name)) : s.drills).map((d) => ({ n: d.n, name: d.name, time: d.time,
+      rows: d.rows.filter((r) => known(r[0]) && (part === 'all' || inX.has(r[0]))).map(([name, mpm, td, d15, d20, vmax, sprints, accdec, pro, time, hitn]) => ({ name, mpm, td, d15, d20, vmax, sprints, accdec, pro: extra || part === 'b' ? 1 : pro,
         time: time ?? (mpm ? Math.round(td / mpm) : null), hitn })) })), // his minutes in the drill (older data: distance ÷ m/min), his efforts > 20 km/h
   };
 }
@@ -249,10 +250,12 @@ function rpPages(D) {
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'accdec', 'Acceleration + Deceleration', 'HI Acc+Dec', 'accdec') + rpChart(D, 'sprints', 'Number of Sprints >25kmh', 'SPRINTS', 'sprints'));
   const halves = rpHalves(D);
   if (s.type === 'match' && (halves[0].length || halves[1].length)) pages.push(...rpMatchPages(D, title)); // a match: his halves pages
-  // drills: rankings by m/min (+ High Acc+Dec), up to 4 drills per page — a match too, after its halves pages (his ask, 2026-10-16)
-  const drills = (D.drills || []).filter((d) => d.rows.length), cols = rpDrillColumns(drills);
-  for (let k = 0; k < cols.length; k += 4) {
-    pages.push(rpHeader('DRILLS SUMMARY', title, [['WEEK', s.week], ['MD', s.md], ['DRILLS', drills.length], ['N SESSION', s.id]]) + rpDrillBoards(D, cols.slice(k, k + 4)));
+  else {
+    // drills: rankings by m/min (+ High Acc+Dec), up to 4 drills per page — high-speed running is rare in drills
+    const drills = (D.drills || []).filter((d) => d.rows.length), cols = rpDrillColumns(drills);
+    for (let k = 0; k < cols.length; k += 4) {
+      pages.push(rpHeader('DRILLS SUMMARY', title, [['WEEK', s.week], ['MD', s.md], ['DRILLS', drills.length], ['N SESSION', s.id]]) + rpDrillBoards(D, cols.slice(k, k + 4)));
+    }
   }
   // the total week load is the last page (the user's order)
   if (D.weekLoad && D.weekLoad.rows.length) pages.push(rpHeader('TOTAL WEEK LOAD', D.weekLoad.label, [['WEEK', s.week], ['FROM', D.weekLoad.from], ['TO', D.weekLoad.to]]) + rpTable(D, D.weekLoad.rows, ['min', 'td', 'd15', 'd20', 'vmax', 'pmax', 'sprints', 'accdec']));
