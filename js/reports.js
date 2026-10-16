@@ -249,8 +249,11 @@ function rpPages(D) {
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'td', 'TOTAL DISTANCE', 'TOTAL DISTANCE', 'td') + rpChart(D, 'd20', 'DISTANCE >20kmh', 'DISTANCE >20kmh', 'd20'));
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'accdec', 'Acceleration + Deceleration', 'HI Acc+Dec', 'accdec') + rpChart(D, 'sprints', 'Number of Sprints >25kmh', 'SPRINTS', 'sprints'));
   const halves = rpHalves(D);
-  // a match, or the B-team game of a training day (his ask, 2026-10-16): his halves pages
-  if ((s.type === 'match' || s.part === 'Game B') && (halves[0].length || halves[1].length)) pages.push(...rpMatchPages(D, title));
+  // a match: his halves pages · the B-team game of a training day: only the halves player by player (his ask, 2026-10-16)
+  if ((s.type === 'match' || s.part === 'Game B') && (halves[0].length || halves[1].length)) {
+    const mp = rpMatchPages(D, title);
+    pages.push(...(s.type === 'match' ? mp : mp.filter((p) => /GAME · 1ST HALF &(amp;)? 2ND HALF/.test(p) && !/TOTAL TEAM/.test(p))));
+  }
   else {
     // drills: rankings by m/min (+ High Acc+Dec), up to 4 drills per page — high-speed running is rare in drills
     const drills = (D.drills || []).filter((d) => d.rows.length), cols = rpDrillColumns(drills);
