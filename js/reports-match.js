@@ -356,6 +356,38 @@ function pageRhie() {
     <div class="rwc-foot"><span>Per player on the pitch = the team's bouts ÷ the players' time on the pitch · % of actions in a RHIE = actions inside a bout ÷ all the high-intensity actions</span><span>${RH_LEG}</span></div></div>`;
 }
 
+/* ---------------------------------------------------------------- the RHIE every 10 minutes (his ask, 2026-10-17): the team, then each player */
+function pageRhie10() {
+  const X = M.wcs && M.wcs.rhie;
+  if (!X || !X.players || !Object.keys(X.players).length || !X.team) return '';
+  const who = (n) => { const id = D.pids[n], p = PL.find((q) => q.id === id); return { id, name: p ? p.name : n }; };
+  const bars = (arr, dash, label, fmt, foot) => {
+    const vals = (arr || []).map((v) => v || 0), top = Math.max(0.5, ...vals, ...(dash || []).filter((v) => v != null)) * 1.18;
+    const Wd = 590, H = 190, x0 = 26, y0 = 22, ph = 128, bw = 34, st = (Wd - x0 - 12) / 10, Y = (v) => y0 + ph - (v / top) * ph;
+    let g = `<svg class="cq-svg" width="${Wd}" height="${H}"><text x="0" y="12" font-size="10.5" font-weight="800" fill="#a52a2a">${label}</text>`;
+    vals.forEach((v, i) => { const cx = x0 + i * st + (i >= 5 ? 8 : 0), u = dash ? dash[i] : null;
+      g += `<rect x="${cx}" y="${Y(v)}" width="${bw}" height="${Math.max(0, y0 + ph - Y(v))}" rx="3" fill="${u != null && v >= u ? '#c4282d' : '#f3a6a8'}"/>
+        ${u == null ? '' : `<line x1="${cx - 3}" x2="${cx + bw + 3}" y1="${Y(u)}" y2="${Y(u)}" stroke="#16269e" stroke-width="2" stroke-dasharray="4 2"/>`}
+        <text x="${cx + bw / 2}" y="${Y(v) - 4}" font-size="11" font-weight="800" fill="#111" text-anchor="middle">${fmt(v)}</text>
+        <text x="${cx + bw / 2}" y="${y0 + ph + 13}" font-size="9" font-weight="700" fill="#16269e" text-anchor="middle">${LB10[i]}</text>`; });
+    const hx = x0 + 5 * st - (st - bw) / 2 + 4;
+    return g + `<line x1="${hx}" x2="${hx}" y1="${y0}" y2="${y0 + ph}" stroke="#c4c7cf" stroke-dasharray="2 3"/><text x="${Wd / 2}" y="${H - 8}" font-size="9.5" fill="#6a6f80" text-anchor="middle">${foot}</text></svg>`;
+  };
+  const P = Object.entries(X.players).filter(([, x]) => x.min >= 20 && x.per).sort((a, b) => b[1].min - a[1].min);
+  const h = Math.max(15, Math.min(21, Math.floor(300 / Math.max(1, P.length)))), cols = '150px 40px repeat(5, minmax(0, 1fr)) 4px repeat(5, minmax(0, 1fr)) 40px 50px 50px 110px';
+  const cell = (v) => `<span class="rwc-h ${v >= 3 ? 'rq5' : v === 2 ? 'rq4' : v === 1 ? 'rq3' : 'rq1'}" style="height:${h - 4}px">${v || '–'}</span>`;
+  const half = (x, a, b) => x.per.slice(a, b).reduce((p, q) => p + q, 0);
+  const row = ([n, x]) => { const w = who(n), m = (X.mref || {})[n], p90 = x.min ? x.n / x.min * 90 : null;
+    return `<div class="rwc-tr rwc-r" style="grid-template-columns:${cols};height:${h}px"><span class="rwc-nm">${face(w.id)}${esc(w.name)}</span><span class="rwc-c rwc-mu">${Math.round(x.min)}'</span>${x.per.slice(0, 5).map(cell).join('')}<span></span>${x.per.slice(5).map(cell).join('')}
+      <span class="rwc-c"><b>${x.n}</b></span><span class="rwc-c">${p90 == null ? '–' : p90.toFixed(1)}</span><span class="rwc-c rwc-mu">${m ? m.p90.toFixed(1) : '–'}</span><span class="rwc-c rwc-mu">${half(x, 0, 5)} · ${half(x, 5, 10)}</span></div>`; };
+  const tbl = `<div class="rwc-tbl"><div class="rwc-tr rwc-th" style="grid-template-columns:${cols}"><span class="l">PLAYER</span><span>MIN</span>${LB10.slice(0, 5).map((l) => `<span>${l}</span>`).join('')}<span></span>${LB10.slice(5).map((l) => `<span>${l}</span>`).join('')}<span>TOT</span><span>PER 90</span><span>HIS USUAL<br>PER 90</span><span>1ST · 2ND<br>HALF</span></div>${P.map(row).join('')}</div>`;
+  return `<div class="rp-page">${header('MATCH · RHIE EVERY 10 MINUTES')}
+    <div class="rwc-ti">The repeated high-intensity efforts of the match, every 10 minutes<small>the team, then each player · fewer bouts late in a half = fatigue, or the game slowed down</small></div>
+    <div class="cq-g3">${bars(X.team, null, 'RHIE BOUTS OF THE TEAM', (v) => v, 'all the players · the bouts that start in the period')}${bars(X.rate, X.usual, 'RHIE PER PLAYER ON THE PITCH', (v) => v.toFixed(1), "red = at or above the season's other matches (dash)")}</div>
+    <div><div class="rwc-ti" style="margin-bottom:4px">Each player · his bouts every 10 minutes<small>players of 20 min or more · his usual = his matches of 60 min or more</small></div>${tbl}</div>
+    <div class="rwc-foot"><span>RHIE = 3 or more high-intensity actions (> 20 km/h, acc, dec ≥ 3 m/s²) with less than 21 s between them · periods of the match clock: the 5th of each half holds its last minutes and the added time · a bout counts in the period where it starts</span></div></div>`;
+}
+
 /* ---------------------------------------------------------------- idea 4: his end of match, match after match */
 function pageTrend() {
   const ps = PL.filter((p) => p.trend && p.trend.length >= 2 && p.fat);
@@ -397,5 +429,5 @@ const hv = rpHalves(D), halves = hv[0].length || hv[1].length ? rpMatchPages(D, 
 // his order (2026-10-13): staff pages · halves · the match by 10' · players · end of match · peaks · trends · the team's last 5 matches
 // his order (2026-10-17): … the end of the match, then each player's end of match over his last matches, the peaks, the
 // peaks every 10 minutes, this match against the season, the match's RHIE, the team's last 5 matches
-return staff + halves + page1() + page2() + page3() + pageTrend() + pagePeaks() + pageWcs() + pageSeason() + pageRhie() + pageL5();
+return staff + halves + page1() + page2() + page3() + pageTrend() + pagePeaks() + pageWcs() + pageSeason() + pageRhie() + pageRhie10() + pageL5();
 }
