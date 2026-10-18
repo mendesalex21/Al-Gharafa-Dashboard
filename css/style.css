@@ -1817,6 +1817,8 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 #view-intensity .wc-ch small { font-size: 12px; color: var(--ink-muted); }
 #view-intensity .wc-note { font-size: 12px; color: var(--ink-muted); margin: 2px 0 10px; }
 #view-intensity .wc-scroll { overflow-x: auto; }
+#view-intensity .wc-row.wc-two { grid-template-columns: repeat(auto-fit, minmax(640px, 1fr)); }
+#view-intensity .in-wk span.off { opacity: .3; cursor: default; }
 #view-intensity table.wc-t { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 #view-intensity .wc-t th { font-size: 10px; font-weight: 700; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .04em; padding: 4px 5px; text-align: center; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
 #view-intensity .wc-t th.g { color: var(--ink); font-size: 10.5px; border-bottom: 2px solid var(--ink-muted); }
