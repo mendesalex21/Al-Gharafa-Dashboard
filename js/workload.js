@@ -357,9 +357,9 @@ function drawZTable(s) {
 }
 
 /** His days as letters (his ask, 2026-10-19): T training, G game, R rehab (orange), I injury (red)… one column a week, Sun → Sat. */
-const TL_LET = { t: ['T', '#2a78d6', '#e6f0fb'], m: ['G', '#fff', '#1d1d1f'], b: ['B', '#fff', '#636366'], p: ['P', '#2a78d6', '#eef5fd'], c: ['C', '#0a7ea4', '#e3f6fd'],
-  i: ['Gy', '#2a78d6', '#f2f7fd'], r: ['R', '#fff', '#ff9f0a'], x: ['I', '#fff', '#e5484d'], s: ['S', '#fff', '#bf5af2'], n: ['N', '#fff', '#8e8e93'],
-  a: ['A', '#6e6e73', '#e5e5ea'], o: ['O', '#aeaeb2', '#f5f5f7'] };
+const TL_LET = { t: ['T', '#fff', '#2a78d6'], m: ['G', '#fff', '#34c759'], b: ['B', '#fff', '#248a3d'], p: ['P', '#fff', '#7fb0ea'], c: ['C', '#0b4f6c', '#64d2ff'],
+  i: ['Gy', '#1d5fae', '#b4d4f7'], r: ['R', '#fff', '#ff9f0a'], x: ['I', '#fff', '#e5484d'], s: ['S', '#fff', '#bf5af2'], n: ['N', '#fff', '#8e8e93'],
+  a: ['A', '#6e6e73', '#d1d1d6'], o: ['O', '#aeaeb2', '#ececf0'] }; // the old colours (blue = training), match in green (his ask, 2026-10-19)
 function drawTimeline(s) {
   const lead = dateOf(s.start).getUTCDay(), cells = [];
   ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach((l) => cells.push(`<b class="tl-d">${l}</b>`));
