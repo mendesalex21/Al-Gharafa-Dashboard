@@ -3,7 +3,7 @@
  * Data: sync/build.py → "workload" payload (ACWR rolling 7:28 + EWMA, weekly load z-scores, monotony,
  * high-speed exposure, availability). Wellness and tests payloads are joined in for the 360° view.
  */
-const WL = { data: null, wellness: null, tests: null, history: null, model: 'acwr', metric: 'td', rank: 'hit', player: null, plMetric: 'td', plModel: 'acwr', week: null, weekMode: 'train' };
+const WL = { data: null, wellness: null, tests: null, history: null, model: 'acwr', metric: 'td', rank: 'hit', player: null, int: null, week: null, weekMode: 'train' };
 const WEEK_TARGET_METRICS = [['td', 'Total distance'], ['hit', 'Distance > 20 km/h'], ['spr_n', 'Sprints (count)'], ['acc_dec', 'HIT Acc + Dec']];
 const RISK_ORDER = { red: 0, orange: 1, green: 2, na: 3 };
 const STATUS_LABEL = { available: 'Available', injured: 'Injured', rehab: 'Rehab', sick: 'Sick', 'national team': 'National team', absent: 'Absent' };
@@ -190,22 +190,117 @@ function drawRanking() {
 }
 
 // ------------------------------------------------------------------ Player
+/* ------------------------------------------------------------------ Workload › Player (his mockup A, 2026-10-19): the Team
+ * page's layout for one player — tiles, his weekly z-score and availability (letters) on top, Day / Week / Month charts with
+ * the A:C strip (option: the team's value as a grey tick), week by week (WCS and RHIE included), match references and tests. */
+const PL_K = [['td', 'Total distance', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Sprint distance', 'm'], ['acc_dec', 'High Acc + Dec', ''], ['srpe', 'sRPE', 'AU']];
+const PL = { view: 'week', color: 'z', team: false };
+
 function renderPlayerLoad(opts) {
   if (opts && opts.player) WL.player = opts.player;
   const root = document.getElementById('view-player');
-  root.innerHTML = `
-    ${pageHead('Workload', 'Player', 'pl-sub', `<div class="picker"><span id="pl-avatar"></span><select class="select" id="pl-select" aria-label="Player"></select></div>`)}
-    <div id="pl-body"><div class="panel"><div class="empty">Loading…</div></div></div>`;
+  root.innerHTML = `<div class="sv-bleed">${pageHead('Workload', 'Player', 'pl-sub', `<div class="picker"><span id="pl-avatar"></span><select class="select" id="pl-select" aria-label="Player"></select></div>`)}
+    <div id="pl-body"><div class="panel"><div class="empty">Loading…</div></div></div></div>`;
+  if (!PL.bound) { PL.bound = true; let timer; window.addEventListener('resize', () => { clearTimeout(timer); timer = setTimeout(() => drawPlayerLoad(), 150); }); }
   withData('workload', (d) => { WL.data = d; drawPlayerLoad(); }, (err) => { root.innerHTML = loadError(err); });
-  withData('wellness', (d) => { WL.wellness = d; drawPlayerLoad(); }, () => {});
+  withData('sessions', (d) => { TR.sessions = d; drawPlayerLoad(); }, () => {}); // each day's z vs his usual for that MD
   withData('tests', (d) => { WL.tests = d; drawPlayerLoad(); }, () => {});
   withData('wellness_history', (d) => { WL.history = d; drawPlayerLoad(); }, () => {});
+  withData('intensity', (d) => { WL.int = d; drawPlayerLoad(); }, () => {}); // his WCS and RHIE of each week
+}
+
+function plBuild(pid) {
+  const d = WL.data, s = d.series[pid], p = d.players.find((x) => x.id === pid), n = s.cat.length;
+  const days = Array.from({ length: n }, (_, i) => addDays(s.start, i));
+  const week1 = d.team.week1 || (d.team.weeks.length ? d.team.weeks[0].start : d.team.start);
+  const sess = Object.fromEntries(((TR.sessions && TR.sessions.sessions) || []).map((x) => [x.date, x]));
+  const dayZ = (x, k) => { const se = sess[x], q = se && se.players.find((r) => r.id === pid); return q && q.mdref && q.mdref.z ? q.mdref.z[k] : null; };
+  const W = {};
+  days.forEach((x, i) => { const ws = addDays(x, -dateOf(x).getUTCDay());
+    const w = W[ws] || (W[ws] = { start: ws, end: addDays(ws, 6), train: 0, games: 0, min: 0, ...Object.fromEntries(PL_K.map(([k]) => [k, 0])) });
+    const c = s.cat[i];
+    if ('tpci'.includes(c)) w.train++;
+    if (c === 'm' || c === 'b') { w.games++; w.min += s.min[i] || 0; }
+    PL_K.forEach(([k]) => { w[k] += s.load[k][i] || 0; }); });
+  const weeks = Object.values(W).sort((a, b) => (a.start < b.start ? -1 : 1)).map((w) => ({ ...w, done: w.end <= d.as_of, label: 'W' + String(Math.round(daysBetween(week1, w.start) / 7) + 1).padStart(2, '0') }));
+  const real = (k) => weeks.filter((w) => w.done && w[k] > 0);
+  const acAt = (k, x) => s.acwr[k][Math.min(n - 1, Math.max(0, daysBetween(s.start, x)))];
+  const zw = (w, k) => (w[k] > 0 ? tmZof(w[k], tmStats(real(k).filter((x) => x.start !== w.start).map((x) => x[k]))) : null);
+  const t = d.team, tIdx = (x) => daysBetween(t.start, x), tw = Object.fromEntries(t.weeks.map((w) => [w.start, w]));
+  const wh = Object.fromEntries(((WL.history && WL.history.days) || []).filter((x) => x.byId && x.byId[pid] != null).map((x) => [x.date, x.byId[pid]]));
+  const wellOf = (a, b) => { const xs = Object.entries(wh).filter(([x]) => x >= a && x <= b).map(([, v]) => v); return xs.length ? xs.reduce((u, v) => u + v, 0) / xs.length : null; };
+  const I = WL.int, g = I && I.gps ? Object.keys(I.gps).find((k) => I.gps[k].pid === pid) : null, IW = {};
+  if (I && g) {
+    const mb = ((I.rhie.mref || {})[g] || {}).bouts;
+    I.weeks.forEach((x) => { const b = x.best[g];
+      const rh = [...Object.values(x.train).map((tt) => ((tt.rhie.players || {})[g] || {}).n), ...(x.matches || []).map((m) => ((I.rhie.matches[m] || {})[g] || {}).n)].filter((v) => v != null);
+      const tot = rh.length ? rh.reduce((u, v) => u + v, 0) : null;
+      IW[x.ws] = { td: b ? b.td[0] : null, hi: b ? b.hi[0] : null, rh: tot, rx: tot != null && mb ? tot / mb : null }; });
+  }
+  return { d, s, p, n, days, dayZ, weeks, real, acAt, zw, t, tIdx, tw, wh, wellOf, IW };
+}
+
+function plTiles(B) {
+  const { p, s, n, d } = B, last = B.real('td').slice(-1)[0];
+  const tiles = PL_K.map(([k, l, u]) => {
+    const now = p.acwr[k], prev = s.acwr[k][n - 8], [col, txt] = tmZone(now), z = last ? B.zw(last, k) : null, st = tmStats(B.real(k).map((w) => w[k])), ta = d.team.acwr_now[k];
+    return `<div class="tm-tile"><span class="k">${l}</span><div class="ac"><b style="color:${col}">${now == null ? '—' : now.toFixed(2)}</b><span>A:C 7:28${now > 1.5 && prev > 1.5 ? '<i class="tm-2w">2W</i>' : ''}</span></div>
+      <span class="tm-zone"><i style="background:${col}"></i>${txt}</span><div class="ln"><span>A week ago</span><b>${prev == null ? '—' : prev.toFixed(2)}</b></div>
+      ${PL.team ? `<div class="ln"><span>Team A:C</span><b>${ta == null ? '—' : ta.toFixed(2)}</b></div>` : ''}
+      ${last ? `<div class="ln"><span>${last.label}</span><b>${tmK(last[k])}${u ? ' ' + u : ''} <span class="mz ${tmZ(z)}">${z == null ? '—' : tmS(z)}</span></b></div><div class="ln"><span>His usual week</span><b>${tmK(st.p25)}–${tmK(st.p75)}</b></div>` : ''}</div>`;
+  }).join('');
+  const dl = Object.keys(B.wh).sort().pop(), w7 = B.wellOf(addDays(d.as_of, -6), d.as_of), w28 = B.wellOf(addDays(d.as_of, -34), addDays(d.as_of, -7));
+  return tiles + `<div class="tm-tile"><span class="k">Wellness</span>${dl ? `<div class="ac"><b style="color:${tmWell(B.wh[dl])}">${Math.round(B.wh[dl])}<small> %</small></b><span>${fmtDay(dl, { weekday: 'short', day: 'numeric', month: 'short' })}</span></div>
+    <span class="tm-zone"><i style="background:${tmWell(B.wh[dl])}"></i>his last check-in</span>` : '<div class="ac"><b>—</b></div><span class="tm-zone">no check-in</span>'}<div class="ln"><span>Last 7 days</span><b>${w7 == null ? '—' : Math.round(w7) + ' %'}</b></div><div class="ln"><span>The 4 weeks before</span><b>${w28 == null ? '—' : Math.round(w28) + ' %'}</b></div><div class="ln"><span>Target</span><b>70 % or more</b></div></div>`;
+}
+
+function plCharts(B) {
+  const { s, days, d, t } = B, z = PL.color === 'z', W = TM.cw;
+  const head = (l, note) => `<h2>${l}<small>${note}</small></h2>`, tk = (tv) => (PL.team && tv > 0 ? { lo: tv * 0.97, hi: tv * 1.03 } : {});
+  const teamNote = PL.team ? ' · grey tick = the team' : '';
+  if (PL.view === 'day') {
+    const ds = days.filter((x) => x >= addDays(d.as_of, -34));
+    return PL_K.map(([k, l, u]) => `<div class="tm-card">${head(l, `per day${u ? ' · ' + u : ''} · colour = z vs his usual for that MD${teamNote}`)}${tmChart({ title: l, dots: ds.length <= (TM.fit || 99),
+      items: ds.map((x) => { const i = daysBetween(s.start, x), v = s.load[k][i], zz = v > 0 ? B.dayZ(x, k) : null, ac = s.acwr[k][i], c = s.cat[i], ti = B.tIdx(x), tv = ti >= 0 ? t.daily[k][ti] : null;
+        return { v, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, game: c === 'm' || c === 'b', sep: dateOf(x).getUTCDay() === 0, label: v > 0 ? tmK(v) : '', ...tk(tv), tick: fmtDay(x, { weekday: 'short', day: 'numeric' }),
+          tip: `${fmtDay(x)} · ${(CAT_INFO[c] || CAT_INFO['-'])[0]}: ${fmtN(v)}${zz == null ? '' : ' · z ' + tmS(zz)}${ac == null ? '' : ' · A:C ' + ac.toFixed(2)}${PL.team && tv ? ' · team ' + fmtN(tv) : ''}` }; }) })}</div>`).join('');
+  }
+  if (PL.view === 'month') {
+    const months = [...new Set(days.map((x) => x.slice(0, 7)))], cur = d.as_of.slice(0, 7);
+    const lab = (m) => fmtDay(m + '-15', { month: 'short' }) + (m === cur ? ' · so far' : '');
+    const info = (m, k) => { const ix = days.map((x, i) => [x, i]).filter(([x]) => x.startsWith(m) && x <= d.as_of).map(([, i]) => i), tot = ix.reduce((a, i) => a + (s.load[k][i] || 0), 0), acs = ix.map((i) => s.acwr[k][i]).filter((v) => v != null);
+      const tix = ix.map((i) => B.tIdx(days[i])).filter((j) => j >= 0), ttot = tix.reduce((a, j) => a + (t.daily[k][j] || 0), 0);
+      return { n: ix.length, tot, pw: ix.length ? tot / ix.length * 7 : 0, ac: acs.length ? acs.reduce((a, b) => a + b, 0) / acs.length : null, tpw: tix.length ? ttot / tix.length * 7 : null }; };
+    return PL_K.map(([k, l, u]) => { const st = tmStats(B.real(k).map((w) => w[k]));
+      return `<div class="tm-card">${head(l, `his average week of the month${u ? ' · ' + u : ''}${teamNote}`)}${tmChart({ title: l, dots: true, band: st.p25 == null ? null : [st.p25, st.p75],
+        items: months.map((m) => { const x = info(m, k), zz = tmZof(x.pw, st); return { v: x.pw, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(x.ac)[0], ac: x.ac, label: tmK(x.pw), tick: lab(m), now: m === cur, soft: m === cur, ...tk(x.tpw),
+          tip: `${lab(m)}: ${fmtN(x.tot)} in ${x.n} days${zz == null ? '' : ' · z ' + tmS(zz) + ' vs his weeks'}${x.ac == null ? '' : ' · average A:C ' + x.ac.toFixed(2)}${PL.team && x.tpw ? ' · team ' + fmtN(x.tpw) + ' a week' : ''}` }; }) })}</div>`; }).join('');
+  }
+  const ws = B.weeks.slice(-Math.max(8, TM.fit || 14));
+  return PL_K.map(([k, l, u]) => { const st = tmStats(B.real(k).map((w) => w[k]));
+    return `<div class="tm-card">${head(l, `per week${u ? ' · ' + u : ''}${st.p25 == null ? '' : ` · his usual ${tmK(st.p25)}–${tmK(st.p75)}`}${teamNote}`)}${tmChart({ title: l, dots: true, band: st.p25 == null ? null : [st.p25, st.p75],
+      items: ws.map((w) => { const zz = B.zw(w, k), ac = w[k] > 0 ? B.acAt(k, w.done ? w.end : d.as_of) : null, tv = B.tw[w.start] ? B.tw[w.start][k] : null;
+        return { v: w[k], col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, label: w[k] > 0 ? tmK(w[k]) : 'no GPS', tick: w.label, now: !w.done, soft: !w.done, ...tk(tv),
+          tip: `${w.label} · ${fmtDay(w.start, { day: 'numeric', month: 'short' })}: ${fmtN(w[k])}${zz == null ? '' : ' · z ' + tmS(zz)}${ac == null ? '' : ' · A:C ' + ac.toFixed(2)}${PL.team && tv ? ' · team ' + fmtN(tv) : ''}` }; }) })}</div>`; }).join('');
+}
+
+function plTable(B) {
+  const { d } = B, pc = (v) => (v == null ? '—' : `<span class="tm-acchip" style="background:${v >= 100 ? '#1f7a3d' : v >= 90 ? '#34a853' : v >= 80 ? '#8ccf9f' : v >= 60 ? '#e8a33d' : '#d9534f'}">${Math.round(v)} %</span>`);
+  const main = (w, k) => { const zz = B.zw(w, k), ac = w[k] > 0 ? B.acAt(k, w.done ? w.end : d.as_of) : null;
+    return `<td class="b">${w[k] > 0 ? tmK(w[k]) : '—'}</td><td>${zz == null ? '' : `<span class="mz ${tmZ(zz)}">${tmS(zz)}</span>`}</td><td class="g">${ac == null ? '' : `<span class="tm-acchip" style="background:${tmZone(ac)[0]}">${ac.toFixed(2)}</span>`}</td>`; };
+  const rows = B.weeks.slice().reverse().map((w) => { const x = B.IW[w.start], o = B.wellOf(w.start, w.end);
+    return `<tr class="${w.done ? '' : 'now'}"><td><b>${w.label}</b> <span class="muted">${fmtDay(w.start, { day: 'numeric', month: 'short' })}${w.done ? '' : ' · in progress'}</span></td><td class="b">${w.train || '—'}</td><td>${w.games || '—'}</td><td>${w.min ? fmtN(w.min) : '—'}</td>
+      ${main(w, 'td')}${main(w, 'hit')}${main(w, 'spr')}${main(w, 'acc_dec')}<td class="b">${x ? pc(x.td) : '—'}</td><td>${x ? pc(x.hi) : ''}</td><td class="b">${x && x.rh != null ? `<b>${x.rh}</b>${x.rx == null ? '' : ` <small class="muted">× ${x.rx.toFixed(1)}</small>`}` : '—'}</td>${main(w, 'srpe')}<td class="b">${o == null ? '—' : `<b style="color:${tmWell(o)}">${Math.round(o)} %</b>`}</td></tr>`; }).join('');
+  const m3 = (l) => `<th class="b">${l}</th><th>z</th><th class="g">A:C</th>`;
+  return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Week by week</h2><span class="panel-note">z vs his other full weeks of the season · A:C 7:28 at the end of the week · WCS: his best minute of the week in training, % of his match worst case · RHIE: his bouts in the week (training + matches), × = how many of his matches it makes</span></div>
+    <div class="table-wrap"><table class="tm-tbl tm-wide"><thead><tr class="grp"><th></th><th colspan="6">Volume</th><th colspan="6">Speed</th><th colspan="3">Accelerations</th><th colspan="2">WCS · best minute</th><th>RHIE</th><th colspan="4">Internal load &amp; wellness</th></tr>
+      <tr><th>Week</th><th class="b">Sessions</th><th>Matches</th><th>Match min</th>${m3('Distance')}${m3('&gt; 20 km/h')}${m3('Sprint dist.')}${m3('Acc + Dec')}<th class="b">m/min</th><th>A/D + spr</th><th class="b">Bouts</th>${m3('sRPE')}<th class="b">Wellness</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
 }
 
 function drawPlayerLoad(opts) {
   if (opts && opts.player) WL.player = opts.player;
-  const d = WL.data;
-  if (!d || document.getElementById('view-player').hidden) return;
+  const d = WL.data, root = document.getElementById('view-player');
+  if (!d || !root || root.hidden || !document.getElementById('pl-body')) return;
   const players = d.players.slice().sort((a, b) => a.name.localeCompare(b.name));
   if (!WL.player || !d.series[WL.player]) WL.player = (players.find((p) => p.risk === 'red') || players[0]).id;
   const sel = document.getElementById('pl-select');
@@ -214,90 +309,35 @@ function drawPlayerLoad(opts) {
     sel.onchange = () => { WL.player = sel.value; drawPlayerLoad(); };
   }
   sel.value = WL.player;
-  const p = d.players.find((x) => x.id === WL.player), s = d.series[WL.player];
+  const B = plBuild(WL.player), { p, s } = B;
   document.getElementById('pl-avatar').innerHTML = avatarHtml(p.id, p.name, 34);
   document.getElementById('pl-sub').innerHTML = `${escapeHtml(p.pos || '')} · ${STATUS_LABEL[p.status]}${p.today ? ` · today: ${escapeHtml(p.today)}` : ''} · data up to ${fmtDay(d.as_of, { day: 'numeric', month: 'short' })}`;
-
-  const w = WL.wellness && WL.wellness.byId ? WL.wellness.byId[p.id] : null;
-  document.getElementById('pl-body').innerHTML = `
-    <div class="tiles">
-      <div class="tile"><div class="tile-label">ACWR · rolling 7:28</div><div class="tile-value chips">${METRIC_KEYS.map((k) => `<span><small>${METRIC_SHORT[k]}</small>${acwrChip(p.acwr[k])}</span>`).join('')}</div>
-        <div class="tile-sub">EWMA: ${METRIC_KEYS.map((k) => `${METRIC_SHORT[k]} ${p.ewma[k] == null ? '—' : p.ewma[k].toFixed(2)}`).join(' · ')}</div></div>
-      <div class="tile"><div class="tile-label">Load spike (weekly z)</div><div class="tile-value">${spikeHtml(maxSpike(p))}</div>
-        <div class="tile-sub">${METRIC_KEYS.map((k) => `${METRIC_SHORT[k]} ${fmtSigned(p.z7[k])}`).join(' · ')}</div></div>
-      <div class="tile"><div class="tile-label">Monotony · strain</div><div class="tile-value">${p.monotony == null ? '—' : p.monotony.toFixed(2)}<small> · ${fmtN(p.strain)}</small></div>
-        <div class="tile-sub">sRPE, last 7 days (Foster) · flag ≥ 2.0</div></div>
-      <div class="tile"><div class="tile-label">High-speed exposure</div><div class="tile-value">${p.days_hsv == null ? '—' : p.days_hsv}<small> days</small></div>
-        <div class="tile-sub">since ≥90% of his max speed · max ${fmtN(p.vmax_ref, 1)} km/h (his best of the last 12 months)</div></div>
-      <div class="tile"><div class="tile-label">Last 28 days</div><div class="tile-value">${p.sessions_28}<small> sessions · </small>${p.matches_28}<small> matches</small></div>
-        <div class="tile-sub">${fmtN(p.minutes_28)} match min · ${p.injury_days_season} injury/rehab days this season</div></div>
-      <div class="tile"><div class="tile-label">Wellness today</div><div class="tile-value">${w && w.score != null ? `<span class="chip-v ${w.status}">${w.score}%</span>` : '—'}</div>
-        <div class="tile-sub">${w && w.worst && w.status !== 'green' ? `lowest: ${escapeHtml(w.worst.label)} ${w.worst.value}/5` : w && w.score != null ? 'no item flagged' : 'no check-in today'}</div></div>
-    </div>
+  // the charts at the width of their card (as the Team page): two per row, one on a phone
+  const body = document.getElementById('pl-body'), two = window.matchMedia('(min-width: 761px)').matches, gw = body.clientWidth;
+  TM.cw = gw ? Math.max(480, Math.round((gw - (two ? 16 : 0)) / (two ? 2 : 1) - 36)) : 548;
+  TM.fit = Math.max(8, Math.floor((TM.cw - 56) / 30));
+  const box = (t, note, inner, extra = '') => `<section class="panel"><div class="panel-head"><h2 class="panel-title small">${t}</h2>${note ? `<span class="panel-note">${note}</span>` : ''}${extra}</div>${inner}</section>`;
+  const ref = `<table class="dtable compact"><thead><tr><th></th><th class="c">Median / 90 min</th><th class="c">Top-3 match avg</th></tr></thead><tbody>
+    ${[['td', 'Total distance', 'm'], ['d15', 'Distance > 15 km/h', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'], ['spr_n', 'Sprints', ''], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE', 'AU']]
+    .map(([k, l, u]) => `<tr><td>${l}</td><td class="c">${p.match_ref[k] == null ? '—' : fmtN(p.match_ref[k])}</td><td class="c"><b>${fmtN(p.top3[k])}</b> <small class="muted">${u}</small></td></tr>`).join('')}</tbody></table>`;
+  const legend = PL.color === 'z' ? [['vlow', 'well below'], ['low', 'below'], ['ok', 'usual'], ['up', 'above'], ['vup', 'well above']].map(([c, l]) => `<span><i style="background:${TM_ZCOL[c]}"></i>${l}</span>`).join('')
+    : [0.4, 0.6, 1, 1.4, 1.6].map((r) => `<span><i style="background:${tmZone(r)[0]}"></i>${tmZone(r)[1]}</span>`).join('');
+  body.innerHTML = `<div class="tm-tiles">${plTiles(B)}</div>
     ${p.flags.length ? `<div class="panel flags-panel">${flagsHtml(p.flags)}</div>` : ''}
-    <div class="panel-head bare"><h2 class="panel-title">Load</h2>${segHtml('pl-metric', METRIC_KEYS.map((k) => [k, METRIC_SHORT[k]]), WL.plMetric)}</div>
-    <section class="panel">
-      <div class="panel-head"><h2 class="panel-title small" id="pl-load-title"></h2>
-        <span class="legend-inline"><span><i style="background:#9fc2ee"></i>training</span><span><i style="background:#2a78d6"></i>match</span><span><i class="ln" style="background:var(--ink)"></i>acute 7 d</span><span><i class="ln" style="background:#8e8e93"></i>chronic 28 d</span></span></div>
-      <div class="chart" id="pl-load"></div>
-    </section>
-    <section class="panel">
-      <div class="panel-head"><h2 class="panel-title small">ACWR</h2>
-        <span class="legend-inline"><span><i class="ln" style="background:var(--ink)"></i>player</span><span><i class="ln dash"></i>squad</span></span>
-        ${segHtml('pl-model', [['acwr', 'Rolling 7:28'], ['ewma', 'EWMA']], WL.plModel)}</div>
-      <div class="chart" id="pl-acwr"></div>
-    </section>
-    <section class="panel">
-      <div class="panel-head"><h2 class="panel-title small">Fatigue · load, wellness, CMJ</h2><span class="panel-note">same days on each row · last 60 days</span><a class="link" id="pl-ready-link">Squad readiness</a></div>
-      <div id="pl-fatigue"></div>
-    </section>
-    <div class="grid2">
-      <section class="panel"><div class="panel-head"><h2 class="panel-title small">Weekly load z-score</h2><span class="panel-note">Sunday–Saturday weeks vs the player's previous 6 weeks</span></div>
-        <div class="table-wrap" id="pl-z"></div></section>
-      <section class="panel"><div class="panel-head"><h2 class="panel-title small">Availability · last ${s.cat.length} days</h2></div>
-        <div id="pl-timeline"></div></section>
-    </div>
-    <div class="grid2">
-      <section class="panel"><div class="panel-head"><h2 class="panel-title small">Match references</h2><span class="panel-note">${p.top3_src === 'own' ? `top 3 of his last ${p.top3_n} games ≥ 70 min (A + B, at most since last season), extra time left out` : `no game of 70 min yet — ${p.top3_src} reference`}</span></div>
-        <table class="dtable compact"><thead><tr><th></th><th class="c">Median / 90 min</th><th class="c">Top-3 match avg</th></tr></thead><tbody>
-        ${[['td', 'Total distance', 'm'], ['d15', 'Distance > 15 km/h', 'm'], ['hit', 'Distance > 20 km/h', 'm'], ['spr', 'Distance > 25 km/h', 'm'], ['spr_n', 'Sprints', ''], ['acc_dec', 'HIT Acc + Dec', ''], ['srpe', 'sRPE', 'AU']]
-          .map(([k, l, u]) => `<tr><td>${l}</td><td class="c">${p.match_ref[k] == null ? '—' : fmtN(p.match_ref[k])}</td><td class="c"><b>${fmtN(p.top3[k])}</b> <small class="muted">${u}</small></td></tr>`).join('')}
-        </tbody></table></section>
-      <section class="panel"><div class="panel-head"><h2 class="panel-title small">Physical tests</h2><a class="link" id="pl-tests-link">Open tests</a></div>
-        <div id="pl-tests"></div></section>
-    </div>`;
-  bindSeg('pl-metric', (v) => { WL.plMetric = v; drawPlayerCharts(p, s); });
-  bindSeg('pl-model', (v) => { WL.plModel = v; drawPlayerCharts(p, s); });
+    <div class="grid2">${box('Weekly load z-score', 'Sunday–Saturday weeks vs his previous 6 weeks', '<div class="table-wrap" id="pl-z"></div>')}${box(`Availability · last ${s.cat.length} days`, '', '<div id="pl-timeline"></div>')}</div>
+    <div class="tm-bar"><div class="tm-dates muted">${PL.view === 'day' ? 'The last 5 weeks' : PL.view === 'week' ? 'The last weeks' : 'The season'}</div>
+      <div class="tm-ctl"><span class="tm-lab">Team</span>${segHtml('pl-team', [['off', 'Off'], ['on', 'Show']], PL.team ? 'on' : 'off')}<span class="tm-lab">Colour</span>${segHtml('pl-color', [['z', 'z-score'], ['ac', 'A:C']], PL.color)}${segHtml('pl-view', [['day', 'Day'], ['week', 'Week'], ['month', 'Month']], PL.view)}</div></div>
+    <div class="tm-legend">${legend}<span>G = match</span>${PL.team ? '<span><i style="background:#6b6b70"></i>the team</span>' : ''}</div>
+    <div class="tm-grid${PL.team ? ' pl-team' : ''}">${plCharts(B)}</div>
+    ${plTable(B)}
+    <div class="grid2">${box('Match references', p.top3_src === 'own' ? `top 3 of his last ${p.top3_n} games ≥ 70 min (A + B, at most since last season), extra time left out` : `no game of 70 min yet — ${p.top3_src} reference`, ref)}${box('Physical tests', '', '<div id="pl-tests"></div>', '<a class="link" id="pl-tests-link">Open tests</a>')}</div>`;
+  bindSeg('pl-team', (v) => { PL.team = v === 'on'; drawPlayerLoad(); });
+  bindSeg('pl-color', (v) => { PL.color = v; drawPlayerLoad(); });
+  bindSeg('pl-view', (v) => { PL.view = v; drawPlayerLoad(); });
   document.getElementById('pl-tests-link').onclick = () => switchView('testing', { athlete: p.id, tab: 'profile' });
-  document.getElementById('pl-ready-link').onclick = () => switchView('readiness');
-  drawPlayerCharts(p, s);
-  fatigueTimeline(document.getElementById('pl-fatigue'), p.id, 60);
   drawZTable(s);
   drawTimeline(s);
   drawPlayerTests(p);
-}
-
-function drawPlayerCharts(p, s) {
-  const k = WL.plMetric, n = s.cat.length;
-  const dates = Array.from({ length: n }, (_, i) => addDays(s.start, i));
-  document.getElementById('pl-load-title').textContent = `${METRIC_LONG[k]}${METRIC_UNIT[k] ? ` (${METRIC_UNIT[k]})` : ''} · daily`;
-  chXY(document.getElementById('pl-load'), {
-    x: dates, height: 230,
-    bars: { values: s.load[k], color: (v, i) => (s.cat[i] === 'm' ? '#2a78d6' : '#9fc2ee') },
-    lines: [{ values: s.acute[k], color: 'var(--ink)', width: 2 }, { values: s.chronic[k], color: '#8e8e93', width: 2, dash: '5 4' }],
-    tick: (x) => fmtDay(x, { day: 'numeric', month: 'short' }),
-    tip: (i) => `<b>${fmtN(s.load[k][i])} ${METRIC_UNIT[k]}</b><span>${fmtDay(dates[i])} · ${CAT_INFO[s.cat[i]] ? CAT_INFO[s.cat[i]][0] : ''}${s.min[i] ? ` · ${s.min[i]} min` : ''}</span><span>acute ${fmtN(s.acute[k][i])} · chronic ${fmtN(s.chronic[k][i])}</span>`,
-  });
-  const vals = (WL.plModel === 'ewma' ? s.ewma : s.acwr)[k].map((v, i) => (s.cat[i] === 'x' || s.cat[i] === 'r' ? null : v)); // meaningless while injured
-  const team = WL.data.team;
-  const off = daysBetween(team.start, s.start);
-  const squad = dates.map((_, i) => team.acwr[k][i + off] ?? null);
-  chXY(document.getElementById('pl-acwr'), {
-    x: dates, height: 200, yMin: 0, yMax: 2.5, bands: ACWR_BANDS,
-    lines: [{ values: squad, color: '#8e8e93', width: 1.5, dash: '4 3' }, { values: vals, color: 'var(--ink)', width: 2.2 }],
-    tick: (x) => fmtDay(x, { day: 'numeric', month: 'short' }),
-    tip: (i) => `<b>${vals[i] == null ? '—' : vals[i].toFixed(2)}</b><span>${fmtDay(dates[i])} · squad ${squad[i] == null ? '—' : squad[i].toFixed(2)}</span>`,
-  });
 }
 
 function drawZTable(s) {
@@ -316,17 +356,21 @@ function drawZTable(s) {
   document.getElementById('pl-z').innerHTML = `<table class="dtable compact"><thead><tr><th></th>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
+/** His days as letters (his ask, 2026-10-19): T training, G game, R rehab (orange), I injury (red)… one column a week, Sun → Sat. */
+const TL_LET = { t: ['T', '#2a78d6', '#e6f0fb'], m: ['G', '#fff', '#1d1d1f'], b: ['B', '#fff', '#636366'], p: ['P', '#2a78d6', '#eef5fd'], c: ['C', '#0a7ea4', '#e3f6fd'],
+  i: ['Gy', '#2a78d6', '#f2f7fd'], r: ['R', '#fff', '#ff9f0a'], x: ['I', '#fff', '#e5484d'], s: ['S', '#fff', '#bf5af2'], n: ['N', '#fff', '#8e8e93'],
+  a: ['A', '#6e6e73', '#e5e5ea'], o: ['O', '#aeaeb2', '#f5f5f7'] };
 function drawTimeline(s) {
-  const lead = dateOf(s.start).getUTCDay(); // grid rows are Sun..Sat
-  const cells = [];
+  const lead = dateOf(s.start).getUTCDay(), cells = [];
+  ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach((l) => cells.push(`<b class="tl-d">${l}</b>`));
   for (let i = 0; i < lead; i++) cells.push('<i class="tl-pad"></i>');
   for (let i = 0; i < s.cat.length; i++) {
-    const c = s.cat[i], info = CAT_INFO[c] || CAT_INFO['-'];
-    cells.push(`<i style="background:${info[1]}" title="${fmtDay(addDays(s.start, i))} · ${info[0]}${s.min[i] ? ` · ${s.min[i]} min` : ''}"></i>`);
+    const c = s.cat[i], info = CAT_INFO[c] || CAT_INFO['-'], L = TL_LET[c];
+    cells.push(L ? `<i style="color:${L[1]};background:${L[2]}" title="${fmtDay(addDays(s.start, i))} · ${info[0]}${s.min[i] ? ` · ${s.min[i]} min` : ''}">${L[0]}</i>` : `<i class="tl-pad" title="${fmtDay(addDays(s.start, i))} · no record"></i>`);
   }
   const used = new Set(s.cat.split(''));
-  document.getElementById('pl-timeline').innerHTML = `<div class="tl">${cells.join('')}</div>
-    <div class="legend-row tight">${Object.entries(CAT_INFO).filter(([k]) => used.has(k) && k !== '-').map(([, [l, c]]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')}</div>`;
+  document.getElementById('pl-timeline').innerHTML = `<div class="tl tl-l">${cells.join('')}</div>
+    <div class="legend-row tight">${Object.entries(TL_LET).filter(([k]) => used.has(k)).map(([k, L]) => `<span><b class="tl-k" style="color:${L[1]};background:${L[2]}">${L[0]}</b>${CAT_INFO[k][0]}</span>`).join('')}</div>`;
 }
 
 function drawPlayerTests(p) {
