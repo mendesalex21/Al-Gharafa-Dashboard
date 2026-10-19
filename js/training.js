@@ -250,25 +250,31 @@ const MC_KEYS = [['td', 'TD'], ['hit', '>20'], ['acc_dec', 'Acc+Dec'], ['spr_n',
 const MC_MODES = [['z', 'z-score'], ['usual', '% of his usual'], ['match', '% of his match']];
 const MC_COL = { vlow: '#1d5fae', low: '#7fb0ea', ok: '#34c759', up: '#ff9f0a', vup: '#e5484d', na: '#aeaeb2' };
 function mcMicro(s) {
-  const X = TR.staff && TR.staff.days ? TR.staff.days[s.date] : null, se = TR.sessions;
-  if (!X || !X.micro || !X.micro.from || !se || !se.usual || s.kind === 'match') return null;
+  const SD = TR.staff && TR.staff.days ? TR.staff.days : {}, se = TR.sessions, isM = s.kind === 'match';
+  // a match day: the microcycle of its last prep session, the match added (his ask, 2026-10-19)
+  const X = isM ? SD[Object.keys(SD).filter((d) => d < s.date && SD[d].next && SD[d].next.date === s.date).sort().pop()] : SD[s.date];
+  if (!X || !X.micro || !X.micro.from || !se || !se.usual) return null;
   const days = se.sessions.filter((x) => x.date >= X.micro.from && x.date <= s.date).sort((a, b) => (a.date < b.date ? -1 : 1));
   if (!days.length) return null;
   const usual = se.usual, out = {};
   for (const p of s.players.filter((q) => q.mdref)) {
-    const done = {}, exp = {}, parts = {};
-    MC_KEYS.forEach(([k]) => { done[k] = 0; exp[k] = 0; parts[k] = []; });
+    const done = {}, exp = {}, parts = {}, vr = {}, zd = {};  // zd: done on the days with a usual (the z, as the build's micro_z)
+    MC_KEYS.forEach(([k]) => { done[k] = 0; exp[k] = 0; parts[k] = []; vr[k] = 0; zd[k] = 0; });
     for (const x of days) {
       const q = x.players.find((r) => r.id === p.id);
       if (!q) continue;
-      const comp = q.mdref && q.mdref.kind === 'comp', type = (x.cycle || {}).type;
-      const u = comp ? (((usual.comp || {}).players || {})[p.id] || (usual.comp || {}).squad)
-        : ((((usual.players || {})[p.id] || {})[type] || {})[x.md] || ((usual.squad || {})[type] || {})[x.md]);
-      MC_KEYS.forEach(([k]) => { const v = q[k] || 0, e = u && u[k] ? u[k][0] : 0; done[k] += v; exp[k] += e; parts[k].push({ md: x.md, v, u: e, z: q.mdref && q.mdref.z ? q.mdref.z[k] : null }); });
+      const comp = q.mdref && q.mdref.kind === 'comp', type = (x.cycle || {}).type, game = x.kind === 'match', sc = game && q.mdref ? svScale(q) : 1;
+      const u = game ? (q.mdref ? Object.fromEntries(MC_KEYS.map(([k]) => [k, [(q.mdref.mean || {})[k], (q.mdref.sd || {})[k]]])) : null)  // his usual game, at today's minutes
+        : comp ? (((usual.comp || {}).players || {})[p.id] || (usual.comp || {}).squad)
+          : ((((usual.players || {})[p.id] || {})[type] || {})[x.md] || ((usual.squad || {})[type] || {})[x.md]);
+      MC_KEYS.forEach(([k]) => { const v = q[k] || 0, e = u && u[k] && u[k][0] != null ? u[k][0] * sc : 0, sd = u && u[k] ? (u[k][1] || 0) * sc : 0;
+        done[k] += v; exp[k] += e; if (u && u[k] && u[k][0] != null) { vr[k] += Math.max(sd, 0.15 * e, 1) ** 2; zd[k] += v; }
+        parts[k].push({ md: game ? 'MD' : x.md, v, u: e, z: q.mdref && q.mdref.z ? q.mdref.z[k] : null }); });
     }
-    out[p.id] = { done, exp, parts, z: ((X.players || {})[p.id] || {}).mc || [], game: (se.top3 || {})[p.id] || null };
+    const z = isM ? MC_KEYS.map(([k]) => (vr[k] ? Math.round((zd[k] - exp[k]) / Math.sqrt(vr[k]) * 10) / 10 : null)) : ((X.players || {})[p.id] || {}).mc || [];
+    out[p.id] = { done, exp, parts, z, game: (se.top3 || {})[p.id] || null };
   }
-  return { md: days.map((x) => x.md), out };
+  return { md: days.map((x) => (x.kind === 'match' ? 'MD' : x.md)), out };
 }
 function mcBar(k, j, c, mode) {
   const done = c.done[k], exp = c.exp[k], z = c.z[j], g = c.game && c.game[k];
