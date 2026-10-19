@@ -378,7 +378,6 @@ function drawPlayerLoad(opts) {
   const legend = PL.color === 'z' ? [['vlow', 'well below'], ['low', 'below'], ['ok', 'usual'], ['up', 'above'], ['vup', 'well above']].map(([c, l]) => `<span><i style="background:${TM_ZCOL[c]}"></i>${l}</span>`).join('')
     : [0.4, 0.6, 1, 1.4, 1.6].map((r) => `<span><i style="background:${tmZone(r)[0]}"></i>${tmZone(r)[1]}</span>`).join('');
   body.innerHTML = `<div class="tm-tiles pl-tiles">${plTiles(B)}</div>
-    ${p.flags.length ? `<div class="panel flags-panel">${flagsHtml(p.flags)}</div>` : ''}
     <div class="grid2">${box('Weekly load z-score', 'Sunday–Saturday weeks vs his previous 6 weeks', '<div class="table-wrap" id="pl-z"></div>')}${box(`Availability · last ${s.cat.length} days`, '', '<div id="pl-timeline"></div>')}</div>
     <div class="tm-bar"><div class="tm-dates muted">${PL.view === 'day' ? 'The last 5 weeks' : PL.view === 'week' ? 'The last weeks' : 'The season'}</div>
       <div class="tm-ctl"><span class="tm-lab">Team</span>${segHtml('pl-team', [['off', 'Off'], ['on', 'Show']], PL.team ? 'on' : 'off')}<span class="tm-lab">Colour</span>${segHtml('pl-color', [['z', 'z-score'], ['ac', 'A:C']], PL.color)}${segHtml('pl-view', [['day', 'Day'], ['week', 'Week'], ['month', 'Month']], PL.view)}</div></div>
