@@ -46,6 +46,7 @@ function renderTeam() {
   withData('workload', (d) => { WL.data = d; drawTeam(); }, (err) => { root.innerHTML = loadError(err); });
   withData('sessions', (d) => { TR.sessions = d; drawTeam(); }, () => {}); // each day's MD and its usual (z-score)
   withData('wellness_history', (d) => { TM.well = d; drawTeam(); }, () => {});
+  withData('intensity', (d) => { TM.int = d; drawTeam(); }, () => {}); // the week-by-week table's WCS and RHIE
 }
 
 /** The dates shown: his choice, else the last 5 weeks (Day), the weeks that fit — 12 or more (Week), the season (Month). */
@@ -177,19 +178,32 @@ function drawTeam() {
       return { train: ss.filter((x) => x.kind !== 'match').length, games: ss.filter((x) => x.kind === 'match').length, min: ss.filter((x) => x.group !== 'compensatory').reduce((a, x) => a + (x.minutes || 0), 0) }; };
     const main = (w, k) => { if (!has(k)) return ''; const zz = w[k] > 0 ? tmZof(w[k], tmStats(B.real(k).filter((x) => x.start !== w.start).map((x) => x[k]))) : null, ac = w[k] > 0 ? B.acAt(k, w.done ? w.end : asOf) : null;
       return `<td class="b">${w[k] > 0 ? tmK(w[k]) : '—'}</td><td>${zz == null ? '' : `<span class="mz ${tmZ(zz)}">${tmS(zz)}</span>`}</td><td class="g">${ac == null ? '' : `<span class="tm-acchip" style="background:${tmZone(ac)[0]}">${ac.toFixed(2)}</span>`}</td>`; };
+    const IW = {}, ID = TM.int;
+    if (ID && ID.weeks) {
+      const m90 = (ID.rhie.m10 || 0) * 9, avg = (P) => (P.length ? P.reduce((a, x) => a + (x.n || 0), 0) / P.length : null);
+      ID.weeks.forEach((x) => { const parts = [...Object.values(x.train).map((t) => avg(Object.values(t.rhie.players || {}))), ...(x.matches || []).map((m) => avg(Object.values(ID.rhie.matches[m] || {})))].filter((v) => v != null);
+        const rh = parts.length ? parts.reduce((a, b) => a + b, 0) : null;
+        IW[x.ws] = { td: x.gap.td[0], hi: x.gap.hi[0], n90: x.n90.td, nb: x.nbest, rh, rx: rh != null && m90 ? rh / m90 : null }; });
+    }
+    const hasI = Object.keys(IW).length > 0, pcol = (v) => (v == null ? '' : v >= 100 ? '#1f7a3d' : v >= 90 ? '#34a853' : v >= 80 ? '#8ccf9f' : v >= 60 ? '#e8a33d' : '#d9534f');
+    const iCells = (w) => { if (!hasI) return ''; const x = IW[w.start];
+      if (!x) return '<td class="b muted">—</td><td></td><td class="b muted">—</td>';
+      const pc = (v) => (v == null ? '—' : `<span class="tm-acchip" style="background:${pcol(v)}">${Math.round(v)} %</span>`);
+      return `<td class="b" title="${x.nb ? `${x.n90} of ${x.nb} players at 90 % or more` : ''}">${pc(x.td)}</td><td>${pc(x.hi)}</td><td class="b">${x.rh == null ? '—' : `<b>${x.rh.toFixed(1)}</b>`}${x.rx == null ? '' : ` <small class="muted">× ${x.rx.toFixed(1)}</small>`}</td>`; };
     const rows = ws.slice().reverse().map((w) => { const e = mk(w), o = B.wellOf(w.start, w.end);
       return `<tr class="tm-go${w.done ? '' : ' now'}" data-wk="${w.start}" tabindex="0" title="Open the detail of ${w.label}"><td><b>${w.label}</b> <span class="muted">${fmtDay(w.start, { day: 'numeric', month: 'short' })}${w.done ? '' : ' · in progress'}</span></td>
-        <td class="b">${e.train || '—'}</td><td>${e.games || '—'}</td><td>${e.min ? fmtN(e.min) : '—'}</td>${main(w, 'td')}${main(w, 'hit')}${main(w, 'spr')}<td>${w.spr_n > 0 ? fmtN(w.spr_n) : '—'}</td>${main(w, 'acc_dec')}${main(w, 'srpe')}
+        <td class="b">${e.train || '—'}</td><td>${e.games || '—'}</td><td>${e.min ? fmtN(e.min) : '—'}</td>${main(w, 'td')}${main(w, 'hit')}${main(w, 'spr')}<td>${w.spr_n > 0 ? fmtN(w.spr_n) : '—'}</td>${main(w, 'acc_dec')}${iCells(w)}${main(w, 'srpe')}
         <td class="b">${o ? `<b style="color:${tmWell(o.v)}">${Math.round(o.v)} %</b>` : '—'}</td><td>${o ? Math.round(o.n) : '—'}</td></tr>`; }).join('');
     const full = B.weeks.filter((w) => w.done && w.td > 0), rng = (xs, f) => { const st = tmStats(xs); return st.p25 == null ? '—' : `${(f || tmK)(st.p25)}–${(f || tmK)(st.p75)}`; };
     const uM = (k) => (has(k) ? `<td class="b u3" colspan="3">${rng(full.map((w) => w[k]))}</td>` : ''), uE = (f) => rng(full.map((w) => mk(w)[f]), (v) => fmtN(v)), wf = full.map((w) => B.wellOf(w.start, w.end)).filter(Boolean);
-    const usual = full.length < 3 ? '' : `<tr class="usu"><td><b>Usual week</b> <span class="muted">middle half of the ${full.length} full weeks</span></td><td class="b">${uE('train')}</td><td>${uE('games')}</td><td>${uE('min')}</td>${uM('td')}${uM('hit')}${uM('spr')}<td>${rng(full.map((w) => w.spr_n || 0), (v) => fmtN(v))}</td>${uM('acc_dec')}${uM('srpe')}
+    const usual = full.length < 3 ? '' : `<tr class="usu"><td><b>Usual week</b><small class="muted" style="display:block">middle half of the ${full.length} full weeks</small></td><td class="b">${uE('train')}</td><td>${uE('games')}</td><td>${uE('min')}</td>${uM('td')}${uM('hit')}${uM('spr')}<td>${rng(full.map((w) => w.spr_n || 0), (v) => fmtN(v))}</td>${uM('acc_dec')}${hasI ? (() => { const xs = full.map((w) => IW[w.start]).filter(Boolean);
+          return xs.length < 3 ? '<td class="b" colspan="3">—</td>' : `<td class="b">${rng(xs.map((x) => x.td), (v) => Math.round(v))} %</td><td>${rng(xs.map((x) => x.hi), (v) => Math.round(v))} %</td><td class="b">${rng(xs.map((x) => x.rh), (v) => v.toFixed(1))}</td>`; })() : ''}${uM('srpe')}
         <td class="b">${wf.length ? rng(wf.map((o) => o.v), (v) => Math.round(v)) + ' %' : '—'}</td><td>${wf.length ? rng(wf.map((o) => o.n), (v) => Math.round(v)) : '—'}</td></tr>`;
     const m3 = (k, l) => (has(k) ? `<th class="b">${l}</th><th>z</th><th class="g">A:C</th>` : ''), n3 = (...ks) => 3 * ks.filter(has).length;
-    table = `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Week by week</h2><span class="panel-note">z vs the other full weeks of the season · A:C 7:28 at the end of the week · sprints: z and A:C on their distance (&gt; 25 km/h) · click a week for its detail day by day</span></div>
+    table = `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Week by week</h2><span class="panel-note">z vs the other full weeks of the season · A:C 7:28 at the end of the week · sprints: z and A:C on their distance (&gt; 25 km/h) · WCS: the squad's best minute of the week in training, % of the match worst case · RHIE: a player's bouts in the week (training + matches), and how many matches it makes · click a week for its detail day by day</span></div>
       <div class="table-wrap"><table class="tm-tbl tm-wide"><thead>
-        <tr class="grp"><th></th><th colspan="${3 + n3('td')}">Volume</th><th colspan="${1 + n3('hit', 'spr')}">Speed</th><th colspan="${n3('acc_dec')}">Accelerations</th><th colspan="${2 + n3('srpe')}">Internal load &amp; wellness</th></tr>
-        <tr><th>Week</th><th class="b">Sessions</th><th>Matches</th><th>Minutes</th>${m3('td', 'Distance')}${m3('hit', '&gt; 20 km/h')}${m3('spr', 'Sprint distance')}<th>Sprints</th>${m3('acc_dec', 'Acc + Dec')}${m3('srpe', 'sRPE')}<th class="b">Wellness</th><th>Check-ins</th></tr></thead>
+        <tr class="grp"><th></th><th colspan="${3 + n3('td')}">Volume</th><th colspan="${1 + n3('hit', 'spr')}">Speed</th><th colspan="${n3('acc_dec')}">Accelerations</th>${hasI ? '<th colspan="2" title="each player\'s best 1 min of the week in training, as a % of his WCS (worst case of the matches) — the squad\'s mean">WCS · best minute</th><th title="repeated high-intensity efforts: a player\'s bouts in the week, training + matches · × = how many matches it makes">RHIE</th>' : ''}<th colspan="${2 + n3('srpe')}">Internal load &amp; wellness</th></tr>
+        <tr><th>Week</th><th class="b">Sessions</th><th>Matches</th><th>Minutes</th>${m3('td', 'Distance')}${m3('hit', '&gt; 20 km/h')}${m3('spr', 'Sprint dist.')}<th>Sprints</th>${m3('acc_dec', 'Acc + Dec')}${hasI ? '<th class="b">m/min</th><th>A/D + spr</th><th class="b">Per player</th>' : ''}${m3('srpe', 'sRPE')}<th class="b">Wellness</th><th>Check-ins</th></tr></thead>
         <tbody>${rows}${usual}</tbody></table></div></section>`;
   } else {
     const months = [...new Set(B.days.filter((x) => x >= from && x <= to).map((x) => x.slice(0, 7)))], cur = asOf.slice(0, 7);

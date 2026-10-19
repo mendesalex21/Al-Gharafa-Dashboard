@@ -97,10 +97,10 @@ function wkBar(X, k) {
 /** One metric day by day until the match: every day has a dotted slot up to its usual (grey: done, blue: left) — so a
  * small day stays visible next to a big one —; done = solid bar inside (colour = z); day left = its objective filled
  * inside, written in blue (red when cut below its usual); black line = usual, grey band = usual range. */
-function wkChart(X, k) {
+function wkChart(X, k, mt) {  // mt: the match of a match day [value /90, usual, low, high, z]
   const days = [...X.profile.map((d) => ({ ...d, done: 1 })), ...(X.plan || [])], W = 300, H = 150, L = 6, R = 6, T = 18, B = 30;
   const n = days.length + 1, step = (W - L - R) / n, ih = H - T - B, bw = Math.min(34, step * 0.5);
-  const top = Math.max(1, ...days.filter((d) => d[k]).map((d) => Math.max(d[k][0] || 0, d[k][1] || 0, d[k][3] || 0))) * 1.12;
+  const top = Math.max(1, ...days.filter((d) => d[k]).map((d) => Math.max(d[k][0] || 0, d[k][1] || 0, d[k][3] || 0)), ...(mt ? [mt[0] || 0, mt[1] || 0, mt[3] || 0] : [])) * 1.12;
   const y = (v) => T + ih * (1 - Math.min(v, top) / top), base = y(0);
   const lab = (x, yy, v, fill) => `<text x="${x}" y="${Math.max(10, yy - 5)}" text-anchor="middle" font-size="10.5" font-weight="800" style="fill:${fill};stroke:var(--surface);stroke-width:3px;paint-order:stroke">${wkFmt(k, v)}</text>`;
   let g = '';
@@ -125,17 +125,26 @@ function wkChart(X, k) {
     g += t + `<text x="${x}" y="${H - 16}" text-anchor="middle" font-size="10" font-weight="800" style="fill:${d.done ? 'var(--ink)' : WK_BLUE}">${d.md}</text><text x="${x}" y="${H - 4}" text-anchor="middle" font-size="9" style="fill:var(--ink-muted)">${fmtDay(d.date, { weekday: 'short', day: 'numeric' })}</text>`;
   });
   const xm = L + step * (n - 0.5);
-  g += `<rect x="${xm - bw / 2}" y="${T}" width="${bw}" height="${ih}" rx="6" fill="none" style="stroke:var(--hairline)" stroke-dasharray="3 3"/><text x="${xm}" y="${T + ih / 2 + 3}" text-anchor="middle" font-size="9" font-weight="700" style="fill:var(--ink-muted)">match</text>`
-    + `<text x="${xm}" y="${H - 16}" text-anchor="middle" font-size="10" font-weight="800" style="fill:var(--ink)">MD</text>${X.next ? `<text x="${xm}" y="${H - 4}" text-anchor="middle" font-size="9" style="fill:var(--ink-muted)">${fmtDay(X.next.date, { weekday: 'short', day: 'numeric' })}</text>` : ''}`;
+  if (mt && mt[0] != null) {  // the match: solid bar (colour = z vs its usual), its range and usual
+    const bx = xm - bw / 2, yy = Math.min(y(mt[0]), base - 2.5), lv = zLevel(mt[4]);
+    if (mt[2] != null && mt[3] != null) g += `<rect x="${bx - 5}" y="${y(mt[3])}" width="${bw + 10}" height="${Math.max(2, y(mt[2]) - y(mt[3]))}" rx="4" style="fill:var(--surface-2)"/>`;
+    g += `<rect x="${bx + 2}" y="${yy}" width="${bw - 4}" height="${base - yy}" rx="3" fill="${lv ? Z_COL[lv] : '#aeaeb2'}"/>` + lab(xm, Math.min(yy, y(mt[1] || 0)), mt[0], 'var(--ink)')
+      + (mt[1] != null ? `<line x1="${bx - 5}" x2="${bx + bw + 5}" y1="${y(mt[1])}" y2="${y(mt[1])}" style="stroke:var(--ink)" stroke-width="2" stroke-linecap="round"/>` : '');
+  } else g += `<rect x="${xm - bw / 2}" y="${T}" width="${bw}" height="${ih}" rx="6" fill="none" style="stroke:var(--hairline)" stroke-dasharray="3 3"/><text x="${xm}" y="${T + ih / 2 + 3}" text-anchor="middle" font-size="9" font-weight="700" style="fill:var(--ink-muted)">match</text>`;
+  g += ''
+    + `<text x="${xm}" y="${H - 16}" text-anchor="middle" font-size="10" font-weight="800" style="fill:var(--ink)">${mt ? 'MD /90' : 'MD'}</text>${X.next ? `<text x="${xm}" y="${H - 4}" text-anchor="middle" font-size="9" style="fill:var(--ink-muted)">${fmtDay(X.next.date, { weekday: 'short', day: 'numeric' })}</text>` : ''}`;
   return `<svg class="wk-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="day by day until the match">${g}</svg>`;
 }
 function weekPanel(s) {
-  const X = TR.staff && TR.staff.days ? TR.staff.days[s.date] : null;
-  if (!X || s.kind !== 'training' || !(X.profile.length || (X.plan || []).length)) return '';
+  const SD = TR.staff && TR.staff.days ? TR.staff.days : {};
+  // a match day: the week of its last prep session (all done), the match in its MD slot (his ask, 2026-10-19)
+  const isM = s.kind === 'match', X = isM ? SD[Object.keys(SD).filter((d) => d < s.date && SD[d].next && SD[d].next.date === s.date).sort().pop()] : SD[s.date];
+  if (!X || (!isM && s.kind !== 'training') || !(X.profile.length || (X.plan || []).length)) return '';
+  const R = isM ? s.team_ref || {} : null, mt = (k) => (R && R[k] && R[k].v != null ? [R[k].v, R[k].mean, R[k].mean - (R[k].sd || 0), R[k].mean + (R[k].sd || 0), R[k].z] : null);
   const nx = X.next, all = [...X.profile, ...(X.plan || [])], mets = WK_M.filter(([k]) => all.some((d) => d[k]));
-  return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">The week · objectives until the match</h2>${nx ? `<span class="panel-note">→ ${escapeHtml([nx.competition, nx.opponent].filter(Boolean).join(' · '))} · ${fmtDay(nx.date, { weekday: 'short', day: 'numeric', month: 'short' })}</span>` : ''}</div>
-    <div class="wk-grid">${mets.map(([k, l, u]) => `<div class="wk-cell"><div class="wk-t">${l}<span>${u}</span></div>${wkBar(X, k)}${wkChart(X, k)}</div>`).join('')}</div>
-    <div class="wk-legend"><span><i class="lg-done"></i>done (colour = z vs usual)</span><span><i class="lg-left"></i>dotted = the day's usual (grey: done · blue: day left)</span><span><i class="lg-obj"></i>its objective: the usual of MD-4 → MD-1 added up, minus what is done, shared over the days left</span><span><i class="lg-line"></i>target · usual</span><span><i class="lg-over"></i>over the target</span><span><i class="lg-proj"></i>over if the days left are as usual</span><span><b class="wk-red">red number</b> = objective cut below its usual</span></div></section>`;
+  return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">${isM ? 'The week · its objectives and the match' : 'The week · objectives until the match'}</h2>${nx ? `<span class="panel-note">→ ${escapeHtml([nx.competition, nx.opponent].filter(Boolean).join(' · '))} · ${fmtDay(nx.date, { weekday: 'short', day: 'numeric', month: 'short' })}</span>` : ''}</div>
+    <div class="wk-grid">${mets.map(([k, l, u]) => `<div class="wk-cell"><div class="wk-t">${l}<span>${u}</span></div>${wkBar(X, k)}${wkChart(X, k, isM ? mt(k) : null)}</div>`).join('')}</div>
+    <div class="wk-legend"><span><i class="lg-done"></i>done (colour = z vs usual)</span><span><i class="lg-left"></i>dotted = the day's usual (grey: done · blue: day left)</span><span><i class="lg-obj"></i>its objective: the usual of MD-4 → MD-1 added up, minus what is done, shared over the days left</span><span><i class="lg-line"></i>target · usual</span><span><i class="lg-over"></i>over the target</span><span><i class="lg-proj"></i>over if the days left are as usual</span><span><b class="wk-red">red number</b> = objective cut below its usual</span>${isM ? '<span>MD /90 = the match, team average per 90 min (colour = z vs its usual games, line = usual) · the bar above = the training days only</span>' : ''}</div></section>`;
 }
 
 // ------------------------------------------------------------------ Sessions
