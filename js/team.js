@@ -73,7 +73,7 @@ function tmBuild() {
 }
 /** One chart: bars, and under them on the same x a strip — the A:C line in its zones, or small bars (check-ins). */
 function tmChart(o) {
-  const W = o.W || TM.cw || 548, cap = W > 700 ? 40 : 34, padL = 44, padR = 12, H1 = W > 700 ? 180 : 168, top = 20, gap = 30, H2 = 60, n = o.items.length || 1, bw = (W - padL - padR) / n;
+  const ns = o.strip === 'none', W = o.W || TM.cw || 548, cap = W > 700 ? 40 : 34, padL = 44, padR = 12, H1 = W > 700 ? 180 : 168, top = 20, gap = ns ? 12 : 30, H2 = ns ? 0 : 60, n = o.items.length || 1, bw = (W - padL - padR) / n;
   const max = o.max || Math.max(...o.items.map((x) => Math.max(x.v || 0, x.hi || 0)), o.band ? o.band[1] : 0) * 1.14 || 1;
   const Y = (v) => top + H1 - (v / max) * H1, X = (i) => padL + i * bw + bw / 2, y2 = top + H1 + gap, R = (r) => y2 + H2 - (Math.min(r, 2) / 2) * H2;
   const raw = max / 4, mag = 10 ** Math.floor(Math.log10(raw)), st = [1, 2, 2.5, 5, 10].map((f) => f * mag).find((f) => f >= raw);
@@ -91,6 +91,7 @@ function tmChart(o) {
     if (x.go) s += `<rect x="${cx - bw / 2}" y="${top - 14}" width="${bw}" height="${H1 + 14}" class="tm-hit" data-wk="${x.go}"><title>${escapeHtml((x.tip ? x.tip + ' — ' : '') + 'click for the detail of the week')}</title></rect>`;
   });
   s += `<line x1="${padL}" x2="${W - padR}" y1="${top + H1}" y2="${top + H1}" class="tm-base"/>`;
+  if (ns) return s + '</svg>'; // no strip under the bars (Workload › Player, his choice 2026-10-19)
   if (o.strip === 'count') { // the check-ins of each day (wellness)
     const mx = Math.max(1, ...o.items.map((x) => x.n || 0));
     s += `<text x="${padL}" y="${y2 - 8}" class="tm-cap">CHECK-INS</text><line x1="${padL}" x2="${W - padR}" y1="${y2 + H2}" y2="${y2 + H2}" class="tm-gl"/>`;
@@ -118,10 +119,11 @@ function tmTiles(B) {
   const load = B.keys.map(([k, l, u]) => {
     const now = B.t.acwr_now[k], prev = B.acAt(k, addDays(asOf, -7)), [col, txt] = tmZone(now);
     const st = last ? tmStats(B.real(k).filter((w) => w.start !== last.start).map((w) => w[k])) : tmStats([]), z = last ? tmZof(last[k], st) : null;
-    return `<div class="tm-tile"><span class="k">${l}</span><div class="ac"><b style="color:${col}">${now == null ? '—' : now.toFixed(2)}</b><span>A:C 7:28${now > 1.5 && prev > 1.5 ? '<i class="tm-2w">2W</i>' : ''}</span></div>
-      <span class="tm-zone"><i style="background:${col}"></i>${txt}</span>
-      <div class="ln"><span>A week ago</span><b>${prev == null ? '—' : prev.toFixed(2)}</b></div>
-      ${last ? `<div class="ln"><span>${last.label}</span><b>${tmK(last[k])}${u ? ' ' + u : ''} <span class="mz ${tmZ(z)}">${z == null ? '—' : tmS(z)}</span></b></div><div class="ln"><span>Usual week</span><b>${tmK(st.p25)}–${tmK(st.p75)}</b></div>` : ''}</div>`;
+    // big: the last full week's z-score · small: the A:C (his choice, 2026-10-19)
+    return `<div class="tm-tile"><span class="k">${l}</span><div class="ac"><b style="color:${TM_ZCOL[tmZ(z)]}">${z == null ? '—' : tmS(z)}</b><span>z · ${last ? last.label : ''}</span></div>
+      <span class="tm-zone"><i style="background:${col}"></i><span title="${txt}">A:C <b>${now == null ? '—' : now.toFixed(2)}</b></span>${now > 1.5 && prev > 1.5 ? ' <span class="tm-2w">2W</span>' : ''}</span>
+      <div class="ln"><span>A:C a week ago</span><b>${prev == null ? '—' : prev.toFixed(2)}</b></div>
+      ${last ? `<div class="ln"><span>${last.label}</span><b>${tmK(last[k])}${u ? ' ' + u : ''}</b></div><div class="ln"><span>Usual week</span><b>${tmK(st.p25)}–${tmK(st.p75)}</b></div>` : ''}</div>`;
   }).join('');
   const dates = Object.keys(B.well).sort(), lastW = dates[dates.length - 1], w7 = B.wellOf(addDays(asOf, -6), asOf), w28 = B.wellOf(addDays(asOf, -34), addDays(asOf, -7));
   const wt = lastW ? `<div class="tm-tile"><span class="k">Wellness</span><div class="ac"><b style="color:${tmWell(B.well[lastW].v)}">${Math.round(B.well[lastW].v)}<small> %</small></b><span>${fmtDay(lastW, { weekday: 'short', day: 'numeric', month: 'short' })}</span></div>

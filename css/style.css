@@ -1896,4 +1896,19 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .tl.tl-l i.tl-pad { background: none; border: none; }
 .legend-row .tl-k { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; border-radius: 4px; font-size: 9.5px; font-weight: 800; padding: 0 2px; }
 .pl-team .tm-usual { fill: #6b6b70; opacity: .9; }
+/* Workload › Player v2 (2026-10-19): a calendar per month, 8 tiles, a switch in a chart's title */
+.tc { display: flex; flex-wrap: wrap; gap: 14px 20px; }
+.tc-t { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+.tc-g { display: grid; grid-template-columns: repeat(7, 20px); grid-auto-rows: 20px; gap: 3px; }
+.tc-g i, .tc-g .tc-h { width: 20px; height: 20px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 800; font-style: normal; letter-spacing: -.02em; }
+.tc-g .tc-h { color: var(--ink-muted); font-weight: 700; font-size: 10px; }
+.tc-g i.tc-none { border: 1px solid var(--hairline); background: none; }
+.tc-g i.tc-pad { background: none; }
+.pl-tiles { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+@media (max-width: 1400px) { .pl-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .pl-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.pl-ch { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.pl-ch h2 { flex: 1; min-width: 0; }
+.pl-ch .seg { flex: none; transform: scale(.9); transform-origin: top right; }
+.dtable tr.sub td { padding-top: 12px; border-bottom: none; }
 
