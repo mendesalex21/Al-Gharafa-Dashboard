@@ -1911,4 +1911,4 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .pl-ch h2 { flex: 1; min-width: 0; }
 .pl-ch .seg { flex: none; transform: scale(.9); transform-origin: top right; }
 .dtable tr.sub td { padding-top: 12px; border-bottom: none; }
-
+.tc-av { display: flex; align-items: baseline; gap: 10px; margin: -4px 0 12px; } .tc-av b { font-size: 26px; font-weight: 700; letter-spacing: -.02em; } .tc-av span { font-size: 12.5px; color: var(--ink-2); }

@@ -416,6 +416,14 @@ function drawZTable(s) {
 const TL_LET = { t: ['T', '#fff', '#2a78d6'], m: ['G', '#fff', '#34c759'], b: ['B', '#fff', '#248a3d'], p: ['P', '#fff', '#7fb0ea'], c: ['C', '#0b4f6c', '#64d2ff'],
   i: ['Gy', '#1d5fae', '#b4d4f7'], r: ['R', '#fff', '#ff9f0a'], x: ['I', '#fff', '#e5484d'], s: ['S', '#fff', '#bf5af2'], n: ['N', '#fff', '#8e8e93'],
   a: ['A', '#6e6e73', '#d1d1d6'], o: ['O', '#aeaeb2', '#ececf0'] }; // the old colours (blue = training), match in green (his ask, 2026-10-19)
+/** His availability (his ask, 2026-10-19): the team's days (training, games — off days and days without record left out)
+ * that he was not injured, in rehab or sick. Absent / not selected and national team count as available. */
+function av(cats) {
+  const n = {}; cats.forEach((c) => { n[c] = (n[c] || 0) + 1; });
+  const days = cats.filter((c) => c !== 'o' && c !== '-').length, out = (n.x || 0) + (n.r || 0) + (n.s || 0);
+  return { days, out, n, pct: days ? Math.round(100 * (days - out) / days) : null };
+}
+const avCol = (p) => (p >= 90 ? '#1f7a3d' : p >= 75 ? '#ff9f0a' : '#e5484d');
 function drawTimeline(s) {
   // a calendar per month (Sun → Sat, his choice 2026-10-19), each day its letter in its colour
   const first = s.start, last = addDays(s.start, s.cat.length - 1), months = [];
@@ -427,10 +435,12 @@ function drawTimeline(s) {
       const x = `${m}-${String(dd).padStart(2, '0')}`, i = daysBetween(s.start, x), c = i >= 0 && i < s.cat.length ? s.cat[i] : null, L = c ? TL_LET[c] : null, info = c ? CAT_INFO[c] || CAT_INFO['-'] : null;
       cells += L ? `<i style="color:${L[1]};background:${L[2]}" title="${fmtDay(x)} · ${info[0]}${s.min[i] ? ` · ${s.min[i]} min` : ''}">${L[0]}</i>` : `<i class="tc-none" title="${fmtDay(x)}${c ? ' · no record' : ''}"></i>`;
     }
-    return `<div class="tc-m"><div class="tc-t">${fmtDay(m + '-15', { month: 'long' })}</div><div class="tc-g">${cells}</div></div>`;
+    const a = av(s.cat.split('').filter((_, i) => addDays(s.start, i).startsWith(m)));
+    return `<div class="tc-m"><div class="tc-t">${fmtDay(m + '-15', { month: 'long' })}${a.pct == null ? '' : ` <span style="color:${avCol(a.pct)}">${a.pct} %</span>`}</div><div class="tc-g">${cells}</div></div>`;
   };
-  const used = new Set(s.cat.split(''));
-  document.getElementById('pl-timeline').innerHTML = `<div class="tc">${months.map(cal).join('')}</div>
+  const used = new Set(s.cat.split('')), all = av(s.cat.split(''));
+  const sum = all.pct == null ? '' : `<div class="tc-av"><b style="color:${avCol(all.pct)}">${all.pct} %</b><span>available · ${all.days - all.out} of ${all.days} team days${all.out ? ` · out ${[['x', 'injury'], ['r', 'rehab'], ['s', 'sick']].filter(([k]) => all.n[k]).map(([k, l]) => `${all.n[k]} ${l}`).join(' · ')}` : ''}</span></div>`;
+  document.getElementById('pl-timeline').innerHTML = `${sum}<div class="tc">${months.map(cal).join('')}</div>
     <div class="legend-row tight">${Object.entries(TL_LET).filter(([k]) => used.has(k)).map(([k, L]) => `<span><b class="tl-k" style="color:${L[1]};background:${L[2]}">${L[0]}</b>${CAT_INFO[k][0]}</span>`).join('')}</div>`;
 }
 
