@@ -291,9 +291,9 @@ function plCharts(B) {
     const ds = days.filter((x) => x >= addDays(d.as_of, -34)), few = ds.length <= (TM.fit || 99);
     const dtick = (x) => (few ? fmtDay(x, { weekday: 'short', day: 'numeric' }) : dateOf(x).getUTCDay() === 0 ? fmtDay(x, { day: 'numeric', month: 'short' }) : '');
     out = plKeys().map((k) => { const [l, u] = PL_LAB[k];
-      return card(head(k, l, `per day${u ? ' · ' + u : ''} · colour = ${z ? 'z vs his usual for that MD' : 'A:C 7:28'}${teamNote}`) + tmChart({ title: l, dots: ds.length <= (TM.fit || 99), strip: 'none',
+      return card(head(k, l, `per day${u ? ' · ' + u : ''} · colour = ${z ? 'z vs his usual for that MD' : 'A:C 7:28'}${teamNote}`) + tmChart({ title: l, dots: ds.length <= (TM.fit || 99),
         items: ds.map((x) => { const i = daysBetween(s.start, x), v = L[k][i], zz = v > 0 ? B.dayZ(x, k) : null, ac = A[k] ? A[k][i] : null, c = s.cat[i], tv = tval(k, B.tIdx(x));
-          return { v, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], game: c === 'm' || c === 'b', sep: dateOf(x).getUTCDay() === 0, label: few && v > 0 ? tmK(v) : '', ...tk(tv), tick: dtick(x),
+          return { v, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, game: c === 'm' || c === 'b', sep: dateOf(x).getUTCDay() === 0, label: few && v > 0 ? tmK(v) : '', ...tk(tv), tick: dtick(x),
             tip: `${fmtDay(x)} · ${(CAT_INFO[c] || CAT_INFO['-'])[0]}: ${fmtN(v)}${zz == null ? '' : ' · z ' + tmS(zz)}${ac == null ? '' : ' · A:C ' + ac.toFixed(2)}${PL.team && tv ? ' · team ' + fmtN(tv) : ''}` }; }) })); }).join('');
     out += card(head('', 'Wellness', 'his score each morning · % · green band = 70 % or more') + tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'none', dots: true,
       items: ds.map((x) => { const v = B.wh[x]; return { v: v || 0, col: v == null ? '#aeaeb2' : tmWell(v), label: few && v != null ? Math.round(v) : '', sep: dateOf(x).getUTCDay() === 0, tick: dtick(x), tip: v == null ? `${fmtDay(x)}: no check-in` : `${fmtDay(x)}: ${Math.round(v)} %` }; }) }));
@@ -306,8 +306,8 @@ function plCharts(B) {
       const tix = ix.map((i) => B.tIdx(days[i])).filter((j) => j >= 0 && t.daily[k]), ttot = tix.reduce((a, j) => a + (t.daily[k][j] || 0), 0);
       return { n: ix.length, tot, pw: ix.length ? tot / ix.length * 7 : 0, ac: acs.length ? acs.reduce((a, b) => a + b, 0) / acs.length : null, tpw: tix.length ? ttot / tix.length * 7 : null }; };
     out = plKeys().map((k) => { const [l, u] = PL_LAB[k], st = tmStats(B.real(k).map((w) => w[k]));
-      return card(head(k, l, `his average week of the month${u ? ' · ' + u : ''}${teamNote}`) + tmChart({ title: l, dots: true, strip: 'none', band: st.p25 == null ? null : [st.p25, st.p75],
-        items: months.map((m) => { const x = info(m, k), zz = tmZof(x.pw, st); return { v: x.pw, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(x.ac)[0], label: tmK(x.pw), tick: lab(m), now: m === cur, soft: m === cur, ...tk(x.tpw),
+      return card(head(k, l, `his average week of the month${u ? ' · ' + u : ''}${teamNote}`) + tmChart({ title: l, dots: true, band: st.p25 == null ? null : [st.p25, st.p75],
+        items: months.map((m) => { const x = info(m, k), zz = tmZof(x.pw, st); return { v: x.pw, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(x.ac)[0], ac: x.ac, label: tmK(x.pw), tick: lab(m), now: m === cur, soft: m === cur, ...tk(x.tpw),
           tip: `${lab(m)}: ${fmtN(x.tot)} in ${x.n} days${zz == null ? '' : ' · z ' + tmS(zz) + ' vs his weeks'}${x.ac == null ? '' : ' · average A:C ' + x.ac.toFixed(2)}${PL.team && x.tpw ? ' · team ' + fmtN(x.tpw) + ' a week' : ''}` }; }) })); }).join('');
     out += card(head('', 'Wellness', 'his average score of the month · %') + tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'none', dots: true,
       items: months.map((m) => { const v = B.wellOf(m + '-01', m + '-31'); return { v: v || 0, col: v == null ? '#aeaeb2' : tmWell(v), label: v == null ? '' : Math.round(v), tick: lab(m), now: m === cur, soft: m === cur, tip: v == null ? '' : `${lab(m)}: ${Math.round(v)} %` }; }) }));
@@ -315,9 +315,9 @@ function plCharts(B) {
   }
   const ws = B.weeks.slice(-Math.max(8, TM.fit || 14));
   out = plKeys().map((k) => { const [l, u] = PL_LAB[k], st = tmStats(B.real(k).map((w) => w[k]));
-    return card(head(k, l, `per week${u ? ' · ' + u : ''}${st.p25 == null ? '' : ` · his usual ${tmK(st.p25)}–${tmK(st.p75)}`}${teamNote}`) + tmChart({ title: l, dots: true, strip: 'none', band: st.p25 == null ? null : [st.p25, st.p75],
+    return card(head(k, l, `per week${u ? ' · ' + u : ''}${st.p25 == null ? '' : ` · his usual ${tmK(st.p25)}–${tmK(st.p75)}`}${teamNote}`) + tmChart({ title: l, dots: true, band: st.p25 == null ? null : [st.p25, st.p75],
       items: ws.map((w) => { const zz = B.zw(w, k), ac = w[k] > 0 ? B.acAt(k, w.done ? w.end : d.as_of) : null, tv = twk(w, k);
-        return { v: w[k], col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], label: w[k] > 0 ? tmK(w[k]) : 'no GPS', tick: w.label, now: !w.done, soft: !w.done, ...tk(tv),
+        return { v: w[k], col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, label: w[k] > 0 ? tmK(w[k]) : 'no GPS', tick: w.label, now: !w.done, soft: !w.done, ...tk(tv),
           tip: `${w.label} · ${fmtDay(w.start, { day: 'numeric', month: 'short' })}: ${fmtN(w[k])}${zz == null ? '' : ' · z ' + tmS(zz)}${ac == null ? '' : ' · A:C ' + ac.toFixed(2)}${PL.team && tv ? ' · team ' + fmtN(tv) : ''}` }; }) })); }).join('');
   out += card(head('', 'Wellness', 'his average score of the week · % · green band = 70 % or more') + tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'none', dots: true,
     items: ws.map((w) => { const v = B.wellOf(w.start, w.end); return { v: v || 0, col: v == null ? '#aeaeb2' : tmWell(v), label: v == null ? '' : Math.round(v), tick: w.label, now: !w.done, soft: !w.done, tip: v == null ? '' : `${w.label}: ${Math.round(v)} %` }; }) }));
