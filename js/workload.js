@@ -42,11 +42,11 @@ function wellnessCell(id) {
 function renderSquad() {
   const root = document.getElementById('view-squad');
   root.innerHTML = `
-    ${pageHead('Workload', 'Squad', 'sq-sub', segHtml('sq-model', [['acwr', 'Rolling 7:28'], ['ewma', 'EWMA']], WL.model))}
+    ${pageHead('Workload', 'Squad', 'sq-sub', segHtml('sq-model', [['acwr', 'Rolling 7:28'], ['ewma', 'EWMA'], ['z', 'z-score']], WL.model))}
     <div class="tiles" id="sq-tiles"></div>
-    <section class="panel">
+    <section class="panel sv-bleed">
       <div class="panel-head"><h2 class="panel-title">Risk board</h2>
-        <span class="panel-note">ACWR per metric · spike = this week's load vs the player's previous 6 weeks (z) · click a player</span></div>
+        <span class="panel-note" id="sq-board-note"></span></div>
       <div class="table-wrap" id="sq-board"><div class="empty">Loading…</div></div>
     </section>
     <section class="panel">
@@ -113,7 +113,8 @@ function drawSquad() {
   if (!d || document.getElementById('view-squad').hidden) return;
   drawSquadWeek();
   document.getElementById('sq-sub').textContent = `Data up to ${fmtDay(d.as_of, { weekday: 'long', day: 'numeric', month: 'long' })} · ${fmtUpdated(d.generated_at)}`;
-  const ratio = (p) => (WL.model === 'ewma' ? p.ewma : p.acwr);
+  const zm = WL.model === 'z', ratio = (p) => (WL.model === 'ewma' ? p.ewma : zm ? p.z7 || {} : p.acwr);  // z: this week's load vs his previous 6 weeks
+  document.getElementById('sq-board-note').textContent = `${zm ? 'z-score per metric: this week’s load vs the player’s previous 6 weeks' : WL.model === 'ewma' ? 'EWMA ratio per metric' : 'ACWR 7:28 per metric'} · spike = the highest weekly z · click a player`;
   const ps = d.players;
   const red = ps.filter((p) => p.risk === 'red').length, orange = ps.filter((p) => p.risk === 'orange').length;
   const unavailable = ps.filter((p) => p.status !== 'available');
@@ -136,7 +137,8 @@ function drawSquad() {
     const r = ratio(p), sp = maxSpike(p);
     const hist = p.history_days < 28 ? `<small class="muted">${p.history_days} d of data</small>` : '';
     const hurt = p.status === 'injured' || p.status === 'rehab';
-    const chip = (v) => (hurt ? '<span class="muted">—</span>' : p.status !== 'available' ? `<span class="chip-v na">${v == null ? '—' : v.toFixed(2)}</span>` : acwrChip(v));
+    const chip = (v) => (hurt ? '<span class="muted">—</span>' : zm ? (v == null ? '<span class="muted">—</span>' : `<span class="mz ${tmZ(v)}">${tmS(v)}</span>`)
+      : p.status !== 'available' ? `<span class="chip-v na">${v == null ? '—' : v.toFixed(2)}</span>` : acwrChip(v));
     return {
       id: p.id,
       cells: [`<i class="riskdot" style="background:${STATUS_COL[p.risk]}" title="${p.risk}"></i>`, playerCell(p.id, p.name, p.pos), statusBadge(p.status),
