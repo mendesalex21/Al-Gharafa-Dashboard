@@ -78,7 +78,7 @@ function hoToday(D) {
 function hoAvail(D) {
   const lab = { injured: 'Injury', rehab: 'Rehab', sick: 'Sick', national: 'National team', absent: 'Absent' }, col = { injured: '#e5484d', rehab: '#ff9f0a' };
   return `<section class="ho-card"><div class="ho-k">Available for the session</div>
-    <div class="ho-ab"><b>${D.avail}</b><span>/ ${D.total}</span><em><strong>${D.avail} GPS</strong> to hand out</em></div>
+    <div class="ho-ab"><b>${D.avail}</b><span>/ ${D.total}</span></div>
     <div class="ho-out">${D.out.map((p) => `<button type="button" class="ho-op" data-player="${p.id}">${avatarHtml(p.id, p.name, 26)}<b>${escapeHtml(p.name)}</b><i style="background:${col[p.status] || '#8e8e93'}">${lab[p.status] || p.today || p.status}</i></button>`).join('') || '<span class="ho-none">Everyone available</span>'}</div>
     <div class="ho-sub">out = injured, in rehab, sick, national team or absent today</div></section>`;
 }
