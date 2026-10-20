@@ -1939,3 +1939,27 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .is-failed .build-banner-dot { background: var(--critical); }
 .build-banner-close { border: 0; background: none; color: var(--ink-muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; }
 .build-banner-close:hover { color: var(--ink); }
+
+/* Attention today in columns (his choice A, 2026-10-20): one column per alert, a short line per player */
+.sv-acols { display: grid; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); gap: 12px; align-items: start; }
+@container (max-width: 1000px) { .sv-acols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 560px) { .sv-acols { grid-template-columns: 1fr; } }
+.sv-acol { border-radius: 14px; padding: 10px 10px 8px; }
+.sv-acol.red { background: color-mix(in srgb, #e5484d 6%, var(--surface)); }
+.sv-acol.orange { background: color-mix(in srgb, #ff9f0a 8%, var(--surface)); }
+.sv-acol.blue { background: color-mix(in srgb, #2a78d6 6%, var(--surface)); }
+.sv-acol.green { background: color-mix(in srgb, #34c759 8%, var(--surface)); }
+.sv-acol-h { display: flex; align-items: center; gap: 7px; font-size: 13.5px; }
+.sv-acol-h i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.red .sv-acol-h i { background: #e5484d; } .orange .sv-acol-h i { background: #ff9f0a; } .blue .sv-acol-h i { background: #2a78d6; } .green .sv-acol-h i { background: #34c759; }
+.sv-acol-h span { margin-left: auto; font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+.sv-acol-n { display: block; color: var(--ink-muted); font-size: 11px; margin: 1px 0 6px 15px; }
+.sv-acol-hint { margin: 0 0 6px; font-size: 11.5px; background: color-mix(in srgb, #2a78d6 10%, transparent); border-radius: 8px; padding: 4px 8px; }
+.sv-acol-none { display: block; color: var(--ink-muted); font-size: 12px; padding: 2px 0 2px 15px; }
+.sv-ar { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; background: none; padding: 3px 2px; border-radius: 8px; cursor: pointer; font-size: 12.5px; text-align: left; color: inherit; font-family: inherit; }
+.sv-ar:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.sv-ar b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.sv-ar .sv-ar-v { margin-left: auto; color: var(--ink-muted); font-size: 11.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sv-acol.red .sv-ar.soft .sv-ar-v { color: color-mix(in srgb, #ff9f0a 65%, var(--ink)); }
+.sv-ar.extra { display: none; } .sv-acol.all .sv-ar.extra { display: flex; }
+.sv-acol .sv-more-btn { padding-left: 2px; }

@@ -237,44 +237,54 @@ function svAttention(s) {
     const its = [[ov.length, 100, 3], [well, 90, 3], [wdrop, 80, 1], [big.length, 70, 1], [wk.length, 60, 1]].filter((x) => x[0]);
     if (its.length) {
       out.push({ p, over: ov.length ? svOverTxt(ov) : null, well, wdrop, big: big.length ? svBigTxt(p, big) : null, week: wk.length ? svWeekTxt(wk) : null,
-        sev: Math.max(...its.map((x) => x[1])) + its.reduce((a, x) => a + x[2], 0) });
+        ov, w, dr, bigs: big, wk, sev: Math.max(...its.map((x) => x[1])) + its.reduce((a, x) => a + x[2], 0) });
     }
   });
   return out.sort((a, b) => b.sev - a.sev);
 }
+const SV_ACS = { td: 'Dist', acc_dec: 'HI A+D', hit: '>20', spr_n: 'Spr' }; // short labels of the attention columns
+const SV_BIGS = { td: 'Dist', d15: '>15', hit: '>20', spr: '>25', spr_n: 'Spr', acc_dec: 'A+D', srpe: 'sRPE' };
 function svAttentionHtml(s) {
-  const at = svAttention(s), n = svFlat(s).length + svOffGps(s).length + svKeepers(s).length, nOver = at.filter((a) => a.over).length, nWell = at.filter((a) => a.well).length, nDrop = at.filter((a) => a.wdrop).length, nBig = at.filter((a) => a.big || a.week).length;
+  const at = svAttention(s), n = svFlat(s).length + svOffGps(s).length + svKeepers(s).length;
   const mc = svMicrocycle(s), left = mc && mc.started ? mc.days.filter((d) => d.date > mc.today) : [], next = left.map((d) => d.md).join(' / ');
   const jok = [], top = new Map();
   if (left.length) {
     svFlat(s).forEach((p) => {
       const plan = svPlan(p, mc), rd = svReading(plan);
-      if (rd.joker) jok.push({ p, t: rd.reached.filter((k) => k === 'hit' || k === 'spr').map((k) => `${SV_LBL[k]} ${Math.round(plan[k].done / plan[k].target * 100)}%`).join(' · ') });
-      if (rd.topup) top.set(p.id, { p, short: true, t: [`${SV_LBL[rd.kTop]} ${fmtN(plan[rd.kTop].done)} / ${fmtN(plan[rd.kTop].target)} m`] });
+      if (rd.joker) jok.push({ p, v: rd.reached.filter((k) => k === 'hit' || k === 'spr').map((k) => `${SV_BIGS[k]} ${Math.round(plan[k].done / plan[k].target * 100)} %`).join(' · '), t: 'High-speed target of his microcycle already reached.' });
+      if (rd.topup) top.set(p.id, { p, short: true, v: [`${fmtN(plan[rd.kTop].done)} / ${fmtN(plan[rd.kTop].target)} m`], t: [`Behind his ${SV_LBL[rd.kTop]} target of the microcycle: ${fmtN(plan[rd.kTop].done)} of ${fmtN(plan[rd.kTop].target)} m.`] });
     });
   }
   [...svFlat(s), ...svOffGps(s)].filter((p) => p.days_hsv >= 10).sort((a, b) => b.days_hsv - a.days_hsv).forEach((p) => { // no run at 90 % of his max speed for 10 days or more (with or without GPS that day)
-    const x = top.get(p.id) || { p, t: [] };
-    x.t.push(`${p.days_hsv} days`);
+    const x = top.get(p.id) || { p, v: [], t: [] };
+    x.v.push(`${p.days_hsv} d`);
+    x.t.push(`No run at 90 % of his max speed for ${p.days_hsv} days.`);
     top.set(p.id, x);
   });
-  const tops = [...top.values()].map((x) => ({ p: x.p, t: x.t.join(' · ') })), shortN = [...top.values()].filter((x) => x.short).length;
-  const chip = (x, i) => `<button type="button" class="sv-pchip ${i >= 10 ? 'extra' : ''}" data-id="${x.p.id}">${avatarHtml(x.p.id, playerName(x.p.id), 22)}<b>${escapeHtml(playerName(x.p.id))}</b><small>${x.t}</small></button>`;
-  const chips = (xs) => (xs.length ? xs.map(chip).join('') + (xs.length > 10 ? `<button type="button" class="sv-more-btn" data-more>+ ${xs.length - 10} more</button>` : '') : '<span class="muted">None</span>');
-  const plans = left.length || tops.length ? `<div class="sv-plans">
-      ${left.length ? `<div class="sv-plan on"><h4>Joker candidates · ${next}</h4><p>High-speed target of his microcycle already reached (distance > 20 or > 25 km/h).</p><div>${chips(jok)}</div></div>` : ''}
-      <div class="sv-plan below"><h4>Need a speed top-up${next ? ' · ' + next : ''}</h4><p>No run at 90 % of his max speed for 10 days or more (days since)${left.length ? ', or too far behind his high-speed target of the microcycle (done / target)' : ''}.</p>${shortN > 6 ? `<p class="sv-plan-hint"><b>${shortN} of ${n} players</b> are short of high-speed running — consider a speed-exposure block for everyone on ${next}.</p>` : ''}<div>${chips(tops)}</div></div>
-    </div>` : '';
-  const rows = at.map((a) => `<button type="button" class="sv-al" data-id="${a.p.id}"${a.p.gk ? ' data-gk="1"' : ''}>${avatarHtml(a.p.id, playerName(a.p.id), 30)}<b>${escapeHtml(playerName(a.p.id))}<small>${escapeHtml(svSub(a.p) || '')}</small></b>
-      <span class="sv-al-c">${a.over ? '<i class="sv-ch red">2 weeks overload</i>' : ''}${a.well ? '<i class="sv-ch red">wellness</i>' : ''}${a.wdrop ? '<i class="sv-ch orange">wellness down</i>' : ''}${a.big ? '<i class="sv-ch orange">big change today</i>' : ''}${a.week ? '<i class="sv-ch orange">week load</i>' : ''}</span>
-      <span class="sv-al-t">${escapeHtml([a.over, a.well, a.wdrop, a.big, a.week].filter(Boolean).join(' '))}</span><i class="sv-al-go">›</i></button>`).join('');
-  return `<section class="panel">
+  const tops = [...top.values()].map((x) => ({ p: x.p, v: x.v.join(' · '), t: x.t.join(' ') })), shortN = [...top.values()].filter((x) => x.short).length;
+  // the columns: each player once per alert, the value that triggered it; the full sentence on hover
+  const ovV = (a) => (a.ov.length === 4 ? `all 4 · ${SV_ACS[a.ov[0].k]} ${a.ov[0].a.toFixed(2)}` : a.ov.slice(0, 2).map((o) => `${SV_ACS[o.k]} ${o.a.toFixed(2)}`).join(' · '));
+  const over = at.filter((a) => a.over).sort((a, b) => b.ov.length - a.ov.length || b.ov[0].a - a.ov[0].a).map((a) => ({ p: a.p, v: ovV(a), t: a.over, c: 'red' }));
+  const well = at.filter((a) => a.well || a.wdrop).sort((a, b) => !!b.well - !!a.well || (a.well ? a.w : a.dr.now) - (b.well ? b.w : b.dr.now))
+    .map((a) => (a.well ? { p: a.p, v: `${a.w} %`, t: a.well, c: 'red' } : { p: a.p, v: `${a.dr.prev} → ${a.dr.now} %`, t: a.wdrop, c: 'orange' }));
+  const big = at.filter((a) => a.big || a.week).map((a) => { const x = a.bigs.length ? a.bigs[0] : a.wk[0]; return { p: a.p, v: `${a.bigs.length ? 'today' : 'week'} ${SV_BIGS[x.k] || x.k} z ${fmtSigned(x.z)}`, t: [a.big, a.week].filter(Boolean).join(' '), c: 'orange' }; });
+  const cols = [
+    ['red', '2 weeks overload', `A:C > ${SV_OVER} this week and last`, over],
+    ['red', 'Wellness', '< 50 % that morning, or −10 % two mornings', well],
+    ['orange', 'Big change', 'today or week so far, |z| ≥ 2', big],
+    ['blue', 'Speed top-up' + (next ? ' · ' + next : ''), 'no run at 90 % of max speed ≥ 10 days' + (left.length ? ', or behind his high-speed target' : ''), tops],
+    ...(left.length ? [['green', 'Joker candidates · ' + next, 'high-speed target of the microcycle reached', jok]] : []),
+  ];
+  const row = (x, i) => `<button type="button" class="sv-ar${i >= 10 ? ' extra' : ''}${x.c === 'orange' ? ' soft' : ''}" data-id="${x.p.id}"${x.p.gk ? ' data-gk="1"' : ''} title="${escapeHtml(x.t)}">${avatarHtml(x.p.id, playerName(x.p.id), 22)}<b>${escapeHtml(playerName(x.p.id))}</b><span class="sv-ar-v">${escapeHtml(x.v)}</span></button>`;
+  const col = ([c, t, note, xs]) => `<div class="sv-acol ${c}"><div class="sv-acol-h"><i></i><b>${t}</b><span>${xs.length}</span></div><small class="sv-acol-n">${note}</small>
+    ${c === 'blue' && shortN > 6 ? `<p class="sv-acol-hint"><b>${shortN} of ${n}</b> short of high-speed running — a speed block for everyone on ${next}?</p>` : ''}
+    ${xs.length ? xs.map(row).join('') + (xs.length > 10 ? `<button type="button" class="sv-more-btn" data-more>+ ${xs.length - 10} more</button>` : '') : '<span class="sv-acol-none">None</span>'}</div>`;
+  const flagged = new Set([...over, ...well, ...big].map((x) => x.p.id)).size;
+  return `<section class="panel sv-bleed">
     <div class="panel-head"><h2 class="panel-title small">Attention today</h2>
-      <span class="sv-sum">${at.length ? `<b>${at.length}</b> of ${n} players to look at<span class="sep"></span>${[[nOver, Z_COL.high, 'two weeks overload'], [nWell, Z_COL.high, 'wellness in the red'], [nDrop, Z_COL.above, 'wellness down'], [nBig, Z_COL.above, 'big change (today or week)']]
-        .filter((x) => x[0]).map(([v, c, l]) => `<i style="background:${c}"></i>${v} ${l}`).join('')}` : '✓ No alert today'}</span></div>
-    ${at.length ? `<div class="sv-als">${rows}</div>` : ''}
-    ${plans}
-    <p class="panel-foot">Alerts only for: A:C above ${SV_OVER} two weeks in a row (distance, HI Acc+Dec, > 20 km/h, sprints) · wellness in the red that morning (< 50 %), or 10 % below his average (his last 28 check-ins) two mornings in a row — goalkeepers included · a load far from his usual today (z ≥ 2, or ≤ −2 in a full session) or this week so far (z ≥ 2 or ≤ −2 vs his usual weeks) · click a player for his full session. Speed exposure is in “Need a speed top-up”. Same rules as the staff e-mail.</p>
+      <span class="sv-sum">${flagged ? `<b>${flagged}</b> of ${n} players to look at · hover a player for the detail, click for his session` : '✓ No alert today'}</span></div>
+    <div class="sv-acols" style="--n:${cols.length}">${cols.map(col).join('')}</div>
+    <p class="panel-foot">Alerts only for: A:C above ${SV_OVER} two weeks in a row (distance, HI Acc+Dec, > 20 km/h, sprints) · wellness in the red that morning (< 50 %), or 10 % below his average (his last 28 check-ins) two mornings in a row — goalkeepers included · a load far from his usual today (z ≥ 2, or ≤ −2 in a full session) or this week so far (z ≥ 2 or ≤ −2 vs his usual weeks). Same rules as the staff e-mail.</p>
   </section>`;
 }
 // ------------------------------------------------------------------ session table: the report's page design (Reports → PDF page 1)
@@ -406,7 +416,7 @@ function svMount(s) {
     else if (r.dataset.gk) { LG.player = r.dataset.id; switchView('longitudinal'); } // a goalkeeper: his wellness trends
     else switchView('player', { player: r.dataset.id });
   }));
-  document.querySelectorAll('#sv-attention [data-more]').forEach((b) => b.addEventListener('click', () => { b.closest('.sv-plan').classList.add('all'); b.remove(); }));
+  document.querySelectorAll('#sv-attention [data-more]').forEach((b) => b.addEventListener('click', () => { b.closest('.sv-acol').classList.add('all'); b.remove(); }));
   document.querySelectorAll('#sv-attention [data-allcards]').forEach((b) => b.addEventListener('click', () => { b.previousElementSibling.classList.add('all'); b.remove(); }));
   svBindIndividual(s);
 }
