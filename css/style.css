@@ -1912,3 +1912,19 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .pl-ch .seg { flex: none; transform: scale(.9); transform-origin: top right; }
 .dtable tr.sub td { padding-top: 12px; border-bottom: none; }
 .tc-av { display: flex; align-items: baseline; gap: 10px; margin: -4px 0 12px; } .tc-av b { font-size: 26px; font-weight: 700; letter-spacing: -.02em; } .tc-av span { font-size: 12.5px; color: var(--ink-2); }
+/* Admin › Match files (2026-10-20) */
+.mf-drop { border: 2px dashed var(--hairline); transition: border-color .15s, background .15s; }
+.mf-drop.over { border-color: #2a78d6; background: rgba(42, 120, 214, .05); }
+.mf-dz { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 26px 10px; text-align: center; }
+.mf-dz .mf-ic { width: 54px; height: 54px; border-radius: 50%; background: rgba(42, 120, 214, .12); color: #2a78d6; font-size: 26px; display: grid; place-items: center; }
+.mf-dz b { font-size: 16px; } .mf-dz span { font-size: 13px; color: var(--ink-2); } .mf-dz small { font-size: 11.5px; color: var(--ink-muted); max-width: 640px; }
+.mf-pick { color: #2a78d6; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.mf-q { display: grid; grid-template-columns: minmax(0, 2fr) 80px minmax(0, 1.4fr) 160px; gap: 12px; align-items: center; padding: 8px 4px; border-top: 1px solid var(--hairline); font-size: 12.5px; }
+.mf-q b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .mf-q em { font-style: normal; color: var(--ink-2); }
+.mf-q i { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; } .mf-q u { display: block; height: 100%; background: #2a78d6; transition: width .3s; }
+.mf-q.ok em { color: #1f7a3d; font-weight: 600; } .mf-q.ok u { background: #34c759; } .mf-q.bad em { color: #c4373c; }
+.mf-t { width: 100%; border-collapse: collapse; font-size: 13px; } .mf-t th { font-size: 10.5px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--hairline); }
+.mf-t td { padding: 9px 8px; border-bottom: 1px solid var(--hairline); } .mf-t .l { text-align: left; }
+.mf-ok { display: inline-flex; align-items: center; gap: 6px; color: #1f7a3d; font-weight: 600; } .mf-ok small { color: var(--ink-muted); font-weight: 500; }
+.mf-no { color: var(--ink-muted); } .mf-del { border: 0; background: none; color: var(--ink-muted); font-size: 16px; cursor: pointer; padding: 0 4px; } .mf-del:hover { color: #c4373c; }
+

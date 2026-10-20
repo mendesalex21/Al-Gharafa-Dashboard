@@ -8,6 +8,8 @@
  *   POST /api/upload       Update dashboard (sync/build.py) sends the payloads, the PDFs and the Excel copies (upload key)
  *   GET  /api/snapshot, /api/payload   the online calculation reads the Excel copies and the payloads it reuses (upload key)
  *   POST /api/rebuild      starts the online calculation (GitHub workflow) after a change on the site (staff session)
+ *   GET/PUT/DELETE /api/match-files   the match files (XML + tracking) in R2 — the admin only (staff session)
+ *   GET  /api/match-file   the online calculation reads a match file (upload key)
  *   cron, every 15 min     the same re-read as /api/refresh
  * Staff session: "s1.<payload>.<sig>", issued by the Google script after a Google sign-in (30 days, Auth.gs):
  * HMAC-SHA256 with SESSION_SECRET, the same secret on both sides. The e-mail must still be in the Staff list (KV
@@ -27,6 +29,7 @@ export default {
     try {
       if (path === '/api/upload' && req.method === 'POST') return await upload(req, env);
       if ((path === '/api/snapshot' || path === '/api/payload') && req.method === 'GET') return await keyRead(req, path, env);
+      if (path === '/api/match-file' && req.method === 'GET') return await mfRead(req, env); // the online calculation (upload key)
       if (path === '/api/rebuild' && req.method === 'POST' && req.headers.get('X-Upload-Key')) { // the PC (tests); the site uses its staff session below
         return env.UPLOAD_KEY && same(req.headers.get('X-Upload-Key'), env.UPLOAD_KEY) ? await rebuild(env) : json({ ok: false, error: 'forbidden' }, 403);
       }
@@ -37,6 +40,8 @@ export default {
       if (path.startsWith('/api/pdf/') && req.method === 'GET') return await pdf(decodeURIComponent(path.slice(9)), env);
       if (path === '/api/statsports' && req.method === 'GET') return await statsports(new URL(req.url).searchParams.get('date'), env);
       if (path === '/api/rebuild' && req.method === 'POST') return await rebuild(env);
+      if (path === '/api/me' && req.method === 'GET') return json({ ok: true, user });
+      if (path === '/api/match-files') return await matchFiles(req, user, env);
       if (path === '/api/refresh' && req.method === 'POST') { const r = await refresh(env, new URL(req.url).searchParams.get('force') === '1'); return json({ ok: true, changed: r.changed || [] }); }
       return json({ ok: false, error: 'not_found' }, 404);
     } catch (err) {
@@ -142,6 +147,46 @@ async function rebuild(env) {
     body: JSON.stringify({ ref: 'main' }),
   });
   return r.status === 204 ? json({ ok: true }) : json({ ok: false, error: `github ${r.status}` }, 502);
+}
+
+/** The match files (admin only): GET = the list · PUT ?name=&match= (body = the file, gzip) · DELETE ?name=&match=.
+ * Kept in R2 under mf/<match id>/<file name>.gz; the list (with what the page read from the XML: teams, date,
+ * competition) in KV under mf:index — one KV write per file. */
+async function matchFiles(req, user, env) {
+  if (!user || user.role !== 'admin') return json({ ok: false, error: 'forbidden' }, 403);
+  if (!env.FILES) return json({ ok: false, error: 'storage_not_ready' }, 501);
+  const index = (await env.DATA.get('mf:index', 'json')) || {};
+  if (req.method === 'GET') return json({ ok: true, matches: index });
+  const q = new URL(req.url).searchParams, name = q.get('name') || '', match = (q.get('match') || '').replace(/\D/g, '');
+  if (!/^[\w.$ -]{3,120}$/.test(name) || !match) return json({ ok: false, error: 'bad_name' }, 400);
+  const key = `mf/${match}/${name}.gz`;
+  if (req.method === 'PUT') {
+    const obj = await env.FILES.put(key, req.body, { httpMetadata: { contentType: 'application/gzip' } });
+    let meta = {};
+    try { meta = JSON.parse(decodeURIComponent(req.headers.get('X-Meta') || '{}')); } catch (e) { /* the file name is enough */ }
+    const m = index[match] || (index[match] = { files: {} });
+    Object.assign(m, Object.fromEntries(Object.entries(meta).filter(([k]) => ['home', 'away', 'date', 'competition', 'round'].includes(k))));
+    m.files[name] = { kind: q.get('kind') || '', size: obj.size, raw: Number(req.headers.get('X-Raw-Size')) || null, at: new Date().toISOString(), by: user.email };
+    await env.DATA.put('mf:index', JSON.stringify(index));
+    return json({ ok: true, match, name, size: obj.size });
+  }
+  if (req.method === 'DELETE') {
+    await env.FILES.delete(key);
+    if (index[match]) { delete index[match].files[name]; if (!Object.keys(index[match].files).length) delete index[match]; }
+    await env.DATA.put('mf:index', JSON.stringify(index));
+    return json({ ok: true });
+  }
+  return json({ ok: false, error: 'bad_method' }, 405);
+}
+
+/** One match file for the online calculation (upload key): ?key=mf/<match>/<name>.gz, or ?key=index for the list. */
+async function mfRead(req, env) {
+  if (!env.UPLOAD_KEY || !same(req.headers.get('X-Upload-Key') || '', env.UPLOAD_KEY)) return json({ ok: false, error: 'forbidden' }, 403);
+  const key = new URL(req.url).searchParams.get('key') || '';
+  if (key === 'index') return json({ ok: true, matches: (await env.DATA.get('mf:index', 'json')) || {} });
+  if (!env.FILES || !/^mf\/\d+\/[\w.$ -]+\.gz$/.test(key)) return json({ ok: false, error: 'bad_key' }, 400);
+  const obj = await env.FILES.get(key);
+  return obj ? new Response(obj.body, { headers: { 'Content-Type': 'application/gzip', 'Cache-Control': 'no-store' } }) : json({ ok: false, error: 'not_found' }, 404);
 }
 
 /** Update dashboard: a payload (?name=workload…) or a PDF (?name=pdf:S75_2026-10-05_Staff_report.pdf, kept 120 days). */
