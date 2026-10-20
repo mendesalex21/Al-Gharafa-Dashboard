@@ -19,7 +19,7 @@
 const UPLOADS = ['workload', 'sessions', 'objectives', 'calendar', 'tests', 'reports', 'staff_report', 'plan_lib', 'squad_stats', 'match_report', 'intensity'];
 const FROM_SCRIPT = ['home', 'wellness', 'wellness_history']; // computed by the Google script from the kiosk check-ins
 const DATA = [...FROM_SCRIPT, ...UPLOADS];
-const KEY_ONLY = ['player_photos']; // kept for the online calculation, not served here (the site reads the photos from the script)
+const KEY_ONLY = ['player_photos', 'build_status']; // kept for the online calculation, not served here (the site reads the photos from the script); build_status → /api/me (admin)
 const SNAPS = ['full', 'drills', 'calendar', 'players', 'config', 'gps', 'pdfs', 'min10', 'peaks', 'wcs']; // Update dashboard's copies (sync/cloud.py SNAPS)
 const enc = new TextEncoder();
 
@@ -40,7 +40,7 @@ export default {
       if (path.startsWith('/api/pdf/') && req.method === 'GET') return await pdf(decodeURIComponent(path.slice(9)), env);
       if (path === '/api/statsports' && req.method === 'GET') return await statsports(new URL(req.url).searchParams.get('date'), env);
       if (path === '/api/rebuild' && req.method === 'POST') return await rebuild(env);
-      if (path === '/api/me' && req.method === 'GET') return json({ ok: true, user });
+      if (path === '/api/me' && req.method === 'GET') return json({ ok: true, user, build: user.role === 'admin' ? await env.DATA.get('p:build_status', 'json') : undefined }); // his banner when an online build was not sent
       if (path === '/api/match-files') return await matchFiles(req, user, env);
       if (path === '/api/refresh' && req.method === 'POST') { const r = await refresh(env, new URL(req.url).searchParams.get('force') === '1'); return json({ ok: true, changed: r.changed || [] }); }
       return json({ ok: false, error: 'not_found' }, 404);

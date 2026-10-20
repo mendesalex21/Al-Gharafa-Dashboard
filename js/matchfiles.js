@@ -94,10 +94,33 @@ function mfDrawList() {
 }
 
 /** The admin's link (nav): shown only when the server says this staff member is the admin. */
+let MF_POLL = null;
 async function mfShowLink() {
   if (!cfOn()) return;
   try {
     const r = await fetch('/api/me', { headers: cfHeaders() }), j = await r.json();
-    if (j.ok && j.user && j.user.role === 'admin') document.getElementById('nav-matchfiles').hidden = false;
+    if (j.ok && j.user && j.user.role === 'admin') {
+      document.getElementById('nav-matchfiles').hidden = false;
+      buildBanner(j.build);
+      if (!MF_POLL) MF_POLL = setInterval(mfShowLink, 120000); // the banner follows the online build's retries
+    }
   } catch (e) { /* not shown */ }
 }
+
+/** His banner when an online build could not be sent (the Google script not answering): the build tries again by
+ * itself 10 minutes later, twice, then fails (GitHub e-mails him). Gone once a build goes through. */
+function buildBanner(b) {
+  const el = document.getElementById('build-banner');
+  if (!el) return;
+  const key = b && b.state !== 'ok' ? `${b.state}-${b.at}-${b.tries}` : '';
+  if (!key || sessionStorageGet('build-banner-closed') === key) { el.hidden = true; return; }
+  const text = b.state === 'retrying'
+    ? `<b>The ${b.at} update was not sent</b> — the Google script is not answering. Trying again by itself at ${b.next} (try ${b.tries + 1} of 3).`
+    : `<b>The ${b.at} update failed after 3 tries</b> — the Google script did not answer. Run Update dashboard again.`;
+  el.className = 'build-banner ' + (b.state === 'retrying' ? 'is-retrying' : 'is-failed');
+  el.innerHTML = `<div class="wrap build-banner-inner"><span class="build-banner-dot"></span><span>${text}</span><button class="build-banner-close" aria-label="Hide">×</button></div>`;
+  el.querySelector('.build-banner-close').onclick = () => { sessionStorageSet('build-banner-closed', key); el.hidden = true; };
+  el.hidden = false;
+}
+function sessionStorageGet(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+function sessionStorageSet(k, v) { try { sessionStorage.setItem(k, v); } catch (e) { /* not kept */ } }

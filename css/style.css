@@ -1928,3 +1928,14 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .mf-ok { display: inline-flex; align-items: center; gap: 6px; color: #1f7a3d; font-weight: 600; } .mf-ok small { color: var(--ink-muted); font-weight: 500; }
 .mf-no { color: var(--ink-muted); } .mf-del { border: 0; background: none; color: var(--ink-muted); font-size: 16px; cursor: pointer; padding: 0 4px; } .mf-del:hover { color: #c4373c; }
 
+
+/* his banner: an online build not sent (the Google script not answering) — matchfiles.js buildBanner */
+.build-banner { border-top: 1px solid var(--hairline); font-size: 13px; }
+.build-banner.is-retrying { background: color-mix(in srgb, var(--warning) 14%, var(--bg)); }
+.build-banner.is-failed { background: color-mix(in srgb, var(--critical) 12%, var(--bg)); }
+.build-banner-inner { display: flex; align-items: center; gap: 10px; padding-block: 8px; }
+.build-banner-inner > span:nth-child(2) { flex: 1; }
+.build-banner-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--warning); }
+.is-failed .build-banner-dot { background: var(--critical); }
+.build-banner-close { border: 0; background: none; color: var(--ink-muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; }
+.build-banner-close:hover { color: var(--ink); }
