@@ -1,16 +1,16 @@
 const VIEWS = {}; // view -> already rendered?
 const VIEW_SECTION = {
-  wellness: 'wellness', longitudinal: 'wellness', sessions: 'training', objectives: 'training', intensity: 'training',
+  home: 'home', wellness: 'wellness', longitudinal: 'wellness', sessions: 'training', objectives: 'training', intensity: 'training',
   team: 'workload', squad: 'workload', player: 'workload', readiness: 'workload', testing: 'testing', calendar: 'calendar', reports: 'reports', roster: 'roster', plan: 'plan', matchfiles: 'matchfiles',
 };
 const VIEW_RENDER = {
-  wellness: () => renderWellness(), longitudinal: () => renderLongitudinal(),
+  home: () => renderHome(), wellness: () => renderWellness(), longitudinal: () => renderLongitudinal(),
   sessions: (o) => renderSessions(o), objectives: (o) => renderObjectives(o), intensity: () => renderIntensity(), team: () => renderTeam(), squad: () => renderSquad(),
   player: (o) => renderPlayerLoad(o), readiness: () => renderReadiness(), testing: (o) => renderTesting(o), calendar: (o) => renderCalendar(o),
   reports: (o) => renderReports(o), roster: () => renderRoster(), plan: () => renderPlan(), matchfiles: () => renderMatchFiles(),
 };
 const VIEW_REDRAW = {
-  longitudinal: () => drawLongitudinal(), sessions: (o) => drawSessions(o), objectives: () => drawObjectives(), intensity: () => drawIntensity(),
+  home: () => drawHome(), longitudinal: () => drawLongitudinal(), sessions: (o) => drawSessions(o), objectives: () => drawObjectives(), intensity: () => drawIntensity(),
   team: () => drawTeam(), squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: () => drawCalendar(), reports: () => rpFit(), roster: () => drawRoster(), plan: () => splDraw(), matchfiles: () => drawMatchFiles(),
 };
 let CURRENT_VIEW = null;
@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => switchView(btn.dataset.view));
   });
   initFlyouts();
+  document.getElementById('brand-home').addEventListener('click', () => switchView('home')); // the club logo = home
   document.getElementById('avatar').addEventListener('click', () => {
     if (!AUTH.demo && confirm('Sign out?')) signOut();
   });
@@ -103,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initAuth(async () => {
     // photos: once per device, then from the browser's storage (a few ms) — wait that long so pages draw with them
     await Promise.race([loadPlayerPhotos(), new Promise((ok) => setTimeout(ok, 400))]);
-    switchView(VIEW_RENDER[start] ? start : 'wellness', opts);
+    switchView(VIEW_RENDER[start] ? start : 'home', opts); // the home page (the club logo) is the landing page
     mfShowLink(); // the admin's Match files link
     window.addEventListener('hashchange', () => { const h = location.hash.slice(1), v = h === 'downloads' ? 'reports' : h; if (VIEW_RENDER[v] && v !== CURRENT_VIEW) switchView(v); });
   });
