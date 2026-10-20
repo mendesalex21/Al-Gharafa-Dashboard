@@ -79,7 +79,7 @@ function rpDoc(data, i, part = 'all') {
   }
   return {
     // a match day's match report keeps its usual name and look (part ''); its extra session reads as a training report
-    session: { id: s.id, date: s.date, dateLabel: rpDateLabel(s.date), week: s.week, md: pm.md ?? s.md, ampm: s.ampm, time: pm.time ?? s.time, exercise: s.ex, type: extra ? 'training' : s.type,
+    session: { id: s.hidden ? 'Rehab / individual' : s.id, date: s.date, dateLabel: rpDateLabel(s.date), week: s.week, md: pm.md ?? s.md, ampm: s.ampm, time: pm.time ?? s.time, exercise: s.ex, type: extra ? 'training' : s.type,
       part: s.parts && part !== 'all' && !(s.parts.x && part === 't') ? rpPartLabel(s, part) : '', extra },
     positions: data.positions, players: data.pos, pids: data.pid || {}, fullSession, gameAvg,
     weekLoad: { from, to: s.date, label: rpRangeLabel(from, s.date), rows: Object.values(acc) },
@@ -243,7 +243,7 @@ function rpChart(D, key, title, legend, gmKey) {
 function rpPages(D) {
   const s = D.session, pages = [];
   const meta = [['WEEK', s.week], ['MD', s.md], ['TIME', s.time + "'"], ['N EXERCICE', s.exercise], ['AM/PM', s.ampm]];
-  const title = `${s.id} · ${s.dateLabel}`;
+  const title = `${s.hidden ? 'Rehab / individual' : s.id} · ${s.dateLabel}`;
   const kicker = s.extra ? 'EXTRA SESSION · MATCH DAY' : 'FULL SESSION' + (s.part ? ' · ' + s.part.toUpperCase() : '');
   pages.push(rpHeader(kicker, title, meta) + rpTable(D, D.fullSession, ['time', 'mpm', 'td', 'd15', 'd20', 'vmax', 'pmax', 'days', 'sprints', 'accdec']));
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'td', 'TOTAL DISTANCE', 'TOTAL DISTANCE', 'td') + rpChart(D, 'd20', 'DISTANCE >20kmh', 'DISTANCE >20kmh', 'd20'));
@@ -329,7 +329,7 @@ function renderReports(opts) {
     RP.data = d;
     const list = d.sessions || [];
     const want = RP.wanted ? list.findIndex((s) => s.date === RP.wanted) : -1;
-    const shown = list.map((s, i) => i).filter((i) => !list[i].hidden);
+    const shown = list.map((s, i) => i);  // a day of rehab / individual work only is listed too (2026-10-20), as "Rehab"
     // a day with a B-team game alongside the team session offers three reports: all players, the session, the game
     RP.opts = shown.flatMap((i) => rpParts(list[i]).map((part) => [i, part]));
     rpGpsPlayers(); // the Excel data view's player list, if it is open
@@ -349,7 +349,7 @@ function rpOption(s, part = 'all') {
   const d = new Date(s.date + 'T12:00:00Z');
   const day = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
   const tag = s.md && s.md !== '/' ? s.md : s.parts ? '' : (s.type === 'match' ? 'Match' : 'Training');
-  return `${s.id} · ${day}${tag ? ' · ' + tag : ''}${s.cycle ? ' · ' + s.cycle : ''}${s.ampm === 'AM' ? ' · AM' : ''}${s.parts ? ' · ' + rpPartLabel(s, part) : ''}`;
+  return `${s.hidden ? 'Rehab / individual' : s.id} · ${day}${tag ? ' · ' + tag : ''}${s.cycle ? ' · ' + s.cycle : ''}${s.ampm === 'AM' ? ' · AM' : ''}${s.parts ? ' · ' + rpPartLabel(s, part) : ''}`;
 }
 
 function rpGo(i, part = 'all') {

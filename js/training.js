@@ -42,7 +42,8 @@ function objectivesPanel(s) {
   const cyc = s.cycle, ref = s.team_ref;
   const per90 = s.kind === 'match', comp = s.group === 'compensatory';
   if (!ref) {
-    return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">${comp ? 'Compensatory session · averages' : 'Team averages'}</h2><span class="panel-note">${comp ? 'no reference yet for compensatory sessions' : 'no objective: outside a standard microcycle (break or pre-season)'}</span></div>
+    const rehab = s.group === 'rehab';  // a day with no team session: the players in rehab / on individual work (2026-10-20)
+    return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">${comp ? 'Compensatory session · averages' : rehab ? `Rehab / individual session · ${s.n} player${s.n > 1 ? 's' : ''}` : 'Team averages'}</h2><span class="panel-note">${comp ? 'no reference yet for compensatory sessions' : rehab ? 'no team session today · their average, no team objective' : 'no objective: outside a standard microcycle (break or pre-season)'}</span></div>
       <div class="obj-plain">${OBJ_BARS.map(([k, l, u]) => { const v = k === 'minutes' ? s.minutes : s.team[k]; return v == null ? '' : `<div><span>${l}</span><b>${fmtN(v)}<small> ${u}</small></b></div>`; }).join('')}</div></section>`;
   }
   const bars = OBJ_BARS.filter(([k]) => ref[k] && ref[k].z != null)
@@ -164,7 +165,7 @@ function renderSessions(opts) {
 }
 
 function sessionLabel(s) {
-  const kind = s.kind === 'match' ? `Match${s.cycle.opponent ? ' · ' + s.cycle.opponent : ''}` : `${s.md || 'Training'}${s.group === 'compensatory' ? ' · compensatory' : ''}`;
+  const kind = s.kind === 'match' ? `Match${s.cycle.opponent ? ' · ' + s.cycle.opponent : ''}` : `${s.md || 'Training'}${s.group === 'compensatory' ? ' · compensatory' : s.group === 'rehab' ? ' · rehab / individual' : ''}`;
   return `${fmtDay(s.date)} · ${kind}`;
 }
 
