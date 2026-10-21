@@ -250,12 +250,13 @@ function svAttentionHtml(s) {
   const jok = [], top = new Map();
   if (left.length) {
     svFlat(s).forEach((p) => {
+      if (p.cat === 'r') return; // a player in rehab: no microcycle target
       const plan = svPlan(p, mc), rd = svReading(plan);
       if (rd.joker) jok.push({ p, v: rd.reached.filter((k) => k === 'hit' || k === 'spr').map((k) => `${SV_BIGS[k]} ${Math.round(plan[k].done / plan[k].target * 100)} %`).join(' · '), t: 'High-speed target of his microcycle already reached.' });
       if (rd.topup) top.set(p.id, { p, short: true, v: [`${fmtN(plan[rd.kTop].done)} / ${fmtN(plan[rd.kTop].target)} m`], t: [`Behind his ${SV_LBL[rd.kTop]} target of the microcycle: ${fmtN(plan[rd.kTop].done)} of ${fmtN(plan[rd.kTop].target)} m.`] });
     });
   }
-  [...svFlat(s), ...svOffGps(s)].filter((p) => p.days_hsv >= 10).sort((a, b) => b.days_hsv - a.days_hsv).forEach((p) => { // no run at 90 % of his max speed for 10 days or more (with or without GPS that day)
+  [...svFlat(s), ...svOffGps(s)].filter((p) => p.days_hsv >= 10 && p.cat !== 'r').sort((a, b) => b.days_hsv - a.days_hsv).forEach((p) => { // no run at 90 % of his max speed for 10 days or more (with or without GPS that day; not a player in rehab)
     const x = top.get(p.id) || { p, v: [], t: [] };
     x.v.push(`${p.days_hsv} d`);
     x.t.push(`No run at 90 % of his max speed for ${p.days_hsv} days.`);

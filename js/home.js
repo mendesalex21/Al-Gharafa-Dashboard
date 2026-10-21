@@ -120,7 +120,7 @@ function hoAttnData(D) {
   const over = at.filter((a) => a.over).sort((a, b) => b.ov.length - a.ov.length || b.ov[0].a - a.ov[0].a).map((a) => ({ p: a.p, v: ovV(a), t: a.over }));
   const well = at.filter((a) => a.well || a.wdrop).sort((a, b) => !!b.well - !!a.well).map((a) => ({ p: a.p, v: a.well ? `${a.w} %` : `${a.dr.prev} → ${a.dr.now} %`, t: a.well || a.wdrop }));
   const big = at.filter((a) => a.big || a.week).map((a) => { const x = a.bigs.length ? a.bigs[0] : a.wk[0]; return { p: a.p, v: `${a.bigs.length ? 'today' : 'week'} ${SV_BIGS[x.k] || x.k} z ${fmtSigned(x.z)}`, t: [a.big, a.week].filter(Boolean).join(' ') }; });
-  const speed = [...svFlat(s), ...svOffGps(s)].filter((p) => p.days_hsv >= 10).sort((a, b) => b.days_hsv - a.days_hsv).map((p) => ({ p, v: `${p.days_hsv} days`, t: `No run at 90 % of his max speed for ${p.days_hsv} days.` }));
+  const speed = [...svFlat(s), ...svOffGps(s)].filter((p) => p.days_hsv >= 10 && p.cat !== 'r').sort((a, b) => b.days_hsv - a.days_hsv).map((p) => ({ p, v: `${p.days_hsv} days`, t: `No run at 90 % of his max speed for ${p.days_hsv} days.` }));
   return { s, n: svFlat(s).length + svOffGps(s).length + svKeepers(s).length, flagged: new Set([...over, ...well, ...big].map((x) => x.p.id)).size, G: [
     { k: 'over', c: 'red', t: '2 weeks overload', note: `A:C > ${SV_OVER} this week and last`, xs: over },
     { k: 'well', c: 'red', t: 'Wellness', note: '< 50 %, or −10 % two mornings', xs: well },
