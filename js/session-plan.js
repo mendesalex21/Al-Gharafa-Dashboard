@@ -961,7 +961,7 @@ function splChecksHtml(b) {
   const rows = [];
   if (c.time.length) {
     rows.push(`<div class="sp-cg">Session time<small>team-session players get ${b.sessionTime}'</small>${c.time.length > 2 ? `<span>${btn('data-fix-all="own"', `Use each one's GPS time (${c.time.length})`)}${btn('data-fix-all="keep"', `Keep ${b.sessionTime}' for all`)}</span>` : ''}</div>`);
-    c.time.forEach((x, i) => rows.push(`<div class="sp-ci${x.fix ? ' done' : ''}"><b>${escapeHtml(x.name)}</b><span>${f1(x.t)}' on the GPS · session ${b.sessionTime}' — arrived late, left early, or extra work?</span><span class="sp-cb">${btn(`data-fix-t="${i}" data-v="own"`, `Use his ${x.own}'`, x.fix === 'own')}${x.pid ? btn(`data-partial="${escapeHtml(x.pid)}"`, 'Partial') : ''}${btn(`data-fix-t="${i}" data-v="keep"`, `Keep ${b.sessionTime}'`, x.fix === 'keep')}</span></div>`));
+    c.time.forEach((x, i) => rows.push(`<div class="sp-ci${x.fix ? ' done' : ''}"><b>${escapeHtml(x.name)}</b><span>${f1(x.t)}' on the GPS · session ${b.sessionTime}' — arrived late, left early, extra work — or individual / rehab?</span><span class="sp-cb">${btn(`data-fix-t="${i}" data-v="own"`, `Use his ${x.own}'`, x.fix === 'own')}${x.pid ? [['Partial', 'Partial'], ['INDIVIDUAL', 'Individual'], ['Rehab', 'Rehab']].map(([v, l]) => btn(`data-setst="${escapeHtml(x.pid)}" data-v="${v}"`, l)).join('') : ''}${btn(`data-fix-t="${i}" data-v="keep"`, `Keep ${b.sessionTime}'`, x.fix === 'keep')}</span></div>`));
   }
   if (c.drill.length) {
     rows.push(`<div class="sp-cg">Drill time<small>planned minutes vs the GPS (median of the players) · a game in halves includes its break</small></div>`);
@@ -1130,7 +1130,7 @@ function splClick(e) {
     if (d) { const on = d.chk && (Number(d.act) || Number(d.min)) === v; d.act = on || v === Number(d.min) ? undefined : v; d.chk = !on; }
     splTouch(date); splDraw(); return;
   }
-  if (t.dataset.partial) { p().status[t.dataset.partial] = 'Partial'; splTouch(date); splDraw(); return; }
+  if (t.dataset.setst) { p().status[t.dataset.setst] = t.dataset.v; splTouch(date); splDraw(); return; } // a time far from the session: Partial, Individual or Rehab
   // drill cards
   if (t.dataset.cardEdit != null) {
     const d = p().drills[Number(t.dataset.cardEdit)], def = splDef(d.name) || {}, inLib = !!splLibOf(d.name);
