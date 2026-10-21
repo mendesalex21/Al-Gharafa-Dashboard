@@ -90,7 +90,7 @@ function hoWell(D) {
   const W = D.w;
   if (!W.date) return '<section class="ho-card"><div class="ho-k">Wellness alerts</div><p class="ho-none">No check-ins yet.</p></section>';
   const when = W.date === D.today ? 'this morning' : hoDay(W.date, { weekday: 'short', day: 'numeric' }) + (W.waiting ? ' · none yet today' : ' morning');
-  const item = (x) => `<button type="button" class="ho-wp ${x.t}" data-well="${x.id}">${avatarHtml(x.id, playerName(x.id), 26)}<b>${escapeHtml(playerName(x.id))}</b><em>${x.t === 'drop' ? `${x.d.prev} → ${x.v} %` : x.v + ' %'}</em><small>${x.t === 'red' ? 'in the red' : `2 mornings below his ${x.d.avg} %`}</small></button>`;
+  const item = (x) => `<button type="button" class="ho-wp ${x.t}" data-well="${x.id}">${avatarHtml(x.id, playerName(x.id), 24)}<b>${escapeHtml(playerName(x.id))}</b><em>${x.t === 'drop' ? `${x.d.prev} → ${x.v} %` : x.v + ' %'}</em><small>${x.t === 'red' ? 'in the red' : `2 mornings below his ${x.d.avg} %`}</small></button>`;
   const all = [...D.red, ...D.dr];
   return `<section class="ho-card"><div class="ho-k">Wellness alerts · ${when}</div>
     <div class="ho-wh"><span class="ho-ws" style="color:${W.teamScore >= 70 ? '#34c759' : '#ff9f0a'}">${W.teamScore != null ? Math.round(W.teamScore) + ' %' : '—'}</span><span>team · ${Object.keys(D.by).length} check-ins</span><span class="ho-wn"><b style="color:#e5484d">${D.red.length}</b> in the red · <b style="color:#ff9f0a">${D.dr.length}</b> dropping</span></div>
