@@ -6,6 +6,7 @@ const HO = { P: {}, open: null };
 const HO_K = [['td', 'Distance', 'm'], ['d15', '> 15 km/h', 'm'], ['hit', '> 20 km/h', 'm'], ['spr', '> 25 km/h', 'm'], ['acc_dec', 'Acc + Dec', ''], ['srpe', 'sRPE', 'AU'], ['minutes', 'Duration', 'min']];
 const hoZc = (z) => (z == null ? '#aeaeb2' : z >= 2 ? '#e5484d' : z >= 1 ? '#ff9f0a' : z <= -1 ? '#2a78d6' : '#34c759');
 const hoDay = (d, o) => fmtDay(d, o || { weekday: 'short', day: 'numeric', month: 'short' });
+const hoVenue = (e) => String(e.venue || '').replace(/\s*\((away|home)\)\s*$/i, '').trim(); // the stadium, without the "(away)" of the fixture list
 const hoCount = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5);
 
 function renderHome() {
@@ -21,7 +22,7 @@ function drawHome() {
   const D = hoData();
   const next = D.matches[0], dleft = next ? hoCount(D.today, next.start) : null;
   const header = `<div class="ho-hd"><div class="ho-date">${fmtDay(D.today, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-    <div class="ho-chips">${D.matchToday ? '<span class="ho-md">MD</span>' : D.tag ? `<span class="ho-md">${D.tag}</span>` : ''}${D.plan.type ? `<span>${D.plan.type[0].toUpperCase() + D.plan.type.slice(1)} microcycle · ${D.plan.length} days</span>` : ''}${next ? `<button type="button" class="ho-chip-m" data-go="calendar">${crestHtml(next.opponent, 16)} ${escapeHtml(next.opponent)} · ${hoDay(next.start, { weekday: 'short', day: 'numeric' })}${next.time ? ' · ' + next.time : ''} · ${dleft === 0 ? 'today' : dleft === 1 ? 'tomorrow' : 'in ' + dleft + ' days'}</button>` : ''}</div></div>`;
+    <div class="ho-chips">${D.matchToday ? '<span class="ho-md">MD</span>' : D.tag ? `<span class="ho-md">${D.tag}</span>` : ''}${D.plan.type ? `<span>${D.plan.type[0].toUpperCase() + D.plan.type.slice(1)} microcycle · ${D.plan.length} days</span>` : ''}${next ? `<button type="button" class="ho-chip-m" data-go="calendar">${crestHtml(next.opponent, 16)} ${escapeHtml(next.opponent)} · ${hoDay(next.start, { weekday: 'short', day: 'numeric' })}${next.time ? ' · <b>' + next.time + '</b>' : ''}${hoVenue(next) ? ' · ' + escapeHtml(hoVenue(next)) : ''} · ${dleft === 0 ? 'today' : dleft === 1 ? 'tomorrow' : 'in ' + dleft + ' days'}</button>` : ''}</div></div>`;
   root.innerHTML = `<div class="ho">${header}<div class="ho-g2">${hoYest(D)}${hoToday(D)}</div><div class="ho-g3">${hoAvail(D)}${hoWell(D)}${hoMatches(D)}</div>${hoAttn(D)}</div>`;
   hoBind(D);
 }
@@ -43,7 +44,10 @@ function hoData() {
   const red = Object.entries(by).filter(([, v]) => v < 50).sort((a, b) => a[1] - b[1]).map(([id, v]) => ({ id, v, t: 'red' }));
   const dr = Object.entries(drops).filter(([id]) => !(by[id] < 50)).map(([id, d]) => ({ id, v: d.now, t: 'drop', d }));
   const low = Object.entries(by).filter(([id, v]) => v >= 50 && v < 60 && !drops[id]).sort((a, b) => a[1] - b[1]).map(([id, v]) => ({ id, v }));
-  const matches = (P.calendar.events || []).filter((e) => e.kind === 'match' && e.start >= today).sort((a, b) => (a.start < b.start ? -1 : 1)).slice(0, 5);
+  // the fixtures with the staff edits (time, stadium, home/away), as the Calendar page shows them; the next match's own fields too
+  const evs = typeof applyCalendarEdits === 'function' ? applyCalendarEdits(P.calendar) : (P.calendar.events || []), pn = plan.next || {};
+  const matches = evs.filter((e) => e.kind === 'match' && e.start >= today).sort((a, b) => (a.start < b.start ? -1 : 1)).slice(0, 5)
+    .map((e) => (e.id === pn.id ? { ...pn, ...e, time: e.time || pn.time, venue: e.venue || pn.venue, ha: e.ha || pn.ha } : e));
   return { P, today, tag, plan, yest, done, row, out, avail: pl.length - out.length, total: pl.length, w, by, red, dr, low, matches, matchToday: matches[0] && matches[0].start === today ? matches[0] : null };
 }
 
@@ -99,7 +103,7 @@ function hoWell(D) {
 }
 function hoMatches(D) {
   const m = D.matches.map((e, i) => { const n = hoCount(D.today, e.start), away = /away/i.test(e.venue || '') || e.ha === 'A';
-    return `<div class="ho-m${i === 0 ? ' first' : ''}">${crestHtml(e.opponent, 30)}<span class="ho-mt"><b>${escapeHtml(e.opponent)}</b><small>${escapeHtml(e.competition || '')}${e.round ? ' · ' + escapeHtml(e.round) : ''} · ${away ? 'Away' : 'Home'}</small></span>
+    return `<div class="ho-m${i === 0 ? ' first' : ''}" title="${escapeHtml(hoVenue(e))}">${crestHtml(e.opponent, 30)}<span class="ho-mt"><b>${escapeHtml(e.opponent)}</b><small>${escapeHtml(e.competition || '')}${e.round ? ' · ' + escapeHtml(e.round) : ''} · ${away ? 'Away' : 'Home'}</small></span>
       <span class="ho-md2"><b>${hoDay(e.start)}</b><small>${e.time || ''}</small></span><span class="ho-mn">${n === 0 ? 'today' : n === 1 ? 'tomorrow' : 'in ' + n + ' d'}</span></div>`; }).join('');
   return `<section class="ho-card ho-link" data-go="calendar"><div class="ho-k">Next ${D.matches.length} matches<i class="ho-go">›</i></div><div class="ho-ml">${m || '<span class="ho-none">No match in the calendar</span>'}</div></section>`;
 }
