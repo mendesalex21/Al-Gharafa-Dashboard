@@ -85,7 +85,7 @@ function renderRoster() {
   const root = document.getElementById('view-roster');
   root.innerHTML = `
     ${pageHead('Season 2026/27', 'Squad', 'ro-sub', `<div class="seg" id="ro-view"><button type="button" data-v="pos" class="active">By position</button><button type="button" data-v="list">List</button></div>
-      <button type="button" class="btn-primary" id="ro-add">+ Add player</button>`)}
+      <button type="button" class="btn-light" id="ro-xlsx" title="The list as an Excel file">⬇ Download Excel</button><button type="button" class="btn-primary" id="ro-add">+ Add player</button>`)}
     <div class="ro-summary" id="ro-summary"></div>
     <div id="ro-body"><div class="panel"><div class="empty">Loading…</div></div></div>
     <p class="ro-foot"><button type="button" class="linkbtn" id="ro-left"></button></p>
@@ -93,6 +93,7 @@ function renderRoster() {
     <aside class="sheet ro-sheet" id="ro-sheet" hidden aria-modal="true" role="dialog"></aside>`;
   root.querySelectorAll('#ro-view button').forEach((b) => { b.onclick = () => { RO.view = b.dataset.v; RO.showLeft = false; drawRoster(); }; });
   document.getElementById('ro-add').onclick = () => roOpen(null);
+  document.getElementById('ro-xlsx').onclick = roDownload;
   document.getElementById('ro-left').onclick = () => { RO.showLeft = !RO.showLeft; RO.view = 'list'; drawRoster(); };
   document.getElementById('ro-bg').onclick = roClose;
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && RO.sheet !== null) roClose(); });
@@ -156,6 +157,33 @@ function roListHtml(ps) {
   return `<section class="panel ro-panel"><div class="ro-scroll"><table class="ro-tbl"><thead><tr>${th('no', 'No.', 'c')}${th('name', 'Player')}<th class="c">Pos</th>${th('age', 'Age', 'c')}<th>Nat.</th>
     ${th('ht', 'Height', 'n hm')}<th class="c hm">Foot</th><th>Status</th>${th('apps', 'Apps', 'n', 'Competitive matches played')}${th('g60', "60'+", 'n hm', 'Competitive matches with 60 minutes or more')}
     ${th('min', 'Minutes', 'n')}${th('vmax', 'Top speed', 'n hm', 'km/h, this season')}${th('acwr', 'A:C TD', 'c', '7:28, total distance')}</tr></thead><tbody>${rows || `<tr><td colspan="13">${emptyState('No player.')}</td></tr>`}</tbody></table></div></section>`;
+}
+
+/** The list as an Excel file (his ask, 2026-10-21: he often gives the squad list): the players shown (the squad, or those
+ * who left), in the list's order — by line and shirt number, or the column he sorted by. */
+async function roDownload() {
+  const btn = document.getElementById('ro-xlsx');
+  if (!RO.data || !btn) return;
+  btn.disabled = true; btn.textContent = 'Preparing…';
+  try {
+    await rpScript(RP_XLSX);
+    let ps = roPlayers();
+    if (RO.sort) { const f = RO_SORT[RO.sort.k]; ps = ps.slice().sort((a, b) => { const x = f(a), y = f(b); return x == null ? 1 : y == null ? -1 : (x > y ? 1 : x < y ? -1 : 0) * RO.sort.dir; }); }
+    else {
+      const line = (p) => { const i = RO_LINES.findIndex(([, poss]) => poss.includes(p.position)); return i < 0 ? 99 : i; };
+      ps = ps.slice().sort((a, b) => line(a) - line(b) || (a.shirt_no ?? 999) - (b.shirt_no ?? 999) || a.name.localeCompare(b.name));
+    }
+    const head = ['No.', 'Full name', 'Name', 'Pos', 'Position', 'Date of birth', 'Age', 'Nationality', 'Height (cm)', 'Weight (kg)', 'Foot', 'U23', 'Status', 'Apps', "60'+", 'Minutes'];
+    const rows = ps.map((p) => [p.shirt_no ?? '', p.full_name || p.name, p.display_name || '', p.position || '', RO_POS[p.position] || '',
+      /^\d{4}-\d{2}-\d{2}$/.test(p.dob || '') ? new Date(p.dob + 'T00:00:00') : '', p.age ?? '', p.nationality || '', p.height || '', p.weight || '', p.foot || '', p.u23 ? 'U23' : '',
+      p.squad === 'left' ? 'Left the club' : (RO_STATUS[p.avail] || RO_STATUS.available)[0], p.s.apps ?? 0, p.s.g60 ?? 0, p.s.min || 0]);
+    const ws = window.XLSX.utils.aoa_to_sheet([head, ...rows], { cellDates: true, dateNF: 'dd/mm/yyyy' });
+    ws['!cols'] = [5, 26, 14, 5, 18, 12, 5, 16, 11, 11, 7, 5, 14, 6, 6, 8].map((w) => ({ wch: w }));
+    const wb = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(wb, ws, RO.showLeft ? 'Players who left' : 'Squad');
+    window.XLSX.writeFile(wb, `Al-Gharafa_${RO.showLeft ? 'players_who_left' : 'squad'}_${todayIso()}.xlsx`);
+  } catch (err) { alert('Excel not created: ' + (err.message || err)); }
+  btn.disabled = false; btn.textContent = '⬇ Download Excel';
 }
 
 function roStatusHtml(p) {
