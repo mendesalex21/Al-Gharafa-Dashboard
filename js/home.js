@@ -34,7 +34,11 @@ function hoData() {
   const done = P.sessions.sessions.find((x) => x.date === today && x.team_ref && x.team_ref.td);
   const T = (P.objectives.table || {})[plan.type] || {}, row = tag ? T[tag] : null;
   const pl = P.workload.players.filter((p) => p.pos !== 'GK'), out = pl.filter((p) => p.status !== 'available'); // outfield players: the GPS to hand out
-  const w = P.wellness || {}, by = Object.fromEntries(Object.entries(w.byId || {}).filter(([, v]) => v && v.score != null).map(([k, v]) => [k, v.score]));
+  let w = P.wellness || {}, by = Object.fromEntries(Object.entries(w.byId || {}).filter(([, v]) => v && v.score != null).map(([k, v]) => [k, v.score]));
+  if (!Object.keys(by).length && P.wellness_history) { // no check-in yet this morning: the last morning with answers
+    const last = (P.wellness_history.days || []).filter((d) => d.teamScore != null).slice(-1)[0];
+    if (last) { w = { date: last.date, teamScore: last.teamScore, waiting: w.date === today }; by = Object.fromEntries(Object.entries(last.byId || {}).filter(([, v]) => v != null)); }
+  }
   const drops = P.wellness_history && w.date ? svWellDrops(P.wellness_history, w.date) : {};
   const red = Object.entries(by).filter(([, v]) => v < 50).sort((a, b) => a[1] - b[1]).map(([id, v]) => ({ id, v, t: 'red' }));
   const dr = Object.entries(drops).filter(([id]) => !(by[id] < 50)).map(([id, d]) => ({ id, v: d.now, t: 'drop', d }));
@@ -85,7 +89,7 @@ function hoAvail(D) {
 function hoWell(D) {
   const W = D.w;
   if (!W.date) return '<section class="ho-card"><div class="ho-k">Wellness alerts</div><p class="ho-none">No check-ins yet.</p></section>';
-  const when = W.date === D.today ? 'this morning' : hoDay(W.date, { weekday: 'short', day: 'numeric' }) + ' morning';
+  const when = W.date === D.today ? 'this morning' : hoDay(W.date, { weekday: 'short', day: 'numeric' }) + (W.waiting ? ' · none yet today' : ' morning');
   const item = (x) => `<button type="button" class="ho-wp ${x.t}" data-well="${x.id}">${avatarHtml(x.id, playerName(x.id), 26)}<b>${escapeHtml(playerName(x.id))}</b><em>${x.t === 'drop' ? `${x.d.prev} → ${x.v} %` : x.v + ' %'}</em><small>${x.t === 'red' ? 'in the red' : `2 mornings below his ${x.d.avg} %`}</small></button>`;
   const all = [...D.red, ...D.dr];
   return `<section class="ho-card"><div class="ho-k">Wellness alerts · ${when}</div>
