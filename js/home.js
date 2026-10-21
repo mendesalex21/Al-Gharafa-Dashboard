@@ -97,7 +97,7 @@ function hoWell(D) {
   const item = (x) => `<button type="button" class="ho-wp ${x.t}" data-well="${x.id}">${avatarHtml(x.id, playerName(x.id), 24)}<b>${escapeHtml(playerName(x.id))}</b><em>${x.t === 'drop' ? `${x.d.prev} → ${x.v} %` : x.v + ' %'}</em><small>${x.t === 'red' ? 'in the red' : `2 mornings below his ${x.d.avg} %`}</small></button>`;
   const all = [...D.red, ...D.dr];
   return `<section class="ho-card"><div class="ho-k">Wellness alerts · ${when}</div>
-    <div class="ho-wh"><span class="ho-ws" style="color:${W.teamScore >= 70 ? '#34c759' : '#ff9f0a'}">${W.teamScore != null ? Math.round(W.teamScore) + ' %' : '—'}</span><span>team · ${Object.keys(D.by).length} check-ins</span><span class="ho-wn"><b style="color:#e5484d">${D.red.length}</b> in the red · <b style="color:#ff9f0a">${D.dr.length}</b> dropping</span></div>
+    <div class="ho-wh"><span class="ho-ws" style="color:${W.teamScore >= 70 ? '#34c759' : '#ff9f0a'}">${W.teamScore != null ? Math.round(W.teamScore) + ' %' : '—'}</span><span>players · ${Object.keys(D.by).filter((id) => typeof GOALKEEPER_IDS === 'undefined' || !GOALKEEPER_IDS.includes(id)).length} check-ins</span><span class="ho-wn"><b style="color:#e5484d">${D.red.length}</b> in the red · <b style="color:#ff9f0a">${D.dr.length}</b> dropping</span></div>
     <div class="ho-wl">${all.map(item).join('') || '<span class="ho-none">No alert</span>'}</div>
     ${D.low.length ? `<div class="ho-sub">also low (50–60 %): ${D.low.map((x) => escapeHtml(playerName(x.id)) + ' ' + x.v + ' %').join(' · ')}</div>` : ''}</section>`;
 }
