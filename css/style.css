@@ -2037,3 +2037,5 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .ho-rv { font-weight: 650; font-variant-numeric: tabular-nums; } .ho-rt { color: var(--ink-muted); } .ho-row i { color: var(--ink-muted); font-style: normal; }
 @media (max-width: 1000px) { .ho-g2, .ho-g3 { grid-template-columns: 1fr; } .ho-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ho-row { grid-template-columns: 26px 1fr auto 12px; } .ho-rt { display: none; } }
 @media (max-width: 560px) { .ho-y { grid-template-columns: 70px minmax(0, 1fr) 62px 40px; } .ho-y .ho-u { display: none; } .ho-t { grid-template-columns: 70px minmax(0, 1fr) 62px; } .ho-t .ho-u { display: none; } }
+
+.sv-ret { background: color-mix(in srgb, #ff9f0a 16%, transparent); color: color-mix(in srgb, #ff9f0a 60%, var(--ink)); border-radius: 999px; padding: 1px 6px; font-style: normal; white-space: nowrap; }

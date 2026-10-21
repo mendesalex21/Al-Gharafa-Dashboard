@@ -236,7 +236,7 @@ function svAttention(s) {
     // ranked as the e-mail: the most serious reason (100 overload · 90 wellness red · 80 wellness down · 70 today · 60 week), + 3 per red, + 1 per orange
     const its = [[ov.length, 100, 3], [well, 90, 3], [wdrop, 80, 1], [big.length, 70, 1], [wk.length, 60, 1]].filter((x) => x[0]);
     if (its.length) {
-      out.push({ p, over: ov.length ? svOverTxt(ov) : null, well, wdrop, big: big.length ? svBigTxt(p, big) : null, week: wk.length ? svWeekTxt(wk) : null,
+      out.push({ p, over: ov.length ? svOverTxt(ov) + (p.ret && s.kind !== 'match' ? ` Back from injury (day ${p.ret} of 7): his chronic load is low, watch the build-up.` : '') : null, well, wdrop, big: big.length ? svBigTxt(p, big) : null, week: wk.length ? svWeekTxt(wk) : null,
         ov, w, dr, bigs: big, wk, sev: Math.max(...its.map((x) => x[1])) + its.reduce((a, x) => a + x[2], 0) });
     }
   });
@@ -265,7 +265,7 @@ function svAttentionHtml(s) {
   const tops = [...top.values()].map((x) => ({ p: x.p, v: x.v.join(' · '), t: x.t.join(' ') })), shortN = [...top.values()].filter((x) => x.short).length;
   // the columns: each player once per alert, the value that triggered it; the full sentence on hover
   const ovV = (a) => (a.ov.length === 4 ? `all 4 · ${SV_ACS[a.ov[0].k]} ${a.ov[0].a.toFixed(2)}` : a.ov.slice(0, 2).map((o) => `${SV_ACS[o.k]} ${o.a.toFixed(2)}`).join(' · '));
-  const over = at.filter((a) => a.over).sort((a, b) => b.ov.length - a.ov.length || b.ov[0].a - a.ov[0].a).map((a) => ({ p: a.p, v: ovV(a), t: a.over, c: 'red' }));
+  const over = at.filter((a) => a.over).sort((a, b) => b.ov.length - a.ov.length || b.ov[0].a - a.ov[0].a).map((a) => ({ p: a.p, v: ovV(a) + (a.p.ret && s.kind !== 'match' ? ` · return ${a.p.ret}/7` : ''), t: a.over, c: 'red' }));
   const well = at.filter((a) => a.well || a.wdrop).sort((a, b) => !!b.well - !!a.well || (a.well ? a.w : a.dr.now) - (b.well ? b.w : b.dr.now))
     .map((a) => (a.well ? { p: a.p, v: `${a.w} %`, t: a.well, c: 'red' } : { p: a.p, v: `${a.dr.prev} → ${a.dr.now} %`, t: a.wdrop, c: 'orange' }));
   const big = at.filter((a) => a.big || a.week).map((a) => { const x = a.bigs.length ? a.bigs[0] : a.wk[0]; return { p: a.p, v: `${a.bigs.length ? 'today' : 'week'} ${SV_BIGS[x.k] || x.k} z ${fmtSigned(x.z)}`, t: [a.big, a.week].filter(Boolean).join(' '), c: 'orange' }; });
@@ -299,7 +299,7 @@ const svLabel = (k) => ({ hacc: 'HIT Acc', hdec: 'HIT Dec' })[k] || RP_LABELS[k]
  * compensatory players (a compensatory session: the others recovered without GPS), else the full session. */
 function rtCore(s) {
   const whole = s.kind === 'match' ? Math.min(90, Math.max(0, ...s.players.filter((p) => p.cat === 'm').map((p) => p.min || 0)) - 2) : 0;
-  const core = s.players.filter((p) => (s.kind === 'match' ? p.cat === 'm' && p.min >= whole : s.group === 'compensatory' ? p.cat === 'c' : p.cat === 't'));
+  const core = s.players.filter((p) => (s.kind === 'match' ? p.cat === 'm' && p.min >= whole : (s.group === 'compensatory' ? p.cat === 'c' : p.cat === 't') && !p.ret)); // back from injury (p.ret = day k of 7): not in the average
   return core.length >= 3 ? core : s.players.filter((p) => p.min > 0);
 }
 const svPro = (s, cat) => (s.kind === 'match' ? cat === 'm' : s.group === 'compensatory' ? cat === 'c' : cat === 't'); // did the session of the group: the grey "team max" track
@@ -333,7 +333,7 @@ function svTable(rows, cols, o = {}) {
     return `<div class="rp-c rp-txt"><span class="rp-v">${fmt(k, v)}</span></div>`;
   };
   const face = (id) => { const ph = typeof PHOTO_DATA !== 'undefined' && PHOTO_DATA[id]; return `<span class="rp-face"${ph ? ` style="background-image:url('${ph}')"` : ''}></span>`; };
-  const row = (r, i) => `<div class="rp-tr rp-row sv-r" data-id="${escapeHtml(r.id)}" style="grid-template-columns:${tpl}"${r.pro ? '' : ` title="${escapeHtml(r.type || '')}"`}><span class="rp-nm">${i != null ? `<i class="sv-rank${i < 3 ? ' r' + (i + 1) : ''}">${i + 1}</i>` : ''}${face(r.id)}<b>${escapeHtml(playerName(r.id))}</b>${r.pro ? '' : '<small class="sv-ind">indiv.</small>'}</span>${cols.map((k) => cell(r, k)).join('')}</div>`;
+  const row = (r, i) => `<div class="rp-tr rp-row sv-r" data-id="${escapeHtml(r.id)}" style="grid-template-columns:${tpl}"${r.pro ? '' : ` title="${escapeHtml(r.type || '')}"`}><span class="rp-nm">${i != null ? `<i class="sv-rank${i < 3 ? ' r' + (i + 1) : ''}">${i + 1}</i>` : ''}${face(r.id)}<b>${escapeHtml(playerName(r.id))}</b>${r.ret ? `<small class="sv-ind sv-ret" title="Back from injury: day ${r.ret} of ${7} — not in the team average">return ${r.ret}/7</small>` : r.pro ? '' : '<small class="sv-ind">indiv.</small>'}</span>${cols.map((k) => cell(r, k)).join('')}</div>`;
   const head = `<div class="rp-tr rp-th sv-th" style="grid-template-columns:${tpl}"><span data-k="name" class="${o.sort ? '' : 'on'}">Players</span>${cols.map((k) => `<span data-k="${k}" class="${o.sort === k ? 'on' : ''}">${svLabel(k)}${o.sort === k ? ' ↓' : ''}</span>`).join('')}</div>`;
   const teamRow = o.team ? `<div class="rp-tr rp-row sv-team" style="grid-template-columns:${tpl}"><span class="rp-nm"><b>Team avg</b></span>${cols.map((k) => cell(o.team, k, true)).join('')}</div>` : '';
   let body;
@@ -352,13 +352,13 @@ function svAvgRow(rows, cols, core) {
 }
 function svTableHtml(s) {
   const full = s.minutes || Math.max(0, ...s.players.map((p) => p.min || 0));
-  const rows = s.players.filter((p) => p.min > 0).map((p) => ({ id: p.id, type: p.type, pro: svPro(s, p.cat), time: p.min, rpe: p.rpe, mpm: p.mpm, td: p.td, d15: p.d15, d20: p.hit, d25: p.spr,
+  const rows = s.players.filter((p) => p.min > 0).map((p) => ({ id: p.id, type: p.type, pro: svPro(s, p.cat), ret: s.kind === 'match' ? null : p.ret, time: p.min, rpe: p.rpe, mpm: p.mpm, td: p.td, d15: p.d15, d20: p.hit, d25: p.spr,
     vmax: p.vmax, pmax: p.vmax_pct != null ? p.vmax_pct / 100 : null, rec: !!p.rec, days: p.days_hsv, sprints: p.spr_n, hacc: p.acc, hdec: p.dec, accdec: p.acc_dec }));
   const core = new Set(rtCore(s).map((p) => p.id));
   const team = svAvgRow(rows, SV_COLS, (r) => core.has(r.id));
   team.time = s.minutes;
   return svTable(rows, SV_COLS, { sort: SV.sort, team, full })
-    + `<div class="rt-leg"><span><i class="sv-lg-b" style="background:#6fb0ee"></i>player value</span><span><i class="sv-lg-b sv-lg-t"></i>team max (players of the ${s.group === 'compensatory' ? 'compensatory session' : 'team session'})</span><span><b class="rt-or">Orange time</b> = partial session</span><span>HIT Acc / Dec: lighter → darker = fewer → more</span><span>% Max Speed green = ≥ 90 % of his max speed · <i class="rp-rec">★</i> his fastest of the last 12 months</span><span>Days = since his last run ≥ 90 % of his max speed</span><span>Team avg = ${svGroupTxt(s)} only</span></div>`;
+    + `<div class="rt-leg"><span><i class="sv-lg-b" style="background:#6fb0ee"></i>player value</span><span><i class="sv-lg-b sv-lg-t"></i>team max (players of the ${s.group === 'compensatory' ? 'compensatory session' : 'team session'})</span><span><b class="rt-or">Orange time</b> = partial session</span><span>HIT Acc / Dec: lighter → darker = fewer → more</span><span>% Max Speed green = ≥ 90 % of his max speed · <i class="rp-rec">★</i> his fastest of the last 12 months</span><span>Days = since his last run ≥ 90 % of his max speed</span><span>Team avg = ${svGroupTxt(s)} only${s.kind === 'match' ? '' : ' · <i class="sv-ind sv-ret">return k/7</i> back from injury: not in it for 7 days'}</span></div>`;
 }
 const svDrillName = (d) => String(d.name || 'Drill').replace(/^Game_/, '').replace(/(\d)(st|nd|rd|th)Half/i, '$1$2 half');
 function svDrillsHtml(s) {
