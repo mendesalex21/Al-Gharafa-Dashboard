@@ -950,7 +950,8 @@ function splBuild() {
     out.full.push(...bo.full); out.drills.push(...bo.drills);
     bList = bo.full.map((r) => ({ name: (byGps[r.Players] || {}).name || r.Players, t: r.Time }));
   }
-  return { ...out, fileDate, missing: day ? [] : missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk, checks, match, halfInfo, squad: day ? day.squad : null, bList };
+  const missLeft = day ? 0 : missing.filter((q) => !(p.noGpsOk || {})[q.id]).length; // planned in the session, no GPS, not answered yet
+  return { ...out, fileDate, missLeft, missing: day ? [] : missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk, checks, match, halfInfo, squad: day ? day.squad : null, bList };
 }
 /** The checks above the three columns: each flagged time with its one-click fixes (the chosen one stays highlighted). */
 function splChecksHtml(b) {
@@ -981,6 +982,16 @@ function splChecksHtml(b) {
     });
   }
   return `<div class="sp-checks${c.left ? '' : ' clear'}"><div class="sp-h3">${c.left ? `To check before publishing <small>${c.left} left · times far from the session, from the plan or from the teammates</small>` : `✓ Times checked <small>${n} looked at · the preview shows what is written</small>`}</div>${rows.join('')}</div>`;
+}
+/** Players in the team session in the plan but with no GPS row (forgotten as injured, absent…): a red block at the top
+ * of the import, one click per status — the plan and the rows follow (his ask, 2026-10-21). "Trained · GPS missing"
+ * = he trained but his unit failed: nothing to write for him, as before (no row without GPS data). */
+function splMissingHtml(b, p) {
+  const ok = p.noGpsOk || {}, n = b.missLeft;
+  const opts = [['Injury', 'Injured'], ['Rehab', 'Rehab'], ['Sick', 'Sick'], ['NT', 'National team'], ['Authorized', 'Authorized absence'], ['Unauthorized', 'Unauthorized absence'], ['Day_Off', 'Day off']];
+  const btn = (attr, label, on) => `<button type="button" class="sp-fx${on ? ' on' : ''}" ${attr}>${label}</button>`;
+  return `<div class="sp-checks sp-nogps${n ? '' : ' clear'}"><div class="sp-h3">${n ? `⚠ ${n} player${n > 1 ? 's' : ''} in the team session without GPS <small>in the plan as Team session, not in the StatSports file — injured, sick, absent? one click sets his status</small>` : `✓ No GPS for ${b.missing.length} player${b.missing.length > 1 ? 's' : ''} in the session — marked as trained <small>no GPS data: no row for them, as before</small>`}</div>
+    ${b.missing.map((q) => `<div class="sp-ci${ok[q.id] ? ' done' : ''}"><b>${escapeHtml(q.name)}</b><span>${escapeHtml(q.pos || '')} · Team session in the plan · no row in the GPS file</span><span class="sp-cb">${opts.map(([v, l]) => btn(`data-nogps="${escapeHtml(q.id)}" data-v="${v}"`, l)).join('')}${btn(`data-nogps-ok="${escapeHtml(q.id)}"`, 'Trained · GPS missing', ok[q.id])}</span></div>`).join('')}</div>`;
 }
 function splImportHtml() {
   const date = SPL.date, p = splEnsure(date), b = splBuild();
@@ -1018,13 +1029,13 @@ function splImportHtml() {
     <div class="sp-files"><div class="sp-file ok"><span class="ic">CSV</span><div><b>${escapeHtml(SPL.files.full.name)}</b><small>${gpsRows.length} players · ${b.fileDate ? SPL_DAY(b.fileDate, { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'no date'}${b.off ? '' : ` · session ${b.sessionTime}'`}</small></div></div>
       ${b.off ? '' : `<div class="sp-file ${SPL.files.drills ? 'ok' : 'miss'}"><span class="ic">CSV</span><div><b>${SPL.files.drills ? escapeHtml(SPL.files.drills.name) : 'Drills file missing'}</b><small>${SPL.files.drills ? `${b.mapping.length} drills · ${b.drills.length} rows` : 'drop S##_Drills.csv too'}</small></div></div>`}
       <label class="sp-drop small"><input type="file" accept=".csv,text/csv" multiple hidden data-files>Drop other files to replace</label></div>
+    ${!b.off && b.missing.length ? splMissingHtml(b, p) : ''}
     ${!b.off && (SPL.files.drills || b.checks.time.length) ? splChecksHtml(b) : ''}
     <div class="sp-three">${b.off ? offCols : `
       <div class="sp-chk"><div class="sp-h3"><i class="n">1</i>Drills <small>StatSports title → the drill of the plan</small></div>${mapRows || '<p class="sp-note">No drills file yet.</p>'}
         <p class="sp-note">Minutes written = the planned ones (a 2 × 10' game is 20', not the 22' of the GPS); type the real minutes if the drill lasted longer. A title you name once, or written exactly like the drill, is recognised.</p></div>
       <div class="sp-chk"><div class="sp-h3"><i class="n">2</i>Players <small>${gpsRows.length} in the GPS file${b.unknown.length ? ` · ${b.unknown.length} unknown` : ' · all recognised ✓'}</small></div>
         ${b.unknown.length ? `<p class="sp-note warn">Not in the squad list (kept with their GPS name): ${b.unknown.map(escapeHtml).join(', ')} — add them in Squad.</p>` : ''}
-        ${b.missing.length ? `<p class="sp-note warn">In the session in the plan but not in the GPS file: ${b.missing.map((q) => escapeHtml(q.name)).join(', ')} — change their status if they did not train.</p>` : ''}
         ${splSwapHtml(p)}
         ${squadHtml}
         <p class="sp-note">${b.match ? 'Out (from the plan):' : 'Added from the plan, without GPS:'}</p><div class="sp-ngs">${b.full.filter((r) => !r.Time && r.DT == null && !(b.match && /^(Game|NC)$/.test(r.Type))).map((r) => `<span class="sp-ng">${escapeHtml(r.Players)}<small>${escapeHtml(r.Type)}</small></span>`).join('') || '<span class="sp-note">nobody</span>'}</div>
@@ -1036,7 +1047,7 @@ function splImportHtml() {
     <div class="sp-tw"><table class="sp-tbl"><thead><tr>${cols.map((c) => `<th class="${auto.has(c) ? 'a' : ''}">${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${cols.map((c) => `<td class="${auto.has(c) ? 'a' : ''}">${fmtv(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
     ${b.issues.length ? `<p class="sp-note warn">${b.issues.map(escapeHtml).join(' · ')}</p>` : ''}
     <div class="sp-actions"><button type="button" class="btn-primary" data-publish ${ready ? '' : 'disabled'}>${b.off ? 'Publish the day off' : `Publish ${escapeHtml(p.sid || splSid(date))}${b.bList ? ' + B-team game' : ''}`}</button><button type="button" class="btn-light" data-xlsx>Download Excel · Full + Drills</button><button type="button" class="btn-light" data-back>Back to the plan</button>
-      <span>${ready && b.off ? 'Publishing adds the rows to the season: each player’s load and the dashboard follow a few minutes later — no report, no e-mail.' : ready ? (b.checks.left ? `${b.checks.left} time${b.checks.left > 1 ? 's' : ''} not checked above — you can still publish: the preview shows what is written.` : 'Publishing adds the rows to the season: the dashboard, the PDF reports and the staff e-mail (with the players’ report) follow on their own, a few minutes later.') : unmapped.length ? 'Name every drill first.' : 'The files are not from this day.'}</span></div>`;
+      <span>${ready && b.missLeft ? `<b class="sp-warn">⚠ ${b.missLeft} player${b.missLeft > 1 ? 's' : ''} in the team session without GPS — set their status above.</b> ` : ''}${ready && b.off ? 'Publishing adds the rows to the season: each player’s load and the dashboard follow a few minutes later — no report, no e-mail.' : ready ? (b.checks.left ? `${b.checks.left} time${b.checks.left > 1 ? 's' : ''} not checked above — you can still publish: the preview shows what is written.` : 'Publishing adds the rows to the season: the dashboard, the PDF reports and the staff e-mail (with the players’ report) follow on their own, a few minutes later.') : unmapped.length ? 'Name every drill first.' : 'The files are not from this day.'}</span></div>`;
 }
 
 async function splPublish() {
@@ -1099,6 +1110,9 @@ function splClick(e) {
   if (t.dataset.corrCancel != null) { SPL.view = 'plan'; SPL.corr = null; splDraw(); return; }
   if (t.dataset.corrPub != null) { splCorrPublish(false); return; }
   if (t.dataset.corrDel != null) { if (confirm('Remove the correction of this session? The Excel values come back a few minutes later.')) splCorrPublish(true); return; }
+  // a player of the session without GPS: his status (one click), or kept as trained without GPS
+  if (t.dataset.nogps) { const pp = p(); pp.status[t.dataset.nogps] = t.dataset.v; if (pp.noGpsOk) delete pp.noGpsOk[t.dataset.nogps]; splTouch(date); splDraw(); return; }
+  if (t.dataset.nogpsOk) { const pp = p(), m = pp.noGpsOk || (pp.noGpsOk = {}); if (m[t.dataset.nogpsOk]) delete m[t.dataset.nogpsOk]; else m[t.dataset.nogpsOk] = 1; splTouch(date); splDraw(); return; }
   // checks before publishing (the chosen fix again = undone)
   if (t.dataset.fixT != null || t.dataset.fixC != null) {
     const kind = t.dataset.fixT != null ? 't' : 'c', b = splBuild(), x = kind === 't' ? b.checks.time[Number(t.dataset.fixT)] : b.checks.cut[Number(t.dataset.fixC)];
