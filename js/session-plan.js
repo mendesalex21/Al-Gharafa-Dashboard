@@ -991,7 +991,7 @@ function splMissingHtml(b, p) {
   const opts = [['Injury', 'Injured'], ['Rehab', 'Rehab'], ['Sick', 'Sick'], ['NT', 'National team'], ['Authorized', 'Authorized absence'], ['Unauthorized', 'Unauthorized absence'], ['Day_Off', 'Day off']];
   const btn = (attr, label, on) => `<button type="button" class="sp-fx${on ? ' on' : ''}" ${attr}>${label}</button>`;
   return `<div class="sp-checks sp-nogps${n ? '' : ' clear'}"><div class="sp-h3">${n ? `⚠ ${n} player${n > 1 ? 's' : ''} in the team session without GPS <small>in the plan as Team session, not in the StatSports file — injured, sick, absent? one click sets his status</small>` : `✓ No GPS for ${b.missing.length} player${b.missing.length > 1 ? 's' : ''} in the session — marked as trained <small>no GPS data: no row for them, as before</small>`}</div>
-    ${b.missing.map((q) => `<div class="sp-ci${ok[q.id] ? ' done' : ''}"><b>${escapeHtml(q.name)}</b><span>${escapeHtml(q.pos || '')} · Team session in the plan · no row in the GPS file</span><span class="sp-cb">${opts.map(([v, l]) => btn(`data-nogps="${escapeHtml(q.id)}" data-v="${v}"`, l)).join('')}${btn(`data-nogps-ok="${escapeHtml(q.id)}"`, 'Trained · GPS missing', ok[q.id])}</span></div>`).join('')}</div>`;
+    ${b.missing.map((q) => `<div class="sp-ci${ok[q.id] ? ' done' : ''}"><b>${escapeHtml(q.name)}</b><span>${escapeHtml(q.pos || '')} · Team session in the plan · no row in the GPS file</span><span class="sp-cb">${opts.map(([v, l]) => btn(`data-miss-st="${escapeHtml(q.id)}" data-v="${v}"`, l)).join('')}${btn(`data-miss-ok="${escapeHtml(q.id)}"`, 'Trained · GPS missing', ok[q.id])}</span></div>`).join('')}</div>`;
 }
 function splImportHtml() {
   const date = SPL.date, p = splEnsure(date), b = splBuild();
@@ -1104,15 +1104,15 @@ function splClick(e) {
     return;
   }
   if (t.dataset.unswap) { const pp = p(), s = { ...(pp.swap || {}) }; delete s[t.dataset.unswap]; pp.swap = s; splTouch(date); splDraw(); return; }
+  // a player of the session without GPS: his status (one click), or kept as trained without GPS (data-miss-*; data-nogps is the day off below)
+  if (t.dataset.missSt) { const pp = p(); pp.status[t.dataset.missSt] = t.dataset.v; if (pp.noGpsOk) delete pp.noGpsOk[t.dataset.missSt]; splTouch(date); splDraw(); return; }
+  if (t.dataset.missOk) { const pp = p(), m = pp.noGpsOk || (pp.noGpsOk = {}); if (m[t.dataset.missOk]) delete m[t.dataset.missOk]; else m[t.dataset.missOk] = 1; splTouch(date); splDraw(); return; }
   if (t.dataset.nogps != null) { SPL.files = { full: { name: 'No GPS this day', text: '' } }; SPL.view = 'import'; SPL.state = ''; splDraw(); return; }
   // correct a session in the data
   if (t.dataset.corrOpen != null) { splOpenCorrection(date); return; }
   if (t.dataset.corrCancel != null) { SPL.view = 'plan'; SPL.corr = null; splDraw(); return; }
   if (t.dataset.corrPub != null) { splCorrPublish(false); return; }
   if (t.dataset.corrDel != null) { if (confirm('Remove the correction of this session? The Excel values come back a few minutes later.')) splCorrPublish(true); return; }
-  // a player of the session without GPS: his status (one click), or kept as trained without GPS
-  if (t.dataset.nogps) { const pp = p(); pp.status[t.dataset.nogps] = t.dataset.v; if (pp.noGpsOk) delete pp.noGpsOk[t.dataset.nogps]; splTouch(date); splDraw(); return; }
-  if (t.dataset.nogpsOk) { const pp = p(), m = pp.noGpsOk || (pp.noGpsOk = {}); if (m[t.dataset.nogpsOk]) delete m[t.dataset.nogpsOk]; else m[t.dataset.nogpsOk] = 1; splTouch(date); splDraw(); return; }
   // checks before publishing (the chosen fix again = undone)
   if (t.dataset.fixT != null || t.dataset.fixC != null) {
     const kind = t.dataset.fixT != null ? 't' : 'c', b = splBuild(), x = kind === 't' ? b.checks.time[Number(t.dataset.fixT)] : b.checks.cut[Number(t.dataset.fixC)];
