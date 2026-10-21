@@ -33,7 +33,12 @@ function hoData() {
   const tag = ((plan.days || []).find((d) => d.date === today) || {}).tag || null;
   const yest = P.sessions.sessions.filter((x) => x.date < today && x.team_ref && x.team_ref.td).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
   const done = P.sessions.sessions.find((x) => x.date === today && x.team_ref && x.team_ref.td);
-  const T = (P.objectives.table || {})[plan.type] || {}, row = tag ? T[tag] : null;
+  // today's objective = the Sessions page's (the week until the match: the team's usual MD-k → MD-1 added up, minus what
+  // is done, shared over the days left — staff report "plan"); without it, the usual of that MD (Objectives table)
+  const SR = (P.staff_report && P.staff_report.days) || {}, T = (P.objectives.table || {})[plan.type] || {};
+  const pd = Object.keys(SR).filter((d) => d < today).sort().reverse().map((d) => (SR[d].plan || []).find((x) => x.date === today)).find(Boolean);
+  const row = pd ? Object.fromEntries(HO_K.filter(([k]) => pd[k] && pd[k][0] != null).map(([k]) => [k, { med: pd[k][0], usual: pd[k][1], p25: pd[k][2], p75: pd[k][3] }]))
+    : tag && T[tag] ? Object.fromEntries(HO_K.filter(([k]) => T[tag][k]).map(([k]) => [k, { ...T[tag][k], med: T[tag][k].med }])) : null;
   const pl = P.workload.players.filter((p) => p.pos !== 'GK'), out = pl.filter((p) => p.status !== 'available'); // outfield players: the GPS to hand out
   let w = P.wellness || {}, by = Object.fromEntries(Object.entries(w.byId || {}).filter(([, v]) => v && v.score != null).map(([k, v]) => [k, v.score]));
   if (!Object.keys(by).length && P.wellness_history) { // no check-in yet this morning: the last morning with answers
@@ -75,12 +80,12 @@ function hoToday(D) {
   }
   const r = D.row;
   if (!r && D.done) return hoYest(D, D.done); // a day with no objective (MD+1, MD+2): the session done, against its usual
-  const rows = r ? HO_K.filter(([k]) => r[k]).map(([k, l, u]) => { const x = r[k], lo = x.p25, hi = x.p75, mx = (x.p90 || hi) * 1.15 || 1;
+  const rows = r ? HO_K.filter(([k]) => r[k]).map(([k, l, u]) => { const x = r[k], lo = x.p25, hi = x.p75, mx = Math.max(x.p90 || 0, hi || 0, x.med || 0) * 1.15 || 1;
     return `<div class="ho-t"><span class="ho-l">${l}</span><span class="ho-bar"><i class="ho-rg" style="left:${lo / mx * 100}%;width:${Math.max(1, (hi - lo) / mx * 100)}%"></i><i class="ho-med" style="left:${x.med / mx * 100}%"></i></span>
       <span class="ho-v"><b>${fmtN(x.med)}</b><small>${u}</small></span><span class="ho-u">${fmtN(lo)}–${fmtN(hi)}</span></div>`; }).join('') : `<p class="ho-none">No training planned today${next ? ` · next: ${escapeHtml(next.opponent)} ${hoDay(next.start, { weekday: 'short', day: 'numeric' })}` : ''}.</p>`;
   const done = D.done ? `<button type="button" class="ho-done" data-go="sessions" data-date="${D.today}">✓ Session done · ${D.done.n} players — see it ›</button>` : '';
   return `<section class="ho-card"><div class="ho-k">Today's training${D.tag ? ` · ${D.tag}` : ''}${D.plan.type ? ` · ${D.plan.type} microcycle` : ''}</div>
-    <div class="ho-sub">${fmtDay(D.today, { weekday: 'long', day: 'numeric', month: 'short' })}${next ? ` · ${dleft === 1 ? 'the day before' : dleft + ' days before'} ${escapeHtml(next.opponent)}` : ''}${r ? ` · objectives = the usual of a ${D.tag} (team average) · band = usual range` : ''}</div>
+    <div class="ho-sub">${fmtDay(D.today, { weekday: 'long', day: 'numeric', month: 'short' })}${next ? ` · ${dleft === 1 ? 'the day before' : dleft + ' days before'} ${escapeHtml(next.opponent)}` : ''}${r ? ` · objective = the Sessions page's (the week until the match, minus what is done) · band = usual range of a ${D.tag}` : ''}</div>
     ${done}<div class="ho-rows">${rows}</div></section>`;
 }
 function hoAvail(D) {
