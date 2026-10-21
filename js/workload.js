@@ -319,10 +319,10 @@ function plCharts(B) {
   out = plKeys().map((k) => { const [l, u] = PL_LAB[k], st = tmStats(B.real(k).map((w) => w[k]));
     return card(head(k, l, `per week${u ? ' · ' + u : ''}${st.p25 == null ? '' : ` · his usual ${tmK(st.p25)}–${tmK(st.p75)}`}${teamNote}`) + tmChart({ title: l, dots: true, band: st.p25 == null ? null : [st.p25, st.p75],
       items: ws.map((w) => { const zz = B.zw(w, k), ac = w[k] > 0 ? B.acAt(k, w.done ? w.end : d.as_of) : null, tv = twk(w, k);
-        return { v: w[k], col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, label: w[k] > 0 ? tmK(w[k]) : 'no GPS', tick: w.label, now: !w.done, soft: !w.done, ...tk(tv),
+        return { v: w[k], col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, label: w[k] > 0 ? tmK(w[k]) : 'no GPS', tick: w.label, now: !w.done, soft: !w.done, go: w.start, ...tk(tv),
           tip: `${w.label} · ${fmtDay(w.start, { day: 'numeric', month: 'short' })}: ${fmtN(w[k])}${zz == null ? '' : ' · z ' + tmS(zz)}${ac == null ? '' : ' · A:C ' + ac.toFixed(2)}${PL.team && tv ? ' · team ' + fmtN(tv) : ''}` }; }) })); }).join('');
   out += card(head('', 'Wellness', 'his average score of the week · % · green band = 70 % or more') + tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'none', dots: true,
-    items: ws.map((w) => { const v = B.wellOf(w.start, w.end); return { v: v || 0, col: v == null ? '#aeaeb2' : tmWell(v), label: v == null ? '' : Math.round(v), tick: w.label, now: !w.done, soft: !w.done, tip: v == null ? '' : `${w.label}: ${Math.round(v)} %` }; }) }));
+    items: ws.map((w) => { const v = B.wellOf(w.start, w.end); return { v: v || 0, col: v == null ? '#aeaeb2' : tmWell(v), label: v == null ? '' : Math.round(v), tick: w.label, now: !w.done, soft: !w.done, go: w.start, tip: v == null ? '' : `${w.label}: ${Math.round(v)} %` }; }) }));
   return out;
 }
 
@@ -331,12 +331,95 @@ function plTable(B) {
   const main = (w, k) => { const zz = B.zw(w, k), ac = w[k] > 0 ? B.acAt(k, w.done ? w.end : d.as_of) : null;
     return `<td class="b">${w[k] > 0 ? tmK(w[k]) : '—'}</td><td>${zz == null ? '' : `<span class="mz ${tmZ(zz)}">${tmS(zz)}</span>`}</td><td class="g">${ac == null ? '' : `<span class="tm-acchip" style="background:${tmZone(ac)[0]}">${ac.toFixed(2)}</span>`}</td>`; };
   const rows = B.weeks.slice().reverse().map((w) => { const x = B.IW[w.start], o = B.wellOf(w.start, w.end);
-    return `<tr class="${w.done ? '' : 'now'}"><td><b>${w.label}</b> <span class="muted">${fmtDay(w.start, { day: 'numeric', month: 'short' })}${w.done ? '' : ' · in progress'}</span></td><td class="b">${w.train || '—'}</td><td>${w.games || '—'}</td><td>${w.min ? fmtN(w.min) : '—'}</td>
+    return `<tr class="tm-go${w.done ? '' : ' now'}" data-wk="${w.start}" tabindex="0" title="Open the detail of ${w.label}"><td><b>${w.label}</b> <span class="muted">${fmtDay(w.start, { day: 'numeric', month: 'short' })}${w.done ? '' : ' · in progress'}</span></td><td class="b">${w.train || '—'}</td><td>${w.games || '—'}</td><td>${w.min ? fmtN(w.min) : '—'}</td>
       ${main(w, 'td')}${main(w, 'hit')}${main(w, 'spr')}${main(w, 'acc_dec')}<td class="b">${x ? pc(x.td) : '—'}</td><td>${x ? pc(x.hi) : ''}</td><td class="b">${x && x.rh != null ? `<b>${x.rh}</b>${x.rx == null ? '' : ` <small class="muted">× ${x.rx.toFixed(1)}</small>`}` : '—'}</td>${main(w, 'srpe')}<td class="b">${o == null ? '—' : `<b style="color:${tmWell(o)}">${Math.round(o)} %</b>`}</td></tr>`; }).join('');
   const m3 = (l) => `<th class="b">${l}</th><th>z</th><th class="g">A:C</th>`;
   return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Week by week</h2><span class="panel-note">z vs his other full weeks of the season · A:C 7:28 at the end of the week · WCS: his best minute of the week in training, % of his match worst case · RHIE: his bouts in the week (training + matches), × = how many of his matches it makes</span></div>
     <div class="table-wrap"><table class="tm-tbl tm-wide"><thead><tr class="grp"><th></th><th colspan="6">Volume</th><th colspan="6">Speed</th><th colspan="3">Accelerations</th><th colspan="2">WCS · best minute</th><th>RHIE</th><th colspan="4">Internal load &amp; wellness</th></tr>
       <tr><th>Week</th><th class="b">Sessions</th><th>Matches</th><th>Match min</th>${m3('Distance')}${m3('&gt; 20 km/h')}${m3('Sprint dist.')}${m3('Acc + Dec')}<th class="b">m/min</th><th>A/D + spr</th><th class="b">Bouts</th>${m3('sRPE')}<th class="b">Wellness</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+}
+
+/**
+ * A week of the player opened (his ask, 2026-10-21): the Team page's week drawer for one player — why the week is above
+ * or below his usual week, each metric as one bar cut by day (the piece = the MD of that day, in the colour of his day
+ * vs his usual for that MD; a match = "G"), the make-up of his week and his days one by one. His usual week = the
+ * middle half of his other full weeks of the season (as the z of the page).
+ */
+function plWeekOpen(start) {
+  if (!WL.data || !WL.player || !WL.data.series[WL.player]) return;
+  const B = plBuild(WL.player), { s, d, p } = B, asOf = d.as_of, wi = B.weeks.findIndex((x) => x.start === start);
+  if (wi < 0) return;
+  svEnsureDrawer();
+  const W = B.weeks[wi], others = B.weeks.filter((x) => x.done && x.td > 0 && x.start !== start), ds = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  const sess = Object.fromEntries(((TR.sessions && TR.sessions.sessions) || []).map((x) => [x.date, x]));
+  const mine = (x) => { const se = sess[x]; return se ? se.players.find((r) => r.id === p.id) : null; };
+  const ix = (x) => daysBetween(s.start, x), cat = (x) => { const i = ix(x); return i >= 0 && i < B.n ? s.cat[i] : '-'; };
+  const val = (x, k) => { const i = ix(x); return i >= 0 && i < B.n && B.L[k] ? B.L[k][i] || 0 : 0; }, mins = (x) => { const i = ix(x); return i >= 0 && i < B.n ? s.min[i] || 0 : 0; };
+  const kindOf = (x) => (x > asOf ? 'later' : ({ m: 'match', b: 'match', t: 'train', p: 'train', c: 'train', i: 'train', r: 'out', x: 'out', s: 'out', n: 'out', a: 'out' }[cat(x)] || 'off'));
+  const pl = (n, w) => `${n} ${w}${n === 1 ? '' : w === 'match' ? 'es' : 's'}`, u1 = (v) => (v == null ? '—' : v.toFixed(1));
+  // his day vs his usual for that MD (the sessions payload: z and the usual mean; a match per 90 min)
+  const zDay = (x, k) => { const q = mine(x); return q && q.mdref && q.mdref.z && q.mdref.z[k] != null && val(x, k) > 0 ? { z: q.mdref.z[k], mean: (q.mdref.mean || {})[k], per90: q.mdref.per90 } : null; };
+  const KS = ['td', 'd15', 'hit', 'spr', 'spr_n', 'acc_dec', 'srpe']; // speed thresholds in order
+  const M = KS.map((k) => { const [l, u] = PL_LAB[k], st = tmStats(others.map((x) => x[k]).filter((v) => v > 0)); return { k, l, u, st, v: W[k] || 0, z: W.done && W[k] > 0 ? tmZof(W[k], st) : null, ac: W[k] > 0 ? B.acAt(k, W.done ? W.end : asOf) : null }; });
+  const avg = (f) => (others.length ? others.reduce((a, x) => a + f(x), 0) / others.length : null);
+  const nM = W.games, nT = W.train, uM = avg((x) => x.games), uT = avg((x) => x.train), nOut = ds.filter((x) => kindOf(x) === 'out').length;
+  const wv = ds.map((x) => B.wh[x]).filter((v) => v != null), wAvg = wv.length ? wv.reduce((a, v) => a + v, 0) / wv.length : null;
+  const wSt = tmStats(others.map((x) => B.wellOf(x.start, x.end)).filter((v) => v != null)), wZ = W.done && wAvg != null ? tmZof(wAvg, wSt) : null;
+
+  // why: the metrics out of his usual, the make-up of his week, his days far from his usual MD, his wellness
+  const out = M.filter((m) => m.z != null && Math.abs(m.z) >= 1), up = out.filter((m) => m.z > 0), dn = out.filter((m) => m.z < 0), names = (xs) => xs.map((m) => `${m.k === 'srpe' ? m.l : m.l.toLowerCase()} (${tmS(m.z)})`).join(', ');
+  const head = !W.done ? `Week in progress, up to ${fmtDay(asOf, { weekday: 'long', day: 'numeric', month: 'short' })} — it is compared with his usual week once it is complete.`
+    : !W.td ? 'No GPS this week.'
+      : !out.length ? 'A usual week for him on every metric.'
+        : [up.length ? `<b>Above</b> his usual week on ${names(up)}` : '', dn.length ? `<b>${up.length ? 'below' : 'Below'}</b> ${up.length ? '' : 'his usual week '}on ${names(dn)}` : ''].filter(Boolean).join(' · ') + '.';
+  const why = [];
+  const games = ds.filter((x) => kindOf(x) === 'match');
+  if (games.length) why.push(`<b>${pl(games.length, 'match')}</b>: ${games.map((x) => `${fmtDay(x, { weekday: 'short', day: 'numeric' })} ${mins(x) ? mins(x) + '\'' : 'no minutes'}${cat(x) === 'b' ? ' (B team)' : ''}`).join(' · ')}${W.done && uM != null && Math.abs(nM - uM) >= 0.75 ? ` — his usual week has ${u1(uM)}` : ''}.`);
+  if (W.done && uT != null && Math.abs(nT - uT) >= 1) why.push(`<b>${pl(nT, 'training day')}</b> — his usual week has ${u1(uT)}.`);
+  if (nOut) why.push(`<b>${pl(nOut, 'day')}</b> not available: ${ds.filter((x) => kindOf(x) === 'out').map((x) => `${fmtDay(x, { weekday: 'short', day: 'numeric' })} ${CAT_INFO[cat(x)][0].toLowerCase()}`).join(' · ')}.`);
+  const far = ds.flatMap((x) => ['td', 'hit'].map((k) => ({ x, k, r: zDay(x, k) }))).filter((y) => y.r && Math.abs(y.r.z) >= 1.5).sort((a, b) => Math.abs(b.r.z) - Math.abs(a.r.z));
+  [...new Set(far.map((y) => y.x))].slice(0, 3).forEach((x) => { const ys = far.filter((y) => y.x === x), md = (sess[x] && sess[x].md) || '';
+    why.push(`<b>${fmtDay(x, { weekday: 'long', day: 'numeric', month: 'short' })}${md ? ` (${escapeHtml(md)})` : ''}</b> ${ys[0].r.z > 0 ? 'above' : 'below'} his usual ${kindOf(x) === 'match' ? 'match' : escapeHtml(md || 'day')}: ${ys.map((y) => `${y.k === 'td' ? 'distance' : '> 20 km/h'} ${fmtN(val(x, y.k))}${y.r.mean != null ? ` vs ${fmtN(y.r.mean)}${y.r.per90 ? ' per 90' : ''}` : ''} (z ${tmS(y.r.z)})`).join(', ')}.`); });
+  if (wZ != null && Math.abs(wZ) >= 1) why.push(`<b>Wellness ${Math.round(wAvg)} %</b> ${wZ > 0 ? 'above' : 'below'} his usual week (${Math.round(wSt.p25)}–${Math.round(wSt.p75)} %, z ${tmS(wZ)}).`);
+
+  const mdOf = (x) => { const md = (sess[x] && sess[x].md) || ''; return kindOf(x) === 'match' ? 'G' : /^MD[+-]\d$/.test(md) ? md : ''; };
+  const tag = (x, wd) => { const md = mdOf(x); return md === 'G' ? 'G' : !md ? '' : wd > 6.5 ? md : wd > 3 ? md.slice(2) : ''; };
+  const bar = (m) => { const scale = Math.max(m.v, m.st.p75 || 0) * 1.12 || 1, live = ds.filter((x) => val(x, m.k) > 0); let at = 0;
+    return `<div class="tw-bar">${m.st.p25 == null ? '' : `<u style="left:${(m.st.p25 / scale * 100).toFixed(2)}%;width:${((m.st.p75 - m.st.p25) / scale * 100).toFixed(2)}%" title="his usual week ${fmtN(m.st.p25)}–${fmtN(m.st.p75)}"></u>`}${live.map((x) => { const v = val(x, m.k), left = at, r = zDay(x, m.k), wd = v / scale * 100, md = mdOf(x); at += v;
+      return `<i class="${x === live[live.length - 1] ? 'last' : ''}" style="left:${(left / scale * 100).toFixed(2)}%;width:${wd.toFixed(2)}%;background:${TM_ZCOL[tmZ(r ? r.z : null)]}" title="${escapeHtml(`${fmtDay(x, { weekday: 'short', day: 'numeric', month: 'short' })}${md ? ' · ' + (md === 'G' ? 'match' : md) : ''}: ${fmtN(v)}${r ? `${r.mean != null ? ` · his usual ${fmtN(r.mean)}${r.per90 ? ' per 90' : ''}` : ''} · z ${tmS(r.z)}` : ''}`)}"><span>${tag(x, wd)}</span></i>`; }).join('')}</div>`; };
+  const chip = (z) => `<span class="mz ${tmZ(z)}">${z == null ? '—' : tmS(z)}</span>`;
+  const rows = M.map((m) => `<div class="tw-m"><span class="n">${m.l}</span><span class="v">${tmK(m.v)}${m.u ? ` <small class="muted">${m.u}</small>` : ''}</span>${bar(m)}<span class="c">${chip(m.z)}</span><span class="u">${m.st.p25 == null ? '' : `usual ${tmK(m.st.p25)}–${tmK(m.st.p75)}`}</span><span class="c">${m.ac == null ? '—' : `<span class="tm-acchip" style="background:${tmZone(m.ac)[0]}">${m.ac.toFixed(2)}</span>`}</span></div>`).join('');
+  const wRow = !wv.length && wSt.p25 == null ? '' : `<div class="tw-m"><span class="n">Wellness</span><span class="v">${wAvg == null ? '—' : Math.round(wAvg)} <small class="muted">%</small></span><div class="tw-days">${ds.map((x) => { const v = B.wh[x], md = mdOf(x);
+    return `<i class="${v == null ? 'no' : ''}"${v != null ? ` style="background:${tmWell(v)}"` : ''} title="${escapeHtml(`${fmtDay(x, { weekday: 'short', day: 'numeric', month: 'short' })}${md ? ' · ' + md : ''}: ${v != null ? Math.round(v) + ' %' : 'no check-in'}`)}">${md ? `<small>${md}</small>` : ''}${v != null ? Math.round(v) : x > asOf ? '' : '–'}</i>`; }).join('')}</div><span class="c">${chip(wZ)}</span><span class="u">${wSt.p25 == null ? '' : `usual ${Math.round(wSt.p25)}–${Math.round(wSt.p75)} %`}</span><span class="c"></span></div>`;
+  const cell = (x, k) => { const v = val(x, k), r = zDay(x, k); return `<td>${v > 0 ? fmtN(v) : '—'}${r ? chip(r.z) : v > 0 ? '<span class="mz na">—</span>' : ''}</td>`; };
+  const short = { td: 'Distance', d15: '> 15', hit: '> 20', spr: 'Sprint dist.', spr_n: 'Sprints', acc_dec: 'Acc + Dec', srpe: 'sRPE' };
+  const dayRows = ds.map((x) => { const k = kindOf(x), q = mine(x), v = B.wh[x], md = mdOf(x), c = cat(x);
+    return `<tr class="${k === 'off' || k === 'later' || k === 'out' ? 'off' : ''}"><td><b>${fmtDay(x, { weekday: 'short', day: 'numeric', month: 'short' })}</b></td><td class="l">${md ? `<span class="tw-md${md === 'G' ? ' g' : ''}">${md === 'G' ? 'G · MD' : md}</span>` : ''}</td><td class="l">${k === 'later' ? 'Not yet' : c === '-' ? 'No team session' : escapeHtml(CAT_INFO[c][0])}${q && q.type && !['m', 't'].includes(c) && q.type.toLowerCase() !== CAT_INFO[c][0].toLowerCase() ? ` <small class="muted">${escapeHtml(q.type)}</small>` : ''}</td><td>${mins(x) ? mins(x) + '\'' : ''}</td><td>${q && q.rpe ? q.rpe : ''}</td>${KS.map((kk) => cell(x, kk)).join('')}<td>${v != null ? `<b style="color:${tmWell(v)}">${Math.round(v)} %</b>` : '—'}</td></tr>`; }).join('');
+  const tot = `<tr class="tot"><td colspan="5">This week${W.done ? '' : ' so far'}</td>${M.map((m) => `<td>${fmtN(m.v)}${chip(m.z)}</td>`).join('')}<td>${wAvg == null ? '—' : Math.round(wAvg) + ' %'}</td></tr>
+    <tr class="usu"><td colspan="5">His usual week (middle half of his ${others.length} other full weeks)</td>${M.map((m) => `<td>${m.st.p25 == null ? '—' : `${tmK(m.st.p25)}–${tmK(m.st.p75)}`}</td>`).join('')}<td></td></tr>`;
+  const cls = (a, b) => (b == null || !W.done ? '' : a - b >= 0.75 ? 'hi' : b - a >= 0.75 ? 'lo' : '');
+  const minG = games.reduce((a, x) => a + mins(x), 0), prev = B.weeks[wi - 1], next = B.weeks[wi + 1];
+  const sheet = document.getElementById('sv-sheet');
+  sheet.innerHTML = `
+    <div class="tw-head"><div><div class="eb">Workload · Player · week detail</div><h3>${avatarHtml(p.id, p.name, 30)} ${escapeHtml(p.name)} · ${W.label} · ${fmtDay(W.start, { day: 'numeric', month: 'short' })} → ${fmtDay(W.end, { day: 'numeric', month: 'short', year: 'numeric' })}${W.done ? '' : ' <small>in progress</small>'}</h3>
+      <p>${pl(nT, 'training day')} · ${pl(nM, 'match')}${minG ? ` (${minG}')` : ''}${nOut ? ` · ${nOut} not available` : ''}</p></div>
+      <div class="sv-nav"><button type="button" data-wk="${prev ? prev.start : ''}" ${prev ? '' : 'disabled'}>‹ ${prev ? prev.label : ''}</button><button type="button" data-wk="${next ? next.start : ''}" ${next ? '' : 'disabled'}>${next ? next.label : ''} ›</button><button type="button" class="sv-x" aria-label="Close">×</button></div></div>
+    <div class="tw-why"><b class="t">Why this week is where it is</b>${head}${why.length ? `<ul>${why.map((x) => `<li>${x}</li>`).join('')}</ul>` : ''}</div>
+    <div class="tw-card"><h4>The week on each metric<small>the bar = his week, one piece per day: its MD, in the colour of his day vs his usual for that MD · between the two black lines = his usual week · G = match</small></h4>
+      <div class="tw-scroll"><div class="tw-m h"><span>Metric</span><span class="r">Week</span><span>MD by MD</span><span class="c">z</span><span>His usual week</span><span class="c">A:C ${W.done ? 'end' : 'now'}</span></div>${rows}${wRow}</div>
+      ${wRow ? '<p class="tw-note">Wellness: one cell per morning, Sunday to Saturday — his score, green 70 % or more · orange 50–70 · red under 50; the week = the average of his mornings.</p>' : ''}</div>
+    <div class="tw-card"><h4>Make-up of the week<small>compared with his other full weeks of the season</small></h4><div class="tw-mk">
+      <div class="${cls(nM, uM)}"><span>Matches</span><b>${nM}</b><em>usual ${u1(uM)}${minG ? ` · ${minG}'` : ''}</em></div><div class="${cls(nT, uT)}"><span>Training days</span><b>${nT}</b><em>usual ${u1(uT)}</em></div>
+      <div><span>Not available</span><b>${nOut}</b><em>injury, rehab, sick, national team, absent</em></div><div><span>Wellness</span><b>${wAvg == null ? '—' : Math.round(wAvg) + ' %'}</b><em>${pl(wv.length, 'morning')}</em></div></div></div>
+    <div class="tw-card"><h4>Day by day<small>his load · chip = z vs his usual for that MD (a match: vs his usual match, per 90)</small></h4>
+      <div class="table-wrap"><table class="tw-dt"><thead><tr><th>Day</th><th class="l">MD</th><th class="l">Session</th><th>Time</th><th>RPE</th>${KS.map((k) => `<th>${short[k]}</th>`).join('')}<th>Wellness</th></tr></thead><tbody>${dayRows}${tot}</tbody></table></div></div>`;
+  const dr = document.getElementById('sv-drawer'), wasHidden = dr.hidden;
+  dr.hidden = false;
+  document.getElementById('sv-dim').hidden = false;
+  document.body.classList.add('sv-noscroll');
+  if (wasHidden) dr.scrollTop = 0;
+  sheet.querySelector('.sv-x').onclick = svClose;
+  sheet.querySelectorAll('[data-wk]').forEach((b) => { b.onclick = () => { if (b.dataset.wk) plWeekOpen(b.dataset.wk); }; });
 }
 
 function plRefs(B) {
@@ -383,7 +466,7 @@ function drawPlayerLoad(opts) {
     <div class="grid2">${box('Weekly load z-score', 'Sunday–Saturday weeks vs his previous 6 weeks', '<div class="table-wrap" id="pl-z"></div>')}${box(`Availability · last ${s.cat.length} days`, '', '<div id="pl-timeline"></div>')}</div>
     <div class="tm-bar"><div class="tm-dates muted">${PL.view === 'day' ? 'The last 5 weeks' : PL.view === 'week' ? 'The last weeks' : 'The season'}</div>
       <div class="tm-ctl"><span class="tm-lab">Team</span>${segHtml('pl-team', [['off', 'Off'], ['on', 'Show']], PL.team ? 'on' : 'off')}<span class="tm-lab">Colour</span>${segHtml('pl-color', [['z', 'z-score'], ['ac', 'A:C']], PL.color)}${segHtml('pl-view', [['day', 'Day'], ['week', 'Week'], ['month', 'Month']], PL.view)}</div></div>
-    <div class="tm-legend">${legend}<span>G = match</span>${PL.team ? '<span><i style="background:#6b6b70"></i>the team</span>' : ''}</div>
+    <div class="tm-legend">${legend}<span>G = match</span>${PL.view === 'week' ? '<span>click a week: its detail day by day</span>' : ''}${PL.team ? '<span><i style="background:#6b6b70"></i>the team</span>' : ''}</div>
     <div class="tm-grid${PL.team ? ' pl-team' : ''}">${plCharts(B)}</div>
     ${plTable(B)}
     <div class="grid2">${box('Match references', p.top3_src === 'own' ? `top 3 of his last ${p.top3_n} games ≥ 70 min (A + B, at most since last season), extra time left out` : `no game of 70 min yet — ${p.top3_src} reference`, plRefs(B))}${box('Physical tests', '', '<div id="pl-tests"></div>', '<a class="link" id="pl-tests-link">Open tests</a>')}</div>`;
@@ -393,6 +476,7 @@ function drawPlayerLoad(opts) {
   bindSeg('pl-hit', (v) => { PL.hit = v; drawPlayerLoad(); });
   bindSeg('pl-spr', (v) => { PL.spr = v; drawPlayerLoad(); });
   document.getElementById('pl-tests-link').onclick = () => switchView('testing', { athlete: p.id, tab: 'profile' });
+  body.querySelectorAll('[data-wk]').forEach((el) => { el.onclick = () => plWeekOpen(el.dataset.wk); el.onkeydown = (e) => { if (e.key === 'Enter') plWeekOpen(el.dataset.wk); }; }); // a week: its detail day by day
   drawZTable(s);
   drawTimeline(s);
   drawPlayerTests(p);
