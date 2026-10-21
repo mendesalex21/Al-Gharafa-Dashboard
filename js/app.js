@@ -106,6 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
     await Promise.race([loadPlayerPhotos(), new Promise((ok) => setTimeout(ok, 400))]);
     switchView(VIEW_RENDER[start] ? start : 'home', opts); // the home page (the club logo) is the landing page
     mfShowLink(); // the admin's Match files link
+    setTimeout(() => { if (typeof splPrefetch === 'function') splPrefetch(); }, 1500); // Session Plan's saved plans (slow Google script), ready before the click
     window.addEventListener('hashchange', () => { const h = location.hash.slice(1), v = h === 'downloads' ? 'reports' : h; if (VIEW_RENDER[v] && v !== CURRENT_VIEW) switchView(v); });
   });
 });

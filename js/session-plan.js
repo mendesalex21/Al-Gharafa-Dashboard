@@ -45,14 +45,31 @@ function renderPlan() {
   document.getElementById('spl-main').addEventListener('input', splInput);
   withData('plan_lib', (d) => { SPL.lib = d; splDraw(); }, (err) => { document.getElementById('spl-main').innerHTML = loadError(err); });
   withData('calendar', (d) => { SPL.cal = d; SPL.events = applyCalendarEdits(d); splMatches(); splDraw(); }, () => { SPL.cal = { events: [], match_days: [] }; SPL.events = []; splDraw(); });
-  splLoadSaved().then(() => splDraw()).catch((err) => { SPL.saved = { plans: {}, titles: {}, published: {}, drills: {} }; SPL.state = 'Plans not loaded: ' + (err.message || err); splDraw(); });
+  splLoadSaved().then(() => splDraw()).catch((err) => { if (!SPL.saved) SPL.saved = { plans: {}, titles: {}, published: {}, drills: {} }; SPL.state = 'Plans not loaded: ' + (err.message || err); splDraw(); });
 }
 
 // ------------------------------------------------------------------ saved plans (API, or this browser in the local demo)
-async function splLoadSaved() {
+// The saved plans come from the Google script (about 4 s): this browser keeps the last copy to draw the page at once,
+// the site fetches them in the background after signing in, and the fresh copy replaces the old one when it comes —
+// unless something was typed meanwhile (it is being saved). His ask, 2026-10-21: no wait on opening Session Plan.
+function splFetchSaved() {
+  if (!SPL.fetching) {
+    SPL.fetching = callApi('plans', null, {}).then((d) => { d.drills = d.drills || {}; cacheSet('plans', d); SPL.fetchedAt = Date.now(); return d; })
+      .finally(() => { SPL.fetching = null; });
+  }
+  return SPL.fetching;
+}
+function splPrefetch() {
+  if (AUTH.demo || SPL.saved || SPL.fetching) return;
+  splFetchSaved().then((d) => { if (!SPL.saved) SPL.saved = d; }).catch(() => { /* fetched again when the page opens */ });
+}
+async function splLoadSaved(force) { // force: after a save or a publish, the copy that includes it
   if (AUTH.demo) { try { SPL.saved = JSON.parse(localStorage.getItem('demo_plans')) || null; } catch (e) { SPL.saved = null; } SPL.saved = SPL.saved || { plans: {}, titles: {}, published: {} }; SPL.saved.drills = SPL.saved.drills || {}; return; }
-  SPL.saved = await callApi('plans', null, {});
-  SPL.saved.drills = SPL.saved.drills || {};
+  if (!SPL.saved) { const c = cacheGet('plans'); if (c && c.plans) { SPL.saved = { ...c, drills: c.drills || {} }; splDraw(); } }
+  if (!force && SPL.saved && SPL.fetchedAt && Date.now() - SPL.fetchedAt < 60000) return; // fetched a moment ago (in the background)
+  if (force && SPL.fetching) await SPL.fetching.catch(() => {}); // a read started before the save would not include it
+  const t0 = Date.now(), fresh = await splFetchSaved();
+  if (!SPL.saved || !(SPL.edited > t0)) SPL.saved = fresh;
 }
 function splDemoStore() { try { localStorage.setItem('demo_plans', JSON.stringify(SPL.saved)); } catch (e) { /* private mode */ } }
 async function splSavePlan(date) {
@@ -61,10 +78,11 @@ async function splSavePlan(date) {
   try {
     if (AUTH.demo) splDemoStore(); else await callApi('plan_save', null, { date, plan: { ...plan, _by: undefined, _at: undefined } });
     SPL.state = 'Saved ✓';
+    if (!AUTH.demo) cacheSet('plans', SPL.saved); // this browser's copy follows
   } catch (err) { SPL.state = 'Not saved — ' + (err.message || err); }
   splStateLine();
 }
-function splTouch(date) { clearTimeout(SPL.timer); SPL.state = 'Editing…'; splStateLine(); SPL.timer = setTimeout(() => splSavePlan(date), 700); }
+function splTouch(date) { SPL.edited = Date.now(); clearTimeout(SPL.timer); SPL.state = 'Editing…'; splStateLine(); SPL.timer = setTimeout(() => splSavePlan(date), 700); }
 function splStateLine() { const el = document.getElementById('spl-state'); if (el) el.textContent = SPL.state || 'Filled in from the calendar · saved as you type'; }
 
 // ------------------------------------------------------------------ calendar rules: MD tag, label, week, session number
@@ -537,7 +555,7 @@ async function splCorrPublish(remove) {
       SPL.saved.corrections = SPL.saved.corrections || {};
       if (n) SPL.saved.corrections[key] = { date, sid: r.sid, changes: JSON.parse(JSON.stringify(ch)), by: 'demo', at: new Date().toISOString() }; else delete SPL.saved.corrections[key];
       splDemoStore();
-    } else { await callApi('correction_save', null, { date, sid: r.sid, changes: ch }); await splLoadSaved(); }
+    } else { await callApi('correction_save', null, { date, sid: r.sid, changes: ch }); await splLoadSaved(true); }
     SPL.state = n ? `Correction of ${r.sid} published ✓ — applied at the next update` : `Correction of ${r.sid} removed — the Excel values come back at the next update`;
     SPL.view = 'plan'; SPL.corr = null; splDraw(); splRebuilt();
   } catch (err) { SPL.state = 'Not published — ' + (err.message || err); splStateLine(); }
@@ -669,7 +687,7 @@ async function splNtPublish() {
       else await callApi('session_publish', null, body);
       n++;
     }
-    if (AUTH.demo) splDemoStore(); else await splLoadSaved();
+    if (AUTH.demo) splDemoStore(); else await splLoadSaved(true);
     SPL.nt = null;
     SPL.state = `${n} NT day${n > 1 ? 's' : ''} published ✓ — in the dashboard at the next update`;
     splDraw(); splRebuilt();
@@ -1036,7 +1054,7 @@ async function splPublish() {
       for (const body of bodies) await callApi('session_publish', null, body);
       saved = true; started = typeof cfRebuild === 'function' ? cfRebuild() : null; // the rows are saved: the online calculation starts now
       SPL.state = 'Published ✓ — saving the plan…'; splStateLine();
-      await splLoadSaved();
+      await splLoadSaved(true);
     }
     if (!p.off) p.sid = sid;
     await splSavePlan(date);
@@ -1128,7 +1146,7 @@ function splClick(e) {
   if (t.dataset.unpub) { if (confirm('Remove this published session? The rows leave the dashboard a few minutes later.')) splUnpublish(t.dataset.unpub); }
 }
 async function splUnpublish(key) {
-  try { if (AUTH.demo) { delete SPL.saved.published[key]; splDemoStore(); } else { await callApi('session_unpublish', null, { key }); await splLoadSaved(); } SPL.state = 'Unpublished — out of the dashboard at the next update'; splDraw(); splRebuilt(); }
+  try { if (AUTH.demo) { delete SPL.saved.published[key]; splDemoStore(); } else { await callApi('session_unpublish', null, { key }); await splLoadSaved(true); } SPL.state = 'Unpublished — out of the dashboard at the next update'; splDraw(); splRebuilt(); }
   catch (err) { alert('Not removed: ' + (err.message || err)); }
 }
 function splChange(e) {
