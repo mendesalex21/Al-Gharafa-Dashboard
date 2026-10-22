@@ -273,7 +273,11 @@
   function tick(v){
     if (!v || v === lastTick) return;
     lastTick = v;
-    if (navigator.vibrate) { try { navigator.vibrate(12); } catch (err) {} return; }
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch (err) {} }
+  }
+  // iPhone (no vibrate API): a page may only tick when the finger leaves the screen — on releasing the slider and on OK
+  function tap(){
+    if (navigator.vibrate) return;
     if (!hapticEl) {
       hapticEl = document.createElement("label");
       hapticEl.style.cssText = "position:fixed;left:-100px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;";
@@ -380,6 +384,7 @@
       row.onpointerup = function(e){
         if (committed) return;
         row.classList.remove("dragging");
+        tap();
         lastValue = lastValue || valueFromX(e.clientX);
         setPos(lastValue);
         validateBtn.style.display = "inline-block";
@@ -393,7 +398,7 @@
       var go = function(e){ // the first tap validates (pointer up, not the delayed click), once, with an immediate press
         if (e) e.preventDefault();
         if (!lastValue || committed) return;
-        validateBtn.classList.add("pressed");
+        validateBtn.classList.add("pressed"); tap();
         setTimeout(function(){ validateBtn.classList.remove("pressed"); }, 160);
         commit(lastValue);
       };
