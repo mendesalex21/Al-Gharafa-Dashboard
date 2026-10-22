@@ -285,6 +285,23 @@
       .then(function(j){ renderGrid((j && j.ids) || {}); }).catch(function(){ renderGrid({}); });
   }
 
+  // a short vibration at each step of the slider (Android: vibrate; iPhone, Safari 18+: a native switch's haptic tick)
+  var lastTick = 0, hapticEl = null;
+  function tick(v){
+    if (!v || v === lastTick) return;
+    lastTick = v;
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch (err) {} return; }
+    if (!hapticEl) {
+      hapticEl = document.createElement("label");
+      hapticEl.style.cssText = "position:fixed;left:-100px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;";
+      var sw = document.createElement("input");
+      sw.type = "checkbox"; sw.setAttribute("switch", ""); sw.tabIndex = -1;
+      hapticEl.appendChild(sw);
+      document.body.appendChild(hapticEl);
+    }
+    try { hapticEl.click(); } catch (err) {}
+  }
+
   function startQuestionnaire(player){
     current = player;
     answers = {};
@@ -293,6 +310,7 @@
     avatarEl.outerHTML = avatarHtml(player, "avatar-wrap").replace('class="avatar-wrap"', 'class="avatar-wrap" id="q-avatar"');
     document.getElementById("q-player-name").textContent = player.name;
     renderDots();
+    lastTick = 0; // a new question: the first step vibrates too
     renderQuestion();
     showScreen("view-question");
   }
@@ -356,6 +374,7 @@
       });
     });
     renderDots();
+    lastTick = 0; // each question: its first step vibrates too
 
     var committed = false;
     var lastValue = 0;
@@ -391,12 +410,12 @@
     row.onpointerdown = function(e){
       if (committed) return;
       if (row.setPointerCapture) { try { row.setPointerCapture(e.pointerId); } catch (err) {} }
-      lastValue = valueFromX(e.clientX);
+      lastValue = valueFromX(e.clientX); tick(lastValue);
       reveal(lastValue);
     };
     row.onpointermove = function(e){
       if (committed || e.buttons === 0) return;
-      lastValue = valueFromX(e.clientX);
+      lastValue = valueFromX(e.clientX); tick(lastValue);
       reveal(lastValue);
     };
     row.onpointerup = function(e){
