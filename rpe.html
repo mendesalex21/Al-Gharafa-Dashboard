@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>RPE Al-Gharafa</title>
+<style>
+  :root{
+    --navy:#0a1642;
+    --navy-2:#122159;
+    --navy-3:#1a2d6e;
+    --gold:#f2b705;
+    --gold-2:#ffd23f;
+    --white:#ffffff;
+    --muted:#8b96c4;
+    --red:#e6483f;
+    --yellow:#f2b705;
+    --green:#3fb35f;
+    --card-bg:#141f52;
+    --radius:18px;
+    --s1:#00c853;
+    --s2:#43a047;
+    --s3:#8bc34a;
+    --s4:#cddc39;
+    --s5:#fdd835;
+    --s6:#ffc107;
+    --s7:#fb8c00;
+    --s8:#f4511e;
+    --s9:#e53935;
+    --s10:#b71c1c;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:radial-gradient(circle at 50% -10%, var(--navy-3), var(--navy) 60%);
+    color:var(--white);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh;
+    -webkit-user-select:none;
+    user-select:none;
+  }
+  .screen{
+    display:none;
+    min-height:100vh;
+    padding:24px 20px 40px;
+  }
+  .screen.active{display:flex; flex-direction:column;}
+
+  .brand{
+    display:flex; align-items:center; justify-content:space-between;
+    max-width:1100px; margin:0 auto 18px; width:100%;
+  }
+  .brand-left{display:flex; align-items:center; gap:12px;}
+  .crest{
+    width:44px;height:44px;
+    display:flex;align-items:center;justify-content:center;
+    flex:none;
+  }
+  .crest img{width:100%;height:100%;object-fit:contain;}
+  .brand-name{font-weight:800; letter-spacing:1px; font-size:15px; color:var(--gold);}
+  .brand-sub{font-size:12px; color:var(--muted); margin-top:1px;}
+  .date-pill{
+    font-size:13px; color:var(--muted); background:rgba(255,255,255,.06);
+    padding:6px 14px; border-radius:999px;
+  }
+
+  .title{max-width:1100px; margin:6px auto 22px; width:100%; text-align:center;}
+  .title h1{font-size:clamp(22px,4vw,30px); margin:0 0 4px;}
+  .title p{margin:0; color:var(--muted); font-size:14px;}
+
+  .grid-wrap{max-width:1100px; margin:0 auto; width:100%; flex:1;}
+  .player-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(130px,1fr)); gap:16px;}
+  .player-card{
+    background:var(--card-bg); border:1px solid rgba(255,255,255,.08); border-radius:var(--radius);
+    padding:12px 10px 14px; display:flex; flex-direction:column; align-items:center;
+    cursor:pointer; position:relative; transition:transform .12s ease, background .12s ease;
+  }
+  .player-card:active{transform:scale(.95); background:var(--navy-3);}
+  .player-card.done{opacity:.55;}
+  .avatar-wrap{
+    width:88px;height:88px;border-radius:50%; overflow:hidden; background:var(--navy-2);
+    display:flex;align-items:center;justify-content:center;
+    border:2px solid rgba(242,183,5,.35); margin-bottom:8px; flex:none;
+  }
+  .avatar-wrap img{width:100%;height:100%;object-fit:cover;}
+  .avatar-initials{font-weight:800; font-size:26px; color:var(--gold);}
+  .player-name{font-size:13px; font-weight:600; text-align:center; line-height:1.25;}
+  .done-badge{
+    position:absolute; top:8px; right:8px; width:24px;height:24px;border-radius:50%;
+    background:var(--green); display:flex;align-items:center;justify-content:center;
+    font-size:14px; color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.3);
+  }
+
+  .q-wrap{max-width:640px; margin:0 auto; width:100%; flex:1; display:flex; flex-direction:column;}
+  .q-player{display:flex; align-items:center; gap:14px; margin-bottom:20px;}
+  .q-player .avatar-wrap{width:56px;height:56px;margin-bottom:0;}
+  .q-player-name{font-weight:700; font-size:17px;}
+  .q-back{margin-left:auto; background:rgba(255,255,255,.08); border:none; color:var(--white); width:40px;height:40px;border-radius:50%; font-size:16px; cursor:pointer;}
+
+  .progress-dots{display:flex; gap:8px; justify-content:center; margin-bottom:26px;}
+  .dot{width:9px;height:9px;border-radius:50%; background:rgba(255,255,255,.18);}
+  .dot.active{background:var(--gold); transform:scale(1.3);}
+  .dot.filled{background:var(--gold); opacity:.55;}
+
+  .q-body{flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;}
+  .q-label{font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:var(--gold); margin-bottom:10px; font-weight:700;}
+  .q-text{font-size:clamp(24px,5vw,32px); font-weight:800; margin:0 0 34px;}
+
+  .scale-row{
+    display:flex; align-items:flex-end; gap:6px;
+    width:100%; max-width:520px; margin:0 auto; height:150px;
+    touch-action:none; cursor:pointer; -webkit-user-select:none; user-select:none;
+  }
+  .scale-btn{
+    flex:1; padding:10px 0 0;
+    display:flex;align-items:flex-start;justify-content:center;
+    position:relative; border-radius:16px 16px 6px 6px; overflow:hidden;
+    background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.14);
+    transition:background .08s ease, border-color .08s ease, transform .1s ease, box-shadow .1s ease;
+  }
+  .scale-btn.active{ box-shadow:0 0 0 2px rgba(255,255,255,.55) inset; }
+  .scale-btn .check{
+    opacity:0; font-size:22px; color:rgba(10,22,66,.75); transform:scale(.6);
+    transition:opacity .12s ease, transform .12s ease;
+  }
+  .scale-btn.picked .check{ opacity:1; transform:scale(1); }
+  .scale-btn .num{
+    position:absolute; left:0; right:0; bottom:6px; text-align:center;
+    font-size:12px; font-weight:700; color:rgba(255,255,255,.45); pointer-events:none;
+  }
+  .scale-btn.revealed .num{ color:rgba(10,22,66,.8); }
+  .scale-btn.s1{ height:30%; }
+  .scale-btn.s2{ height:38%; }
+  .scale-btn.s3{ height:46%; }
+  .scale-btn.s4{ height:54%; }
+  .scale-btn.s5{ height:62%; }
+  .scale-btn.s6{ height:70%; }
+  .scale-btn.s7{ height:78%; }
+  .scale-btn.s8{ height:86%; }
+  .scale-btn.s9{ height:93%; }
+  .scale-btn.s10{ height:100%; }
+.scale-btn.revealed{ background:#eef1f8; border-color:transparent; }
+.scale-anchors{ position:relative; width:100%; max-width:520px; margin:0 auto; margin-top:14px; height:18px; font-size:13px; font-weight:600; color:var(--muted); }
+.scale-anchors span{ position:absolute; top:0; transform:translateX(-50%); white-space:nowrap; }
+
+  .done-wrap{max-width:480px;margin:auto; text-align:center; display:flex; flex-direction:column; align-items:center;}
+  .done-check{width:96px;height:96px;border-radius:50%; background:var(--green); display:flex;align-items:center;justify-content:center; font-size:46px; margin-bottom:20px; color:#fff;}
+  .done-wrap h2{margin:0 0 8px; font-size:26px;}
+  .done-wrap p{color:var(--muted); margin:0 0 26px;}
+  .btn-primary{background:var(--gold); color:var(--navy); border:none; font-weight:800; padding:14px 30px; border-radius:14px; font-size:15px; cursor:pointer;}
+
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background:var(--card-bg); border:1px solid rgba(255,255,255,.15); color:var(--white);
+    padding:10px 18px; border-radius:12px; font-size:13px; opacity:0; transition:opacity .3s;
+    pointer-events:none;
+  }
+  .toast.show{opacity:1;}
+
+</style>
+</head>
+<body>
+
+<div id="view-grid" class="screen active">
+  <div class="brand">
+    <div class="brand-left">
+      <div class="crest"><img src="data:image/png;base64,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" alt="Al-Gharafa SC"></div>
+      <div>
+        <div class="brand-name">AL-GHARAFA SC</div>
+        <div class="brand-sub">RPE check-in</div>
+      </div>
+    </div>
+    <div class="date-pill" id="date-pill"></div>
+  </div>
+  <div class="title">
+    <h1>Select your name</h1>
+    <p>Rate your session effort (RPE) after training</p>
+  </div>
+  <div class="grid-wrap">
+    <div class="player-grid" id="player-grid"></div>
+  </div>
+</div>
+
+<div id="view-question" class="screen">
+  <div class="q-wrap">
+    <div class="q-player">
+      <div class="avatar-wrap" id="q-avatar"></div>
+      <div class="q-player-name" id="q-player-name"></div>
+      <button class="q-back" id="q-back">←</button>
+    </div>
+    <div class="progress-dots" id="progress-dots"></div>
+    <div class="q-body">
+      <div class="q-label" id="q-label"></div>
+      <div class="q-text" id="q-text"></div>
+      <div class="scale-row" id="scale-row"></div>
+      <div class="scale-anchors">
+          <span id="anchor-low"></span>
+          <span id="anchor-mid"></span>
+          <span id="anchor-diff"></span>
+        <span id="anchor-high"></span>
+        </div>
+          <button class="btn-primary" id="btn-validate" style="margin-top:28px; display:none;">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="view-done" class="screen">
+  <div class="done-wrap">
+    <div class="done-check">✓</div>
+    <h2 id="done-name">Thank you!</h2>
+    <p>Your answer has been saved.</p>
+    <button class="btn-primary" id="done-btn">Back to home</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  // Base64 headshots for the 16 players we have photos for (resized/compressed).
+  // Swap in the remaining 12 the same way once you have their photos —
+  // just add them to this object with the player's id as the key.
+  var PHOTO_DATA = {}; // from the server (/api/kiosk/photos) — no Drive link in this public file
+
+  var ROSTER = []; // from the server (/api/kiosk/roster): the active players of the Players sheet
+
+  var QUESTIONS = [
+  {key:"rpe", label:"RPE", text:"Rate of Perceived Exertion", low:"Very Easy", mid:"Moderate", diff:"Difficult", high:"Maximal Effort"}
+  ];
+
+  var current = null;
+  var answers = {};
+  var qIndex = 0;
+  var gridPollTimer = null;
+
+  function todayStr(){
+    var fmt = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Qatar', year:'numeric', month:'2-digit', day:'2-digit'});
+    return fmt.format(new Date());
+  }
+  function initials(name){
+    return name.split(" ").map(function(p){return p[0];}).join("").slice(0,2).toUpperCase();
+  }
+  function showToast(msg){
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(function(){ t.classList.remove("show"); }, 2200);
+  }
+
+  function avatarHtml(p, cls){
+    var photo = PHOTO_DATA[p.id];
+    if (photo){
+      return '<div class="'+cls+'"><img src="'+photo+'" alt=""></div>';
+    }
+    return '<div class="'+cls+'"><span class="avatar-initials">'+initials(p.name)+'</span></div>';
+  }
+
+  function renderGrid(doneToday){
+    var grid = document.getElementById("player-grid");
+    grid.innerHTML = "";
+    ROSTER.forEach(function(p){
+      var card = document.createElement("div");
+      card.className = "player-card" + (doneToday[p.id] ? " done" : "");
+      card.innerHTML = avatarHtml(p, "avatar-wrap") +
+        '<div class="player-name">'+p.name+'</div>' +
+        (doneToday[p.id] ? '<div class="done-badge">✓</div>' : "");
+      card.addEventListener("click", function(){ startQuestionnaire(p); });
+      grid.appendChild(card);
+    });
+  }
+
+  function updateDatePill(){
+    var d = new Date();
+    var opts = {weekday:"long", day:"numeric", month:"long", timeZone:"Asia/Qatar"};
+    document.getElementById("date-pill").textContent = d.toLocaleDateString("en-GB", opts);
+  }
+
+  function refreshGridStatus(){
+    fetch('/api/kiosk/done?kind=' + KIND + '&date=' + todayStr(), { cache: 'no-store' }).then(function(r){ return r.json(); })
+      .then(function(j){ renderGrid((j && j.ids) || {}); }).catch(function(){ renderGrid({}); });
+  }
+
+  function startQuestionnaire(player){
+    current = player;
+    answers = {};
+    qIndex = 0;
+    var avatarEl = document.getElementById("q-avatar");
+    avatarEl.outerHTML = avatarHtml(player, "avatar-wrap").replace('class="avatar-wrap"', 'class="avatar-wrap" id="q-avatar"');
+    document.getElementById("q-player-name").textContent = player.name;
+    renderDots();
+    renderQuestion();
+    showScreen("view-question");
+  }
+
+  function renderDots(){
+    var wrap = document.getElementById("progress-dots");
+    wrap.innerHTML = "";
+    QUESTIONS.forEach(function(q, i){
+      var dot = document.createElement("div");
+      dot.className = "dot" + (i === qIndex ? " active" : (i < qIndex ? " filled" : ""));
+      wrap.appendChild(dot);
+    });
+  }
+
+  function renderQuestion(){
+    var q = QUESTIONS[qIndex];
+    document.getElementById("q-label").textContent = "Question " + q.label;
+    document.getElementById("q-text").textContent = q.text;
+    document.getElementById("anchor-low").textContent = q.low;
+    document.getElementById("anchor-mid").textContent = q.mid;
+    document.getElementById("anchor-high").textContent = q.high;
+    document.getElementById("anchor-diff").textContent = q.diff;
+    var row = document.getElementById("scale-row");
+    row.innerHTML = "";
+    row.classList.remove("touched", "dragging", "picked");
+    var validateBtn = document.getElementById("btn-validate");
+    validateBtn.style.display = "none";
+
+    var bars = [];
+    for (var v=1; v<=10; v++){
+      var bar = document.createElement("div");
+      bar.className = "scale-btn s" + v;
+      bar.setAttribute("aria-label", "Level " + v);
+    if (v === 3 || v === 6 || v === 8) bar.style.marginRight = "12px";
+      var check = document.createElement("span");
+      check.className = "check";
+      check.textContent = "✓";
+      bar.appendChild(check);
+      var num = document.createElement("span");
+      num.className = "num";
+      num.textContent = String(v);
+      bar.appendChild(num);
+      row.appendChild(bar);
+      bars.push(bar);
+    }
+
+    requestAnimationFrame(function(){
+      var rowRect = row.getBoundingClientRect();
+      var groups = [
+        {ids:["anchor-low"], els: bars.slice(0,3)},
+        {ids:["anchor-mid"], els: bars.slice(3,6)},
+        {ids:["anchor-diff"], els: bars.slice(6,8)},
+        {ids:["anchor-high"], els: bars.slice(8,10)}
+      ];
+      groups.forEach(function(g){
+        var firstRect = g.els[0].getBoundingClientRect();
+        var lastRect = g.els[g.els.length-1].getBoundingClientRect();
+        var centerPx = (firstRect.left + lastRect.right) / 2;
+        var pct = (centerPx - rowRect.left) / rowRect.width * 100;
+        document.getElementById(g.ids[0]).style.left = pct + "%";
+      });
+    });
+    renderDots();
+
+    var committed = false;
+    var lastValue = 0;
+
+    function valueFromX(clientX){
+      var rect = row.getBoundingClientRect();
+      var x = clientX - rect.left;
+      if (x < 0) x = 0;
+      if (x > rect.width) x = rect.width - 1;
+      var idx = Math.floor((x / rect.width) * 10);
+      if (idx > 9) idx = 9;
+      if (idx < 0) idx = 0;
+      return idx + 1;
+    }
+
+    function reveal(value){
+      for (var i = 0; i < bars.length; i++){
+        var v = i + 1;
+        bars[i].classList.toggle("revealed", v <= value);
+        bars[i].classList.toggle("active", v === value);
+      }
+    }
+
+    function commit(value){
+      if (committed || !value) return;
+    committed = true;
+    validateBtn.style.display = "none";
+      reveal(value);
+      bars[value - 1].classList.add("picked");
+      setTimeout(function(){ answerQuestion(q.key, value); }, 260);
+    }
+
+    row.onpointerdown = function(e){
+      if (committed) return;
+      if (row.setPointerCapture) { try { row.setPointerCapture(e.pointerId); } catch (err) {} }
+      lastValue = valueFromX(e.clientX);
+      reveal(lastValue);
+    };
+    row.onpointermove = function(e){
+      if (committed || e.buttons === 0) return;
+      lastValue = valueFromX(e.clientX);
+      reveal(lastValue);
+    };
+    row.onpointerup = function(e){
+      if (committed) return;
+      lastValue = lastValue || valueFromX(e.clientX);
+      reveal(lastValue);
+      validateBtn.style.display = "inline-block";
+    };
+    row.onpointercancel = function(){
+      if (committed || !lastValue) return;
+      reveal(lastValue);
+      validateBtn.style.display = "inline-block";
+    };
+    validateBtn.onclick = function(){
+      if (lastValue) commit(lastValue);
+    };
+  }
+
+  function answerQuestion(key, value){
+    answers[key] = value;
+    if (qIndex < QUESTIONS.length - 1){
+      qIndex++;
+      renderQuestion();
+    } else {
+      finishQuestionnaire();
+    }
+  }
+
+  document.getElementById("q-back").addEventListener("click", function(){
+    if (qIndex > 0){
+      qIndex--;
+      renderQuestion();
+    } else {
+      showScreen("view-grid");
+    }
+  });
+
+  function finishQuestionnaire(){
+    var date = todayStr();
+    var payload = {
+      playerId: current.id,
+      playerName: current.name,
+      date: date,
+      ts: new Date().toISOString(),
+      rpe: answers.rpe
+  };
+
+    document.getElementById("done-name").textContent = "Thank you, " + current.name + "!";
+    showScreen("view-done");
+
+    fetch('/api/kiosk/' + (KIND === 'rpe' ? 'rpe' : 'checkin'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({}, payload, answers, /[?&]test/.test(location.search) ? { test: true } : {})) })
+      .then(function(r){ return r.json(); }).then(function(j){ if (!j || !j.ok) throw new Error(j && j.error); refreshGridStatus(); })
+      .catch(function(){ showToast("Couldn't save, please try again"); });
+
+    setTimeout(function(){
+      if (document.getElementById("view-done").classList.contains("active")){
+        showScreen("view-grid");
+      }
+    }, 3500);
+  }
+
+  document.getElementById("done-btn").addEventListener("click", function(){ showScreen("view-grid"); });
+
+  function showScreen(id){
+    ["view-grid","view-question","view-done"].forEach(function(s){
+      document.getElementById(s).classList.toggle("active", s === id);
+    });
+  }
+
+  var KIND = 'rpe';
+  updateDatePill();
+  if (/[?&]test/.test(location.search)) document.getElementById('date-pill').textContent += ' · TEST — nothing is saved';
+  renderGrid({});
+  fetch('/api/kiosk/roster', { cache: 'no-store' }).then(function(r){ return r.json(); }).then(function(j){
+    ROSTER = (j && j.players) || [];
+    refreshGridStatus();
+    fetch('/api/kiosk/photos').then(function(r){ return r.json(); }).then(function(p){ PHOTO_DATA = (p && p.photos) || {}; refreshGridStatus(); }).catch(function(){ /* initials */ });
+  }).catch(function(){ showToast("No connection — try again in a moment"); });
+  gridPollTimer = setInterval(function(){
+    if (document.getElementById("view-grid").classList.contains("active")){
+      refreshGridStatus();
+    }
+  }, 20000);
+
+})();
+</script>
+</body>
+</html>

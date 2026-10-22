@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Wellness Al-Gharafa</title>
+<style>
+  :root{
+    --navy:#0a1642;
+    --navy-2:#122159;
+    --navy-3:#1a2d6e;
+    --gold:#f2b705;
+    --gold-2:#ffd23f;
+    --white:#ffffff;
+    --muted:#8b96c4;
+    --red:#e6483f;
+    --yellow:#f2b705;
+    --green:#3fb35f;
+    --card-bg:#141f52;
+    --radius:18px;
+    --s1:#e53935;
+    --s2:#fb8c00;
+    --s3:#fdd835;
+    --s4:#66bb6a;
+    --s5:#00c853;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:radial-gradient(circle at 50% -10%, var(--navy-3), var(--navy) 60%);
+    color:var(--white);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh;
+    -webkit-user-select:none;
+    user-select:none;
+  }
+  .screen{
+    display:none;
+    min-height:100vh;
+    padding:24px 20px 40px;
+  }
+  .screen.active{display:flex; flex-direction:column;}
+
+  .brand{
+    display:flex; align-items:center; justify-content:space-between;
+    max-width:1100px; margin:0 auto 18px; width:100%;
+  }
+  .brand-left{display:flex; align-items:center; gap:12px;}
+  .crest{
+    width:44px;height:44px;
+    display:flex;align-items:center;justify-content:center;
+    flex:none;
+  }
+  .crest img{width:100%;height:100%;object-fit:contain;}
+  .brand-name{font-weight:800; letter-spacing:1px; font-size:15px; color:var(--gold);}
+  .brand-sub{font-size:12px; color:var(--muted); margin-top:1px;}
+  .date-pill{
+    font-size:13px; color:var(--muted); background:rgba(255,255,255,.06);
+    padding:6px 14px; border-radius:999px;
+  }
+
+  .title{max-width:1100px; margin:6px auto 22px; width:100%; text-align:center;}
+  .title h1{font-size:clamp(22px,4vw,30px); margin:0 0 4px;}
+  .title p{margin:0; color:var(--muted); font-size:14px;}
+
+  .grid-wrap{max-width:1100px; margin:0 auto; width:100%; flex:1;}
+  .player-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(130px,1fr)); gap:16px;}
+  .player-card{
+    background:var(--card-bg); border:1px solid rgba(255,255,255,.08); border-radius:var(--radius);
+    padding:12px 10px 14px; display:flex; flex-direction:column; align-items:center;
+    cursor:pointer; position:relative; transition:transform .12s ease, background .12s ease;
+  }
+  .player-card:active{transform:scale(.95); background:var(--navy-3);}
+  .player-card.done{opacity:.55;}
+  .avatar-wrap{
+    width:88px;height:88px;border-radius:50%; overflow:hidden; background:var(--navy-2);
+    display:flex;align-items:center;justify-content:center;
+    border:2px solid rgba(242,183,5,.35); margin-bottom:8px; flex:none;
+  }
+  .avatar-wrap img{width:100%;height:100%;object-fit:cover;}
+  .avatar-initials{font-weight:800; font-size:26px; color:var(--gold);}
+  .player-name{font-size:13px; font-weight:600; text-align:center; line-height:1.25;}
+  .done-badge{
+    position:absolute; top:8px; right:8px; width:24px;height:24px;border-radius:50%;
+    background:var(--green); display:flex;align-items:center;justify-content:center;
+    font-size:14px; color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.3);
+  }
+
+  .q-wrap{max-width:640px; margin:0 auto; width:100%; flex:1; display:flex; flex-direction:column;}
+  .q-player{display:flex; align-items:center; gap:14px; margin-bottom:20px;}
+  .q-player .avatar-wrap{width:56px;height:56px;margin-bottom:0;}
+  .q-player-name{font-weight:700; font-size:17px;}
+  .q-back{margin-left:auto; background:rgba(255,255,255,.08); border:none; color:var(--white); width:40px;height:40px;border-radius:50%; font-size:16px; cursor:pointer;}
+
+  .progress-dots{display:flex; gap:8px; justify-content:center; margin-bottom:26px;}
+  .dot{width:9px;height:9px;border-radius:50%; background:rgba(255,255,255,.18);}
+  .dot.active{background:var(--gold); transform:scale(1.3);}
+  .dot.filled{background:var(--gold); opacity:.55;}
+
+  .q-body{flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;}
+  .q-label{font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:var(--gold); margin-bottom:10px; font-weight:700;}
+  .q-text{font-size:clamp(24px,5vw,32px); font-weight:800; margin:0 0 34px;}
+
+  .scale-row{
+    position:relative; display:flex; align-items:center;
+    width:100%; max-width:520px; margin:0 auto; height:64px;
+    touch-action:none; cursor:pointer; -webkit-user-select:none; user-select:none;
+  }
+  .scale-track{
+    width:100%; height:14px; border-radius:999px;
+    background:linear-gradient(90deg, var(--s1), var(--s2), var(--s3), var(--s4), var(--s5));
+    opacity:.32; transition:opacity .15s ease;
+  }
+  .scale-row.touched .scale-track{ opacity:1; }
+  .scale-ticks{ position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); display:flex; justify-content:space-between; padding:0 4px; pointer-events:none; }
+  .scale-ticks i{ width:4px; height:4px; border-radius:50%; background:rgba(255,255,255,.35); }
+  .scale-handle{
+    position:absolute; top:50%; left:0%; width:38px; height:38px; border-radius:50%;
+    background:var(--white); transform:translate(-50%,-50%);
+    box-shadow:0 4px 12px rgba(0,0,0,.4), 0 0 0 5px var(--handle-ring, rgba(255,255,255,.25));
+    transition:box-shadow .12s ease;
+  }
+  .scale-row.dragging .scale-handle{ box-shadow:0 6px 16px rgba(0,0,0,.5), 0 0 0 7px var(--handle-ring, rgba(255,255,255,.35)); }
+  .scale-row.picked .scale-handle{ transform:translate(-50%,-50%) scale(1.08); }
+  .scale-anchors{display:flex; justify-content:space-between; width:100%; max-width:520px; margin:0 auto; margin-top:14px; font-size:13px; font-weight:600; color:var(--muted);}
+
+  .done-wrap{max-width:480px;margin:auto; text-align:center; display:flex; flex-direction:column; align-items:center;}
+  .done-check{width:96px;height:96px;border-radius:50%; background:var(--green); display:flex;align-items:center;justify-content:center; font-size:46px; margin-bottom:20px; color:#fff;}
+  .done-wrap h2{margin:0 0 8px; font-size:26px;}
+  .done-wrap p{color:var(--muted); margin:0 0 26px;}
+  .btn-primary{background:var(--gold); color:var(--navy); border:none; font-weight:800; padding:14px 30px; border-radius:14px; font-size:15px; cursor:pointer;}
+
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background:var(--card-bg); border:1px solid rgba(255,255,255,.15); color:var(--white);
+    padding:10px 18px; border-radius:12px; font-size:13px; opacity:0; transition:opacity .3s;
+    pointer-events:none;
+  }
+  .toast.show{opacity:1;}
+
+</style>
+</head>
+<body>
+
+<div id="view-grid" class="screen active">
+  <div class="brand">
+    <div class="brand-left">
+      <div class="crest"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABqCAMAAAB03aRsAAAAwFBMVEUAAAD6xwX3&#43;PYULGkhbUwXalEhb0eimSUhbkeYpajXsw/8/fwUZTlXaJf56qGnsMoZbyz&#43;5GFjaF9eilwJIHJzmZO5yc34&#43;vhyiTU1S4f29/qoxrcXLWsxgVoMXzMTKWiOdxgFVCdYbSUA/wAqLC8AAPZda5glmC8WoFFUlWuluK1nZ7FYZpdyjp6Oo7CSpbb//3YAVapQjGtWkXRy/xmfp1SgqMGh5aGpysYAALYiOoA/hl0A//9/f39Vqqp/kMGUqDndAAAAQHRSTlMA/v399Beg/l7&#43;/hL8/v3&#43;C/7//Q3//WT//p3/o/&#43;fYf9b/wH/AaYUFVsYD1&#43;sb6QDAxOWA/&#43;UBJIH/5gBAgP/op&#43;mvwAACdBJREFUeNq1Wglj2rgSFrJsSz5lg20ggQTIJm233fbt/c79///qzYxkWz6gSWDVhEAizzfzzSm7jL1hxSyOG85jevs3rJg1PMsWi2zbxH8DQhzHW74wq8iaGyOAdHht5cPit7chbprMBYhvSj5YwItiMQCIbwmwzbgrHrywvS1FfDFe2S0RgJ8JAJF0O57mANz4utaAZgYg27YWxNfn74x8zDZYvImvzQgIoWJxfhXZtRELFlwCWETZlSaABy4CLK4F&#43;Mb4RfmL4jqO0MeXAa404VuXZBGsMAzxxzjlrgD4EX1MgpfLsFvrNSKNUu49y4fvZpsr1Hs50Bsh1xbk3RSheLnNshqjKAxnIhQx0Mn/fQ/A6ge2evDyLMrQCdHyTBaESxwCVu&#43;Qz9iD53mqMMyU0fkg4j&#43;ROm8Vv7oH&#43;V5q2uQcQU4YeQ9vLHm&#43;Ud/zhInRsFxcBvDuV2&#43;hCTZ7Zm0yo3&#43;4jM4StChyVKVh/3u9/AevXdzyEy3PkcQ5T5HL/OG1jnDle1XRig7X80ZkGcr3VOrdvy6aHPkp32x4l7HnjDAA&#43;eaVjvDZfSv/X7zIanccCh2IyBSN37Isp2ig1/vVd1ly9YeOCP7Lc&#43;6mbmTTy1alzHjASxVdc0/pf6m2sZ8qKz6HUavIKoRxMxeNcCzJNmmep&#43;QCi7C6zM/KyxWJz9M0zxZ8M2kGWFaHDkhVrurW7odLCKsVxn&#43;u4IKNSYJ8k02cOogm42GRctEirC6w9A9ycMqtuXkBFkwAovU0hPCiLrLPO9o3Dq7NNTlOQ9l0JBqWpU6uUu27e1D0AkFAP22ri4JTR7/IUJF3ilu9yA3&#43;pQzIU1OEogLCaDy1jxlyEIRL0oUKZw2wZXpRXGZoEfUIaX45kgYGdACXY8h1s2cC3EbScJ38vkTXXQTNt8j1ZO76qy&#43;96QUTrAE25b383CQazrWbtnvwORNAfV9SDjsMnQWY6Z09R16Vu4GkO&#43;WF8G0OeLm4TNEcwKZvH3lXkvpI9X0JAMwwJFoV0nM&#43;mI4vmeestmQAR1pqM1oFgQh8fzUMtTNRFIVleIGiXgBwJEEsWhAIIQLxYhhqfTwPgJPcYtL/nWzuSYL2CcRooN4HDwCC7WMdwEwVjda224xaJwBU6cQEJkGwBO79AN4E/mmcjXyqfad5uB61/YL3CDaR/onMoHN9IQMJZLVyzwCEA7XD0SQZQV0fcbR6IWbACwSkf7RFl6tZH4x0XkTjWbX3tGX5AaIH5AdMSnLB57ao5/kMwHRgicpzyWAiPf2dATEQSEyAM6R8&#43;dx5wDY07gobyDeROkqIQvVxJFDIs6FG4g8AenkmoRtTUaoBwJCOsBQimsnp2g1UmAHumTQ&#43;kAT067MbQkgTX9jTXuiqGsJfj/YQ2OZDRBu5U5CobkOcBsCOSTSfPTuFBKGESBKBL8exfK&#43;dJWkmDo&#43;4TSTHqgNQhmMmAhTNJNjgB9&#43;e3Rzw4A9LBWMzv6vg2o6hR094Ze&#43;QdbRORHXX7hOjTAt2FD4W5wsgV718km5WvUtCk2mPUfQYll6fb4N9dzuC6HoCpDD5gFwg2Ne&#43;UotkyQdLiTWVubIU4OLOgDCphvsqRKi7gg0lArLA4ujfvU1&#43;Rj4YgQjh4&#43;Nj5ORw6KpvNUl6nu9/pUwGH0Cm6eDQdHVOTOSD&#43;a3eYIc4mndj/Q2C2nTjlylG8APe7A6NsDEkBJ9ZVRJBNU1MxCRQtBfJcm7fshtRH16IG8lstW5S64JEzV3IxRojpibC1E4cw1k9OG9jyVsF4ANfSoZOCNg&#43;VvkFA8iBdwNNl/P7OhN&#43;oESGUkFFD1LNllFRzV6nkqQeWjSiqLX7LnGjdCc0M7UiYFvjguRuTv5dooYxUws1dHLZQghjwv0HARkgfRy4JPpi31iAie7EbMWXy2Fq8NrVRXVoFuCzbvsN0x&#43;gckvR5AMXdFeUConlUwBedXu5wl0lfdgZgFibjnliGmoeRuxha4dwvEKVT6VSqDxeWqNZUwBuWYOdT7x8elKOBc8fBbV6dmIfbMFmDZUi9GVZomyVGvHGAD70PmGSCSUXTwPvEwDbA4BvhkdNCL6Oa5sGZWl0Ucq&#43;IU1H3qePiIK2DpCpZ8WYkhKC9APOjies2MARulnsUPIoeShOR4m37DhSpZsvZMAXUhqCVJMF0JTh455MEKN4b&#43;kYJxYBziQNMZTGB6xE0m9PBtKMSMaE5TQJSJ5y8glsxH1TgIoY&#43;voBugyUaOf0gfNFElOvmFRJtAB&#43;CUwYp2BEVgB7NwW4S4wBzJYJvxvgoUEH4kC5ICblLrlDz5RPitxfP6WUHBX8Wo37BsoXW&#43;3TRA3O7Q45doahdi3GNohk1yU1gpRlW//GXYM8rGIYtPBI457PCOHnQ8NtT6sHgdELGoTkcljwlqZUp80BlYV514E4AU1BoMV&#43;W7dt00rCcWF9poSL9VF0&#43;5bC6L/Z2swdnvbxpIANiLVVWyRmGkiO0L2Ok&#43;RQ5AQcimHfbkfb7VT&#43;UTA7tw8BSFygP/aTfqXUb2bIitDvLjsYTrZPZ3RhfzqI93ge&#43;M/4lKypP0BqJKxFqJz5miaIrnSY3MVJw72TYIbOxkyK0k2CwXFTHGKDkA/m99CEvKIaizg0Kw1O4Ub&#43;/mfTwPTkhot/8mnGkxBK6fScHI56cmLl11m98dpRpW4OO2rFcvZuDpEEZQlsUKqYHgHbqYLDVJFE9r4y7OP2zuaGW370&#43;XuCEo&#43;GAVvOPvobzkX2vrU5fdR0cIn3gaSBV5&#43;BwM4Q0KEk2I5uREXO3dj&#43;OGI3FRlXm5x/hPAM6FTPTmcsoBqCewRTfODkx&#43;7RE47YESLBqzEAjipgSyP2jOJHf&#43;fOsjS1O/llYER4xMEXlI9IOM7y8IvCfQgihIkf3z9dkK&#43;ZrXtirxveQUTH42NIPOGMDTjHY9RTRepLKkBSfv/eONggaaRPPrUQcO5oj3xhhP8e8blXJ377Cbxm3PvKJxTSGBGwf285zwpH2Ralf47Jm3hv1A/gzKf1K8RrakBIlQ&#43;O&#43;0oYk5A1wcO3TbA/7EyG&#43;m96SmSuEULv9/GflF5Z/yChKDIQDtJ/Yfsd8ik1FDjf168WrzUaTFkf7PQhkfGf261brrfb5ktA05Wg/A/k25/UmfpqT0Es2dN/QLBL79lBaGmkYz9/JfsDI3yNxwaf3AdfO0dHje7BL3MG9tl7F/XqQFpDQM4fnz79Ye/CGeEBmIna63fKx4jCI5Z1hzS5HljpUgbv4n7uoS&#43;1EODaJ75pModY1obL6yFAmN9moLRRLNtZ4WYLvI4u0Uwbnf1bCj&#43;ZJJJIvU95om8o3WmpAUao1Oz2ywyXNC4H9vB4awAoNniv&#43;0Se9tmrIf4PxWOfMg6zsLEAAAAASUVORK5CYII=" alt="Al-Gharafa SC"></div>
+      <div>
+        <div class="brand-name">AL-GHARAFA SC</div>
+        <div class="brand-sub">Wellness check-in</div>
+      </div>
+    </div>
+    <div class="date-pill" id="date-pill"></div>
+  </div>
+  <div class="title">
+    <h1>Select your name</h1>
+    <p>Answer 5 quick questions before training</p>
+  </div>
+  <div class="grid-wrap">
+    <div class="player-grid" id="player-grid"></div>
+  </div>
+</div>
+
+<div id="view-question" class="screen">
+  <div class="q-wrap">
+    <div class="q-player">
+      <div class="avatar-wrap" id="q-avatar"></div>
+      <div class="q-player-name" id="q-player-name"></div>
+      <button class="q-back" id="q-back">←</button>
+    </div>
+    <div class="progress-dots" id="progress-dots"></div>
+    <div class="q-body">
+      <div class="q-label" id="q-label"></div>
+      <div class="q-text" id="q-text"></div>
+      <div class="scale-row" id="scale-row"></div>
+      <div class="scale-anchors">
+        <span id="anchor-low"></span>
+        <span id="anchor-high"></span>
+      </div>
+          <button class="btn-primary" id="btn-validate" style="margin-top:28px; display:none;">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="view-done" class="screen">
+  <div class="done-wrap">
+    <div class="done-check">✓</div>
+    <h2 id="done-name">Thank you!</h2>
+    <p>Your answer has been saved.</p>
+    <button class="btn-primary" id="done-btn">Back to home</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  
+  
+  
+  var PHOTO_DATA = {}; // from the server (/api/kiosk/photos) — no Drive link in this public file
+
+  var ROSTER = []; // from the server (/api/kiosk/roster): the active players of the Players sheet
+
+  var QUESTIONS = [
+    {key:"fatigue", label:"1 / 5", text:"Fatigue", low:"Very Tired", high:"Very Fresh"},
+    {key:"soreness", label:"2 / 5", text:"Soreness", low:"Very Sore", high:"Feeling Great"},
+    {key:"sleep", label:"3 / 5", text:"Sleep Quality", low:"Very Poor", high:"Very Good"},
+    {key:"energy", label:"4 / 5", text:"Energy", low:"No Energy", high:"Full of Energy"},
+    {key:"recovery", label:"5 / 5", text:"Recovery", low:"Nothing Recovered", high:"Fully Recovered"}
+  ];
+
+  var current = null;
+  var answers = {};
+  var qIndex = 0;
+  var gridPollTimer = null;
+
+  function todayStr(){
+    var fmt = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Qatar', year:'numeric', month:'2-digit', day:'2-digit'});
+    return fmt.format(new Date());
+  }
+  function initials(name){
+    return name.split(" ").map(function(p){return p[0];}).join("").slice(0,2).toUpperCase();
+  }
+  function showToast(msg){
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(function(){ t.classList.remove("show"); }, 2200);
+  }
+
+  function avatarHtml(p, cls){
+    var photo = PHOTO_DATA[p.id];
+    if (photo){
+      return '<div class="'+cls+'"><img src="'+photo+'" alt=""></div>';
+    }
+    return '<div class="'+cls+'"><span class="avatar-initials">'+initials(p.name)+'</span></div>';
+  }
+
+  function renderGrid(doneToday){
+    var grid = document.getElementById("player-grid");
+    grid.innerHTML = "";
+    ROSTER.forEach(function(p){
+      var card = document.createElement("div");
+      card.className = "player-card" + (doneToday[p.id] ? " done" : "");
+      card.innerHTML = avatarHtml(p, "avatar-wrap") +
+        '<div class="player-name">'+p.name+'</div>' +
+        (doneToday[p.id] ? '<div class="done-badge">✓</div>' : "");
+      card.addEventListener("click", function(){ startQuestionnaire(p); });
+      grid.appendChild(card);
+    });
+  }
+
+  function updateDatePill(){
+    var d = new Date();
+    var opts = {weekday:"long", day:"numeric", month:"long", timeZone:"Asia/Qatar"};
+    document.getElementById("date-pill").textContent = d.toLocaleDateString("en-GB", opts);
+  }
+
+  function refreshGridStatus(){
+    fetch('/api/kiosk/done?kind=' + KIND + '&date=' + todayStr(), { cache: 'no-store' }).then(function(r){ return r.json(); })
+      .then(function(j){ renderGrid((j && j.ids) || {}); }).catch(function(){ renderGrid({}); });
+  }
+
+  function startQuestionnaire(player){
+    current = player;
+    answers = {};
+    qIndex = 0;
+    var avatarEl = document.getElementById("q-avatar");
+    avatarEl.outerHTML = avatarHtml(player, "avatar-wrap").replace('class="avatar-wrap"', 'class="avatar-wrap" id="q-avatar"');
+    document.getElementById("q-player-name").textContent = player.name;
+    renderDots();
+    renderQuestion();
+    showScreen("view-question");
+  }
+
+  function renderDots(){
+    var wrap = document.getElementById("progress-dots");
+    wrap.innerHTML = "";
+    QUESTIONS.forEach(function(q, i){
+      var dot = document.createElement("div");
+      dot.className = "dot" + (i === qIndex ? " active" : (i < qIndex ? " filled" : ""));
+      wrap.appendChild(dot);
+    });
+  }
+
+  function renderQuestion(){
+    var q = QUESTIONS[qIndex];
+    document.getElementById("q-label").textContent = "Question " + q.label;
+    document.getElementById("q-text").textContent = q.text;
+    document.getElementById("anchor-low").textContent = q.low;
+    document.getElementById("anchor-high").textContent = q.high;
+    var row = document.getElementById("scale-row");
+    row.innerHTML = "";
+    row.classList.remove("touched", "dragging", "picked");
+
+        var validateBtn = document.getElementById("btn-validate");
+        validateBtn.style.display = "none";
+
+    var track = document.createElement("div");
+    track.className = "scale-track";
+    row.appendChild(track);
+
+    var ticks = document.createElement("div");
+    ticks.className = "scale-ticks";
+    for (var t = 0; t < 5; t++) ticks.appendChild(document.createElement("i"));
+    row.appendChild(ticks);
+
+    var handle = document.createElement("div");
+    handle.className = "scale-handle";
+    row.appendChild(handle);
+
+    renderDots();
+
+    var committed = false;
+    var lastValue = 0;
+    var HEX = ["#e53935","#fb8c00","#fdd835","#66bb6a","#00c853"];
+
+    function setPos(value){
+      var pct = (value - 1) / 4 * 100;
+      handle.style.left = pct + "%";
+      handle.style.setProperty("--handle-ring", HEX[value - 1] + "80");
+    }
+    setPos(1);
+
+    function valueFromX(clientX){
+      var rect = track.getBoundingClientRect();
+      var x = clientX - rect.left;
+      if (x < 0) x = 0;
+      if (x > rect.width) x = rect.width;
+      var frac = x / rect.width;
+      return Math.round(frac * 4) + 1;
+    }
+
+    function commit(value){
+      if (committed || !value) return;
+      committed = true;
+      setPos(value);
+      row.classList.add("picked");
+      setTimeout(function(){ answerQuestion(q.key, value); }, 260);
+    }
+
+    row.onpointerdown = function(e){
+      if (committed) return;
+      if (row.setPointerCapture) { try { row.setPointerCapture(e.pointerId); } catch (err) {} }
+      row.classList.add("touched", "dragging");
+      lastValue = valueFromX(e.clientX);
+      setPos(lastValue);
+    };
+    row.onpointermove = function(e){
+      if (committed || e.buttons === 0) return;
+      lastValue = valueFromX(e.clientX);
+      setPos(lastValue);
+    };
+      row.onpointerup = function(e){
+        if (committed) return;
+        row.classList.remove("dragging");
+        lastValue = lastValue || valueFromX(e.clientX);
+        setPos(lastValue);
+        validateBtn.style.display = "inline-block";
+      };
+      row.onpointercancel = function(){
+        if (committed || !lastValue) return;
+        row.classList.remove("dragging");
+        setPos(lastValue);
+        validateBtn.style.display = "inline-block";
+      };
+      validateBtn.onclick = function(){
+        if (lastValue) commit(lastValue);
+      };
+  }
+
+  function answerQuestion(key, value){
+    answers[key] = value;
+    if (qIndex < QUESTIONS.length - 1){
+      qIndex++;
+      renderQuestion();
+    } else {
+      finishQuestionnaire();
+    }
+  }
+
+  document.getElementById("q-back").addEventListener("click", function(){
+    if (qIndex > 0){
+      qIndex--;
+      renderQuestion();
+    } else {
+      showScreen("view-grid");
+    }
+  });
+
+  function finishQuestionnaire(){
+    var date = todayStr();
+    var payload = {
+      playerId: current.id,
+      playerName: current.name,
+      date: date,
+      ts: new Date().toISOString(),
+      fatigue: answers.fatigue,
+      soreness: answers.soreness,
+      sleep: answers.sleep,
+      energy: answers.energy,
+      recovery: answers.recovery
+    };
+    payload.average = Math.round(((payload.fatigue+payload.soreness+payload.sleep+payload.energy+payload.recovery)/5)*10)/10;
+
+    document.getElementById("done-name").textContent = "Thank you, " + current.name + "!";
+    showScreen("view-done");
+
+    fetch('/api/kiosk/' + (KIND === 'rpe' ? 'rpe' : 'checkin'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({}, payload, answers, /[?&]test/.test(location.search) ? { test: true } : {})) })
+      .then(function(r){ return r.json(); }).then(function(j){ if (!j || !j.ok) throw new Error(j && j.error); refreshGridStatus(); })
+      .catch(function(){ showToast("Couldn't save, please try again"); });
+
+    setTimeout(function(){
+      if (document.getElementById("view-done").classList.contains("active")){
+        showScreen("view-grid");
+      }
+    }, 3500);
+  }
+
+  document.getElementById("done-btn").addEventListener("click", function(){ showScreen("view-grid"); });
+
+  function showScreen(id){
+    ["view-grid","view-question","view-done"].forEach(function(s){
+      document.getElementById(s).classList.toggle("active", s === id);
+    });
+  }
+
+  var KIND = 'checkins';
+  updateDatePill();
+  if (/[?&]test/.test(location.search)) document.getElementById('date-pill').textContent += ' · TEST — nothing is saved';
+  renderGrid({});
+  fetch('/api/kiosk/roster', { cache: 'no-store' }).then(function(r){ return r.json(); }).then(function(j){
+    ROSTER = (j && j.players) || [];
+    refreshGridStatus();
+    fetch('/api/kiosk/photos').then(function(r){ return r.json(); }).then(function(p){ PHOTO_DATA = (p && p.photos) || {}; refreshGridStatus(); }).catch(function(){ /* initials */ });
+  }).catch(function(){ showToast("No connection — try again in a moment"); });
+  gridPollTimer = setInterval(function(){
+    if (document.getElementById("view-grid").classList.contains("active")){
+      refreshGridStatus();
+    }
+  }, 20000);
+
+})();
+</script>
+</body>
+</html>

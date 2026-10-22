@@ -16,6 +16,8 @@
  * "staff", re-read with the wellness): removing someone there cuts his access within 10 minutes.
  * Anything missing or failing here → an error status: the site then falls back to the Google script.
  */
+import { kioskRoute, kioskMirror, kioskCompute } from './kiosk.js'; // the players' wellness / RPE pages (2026-10-22)
+
 const UPLOADS = ['workload', 'sessions', 'objectives', 'calendar', 'tests', 'reports', 'staff_report', 'plan_lib', 'squad_stats', 'match_report', 'intensity'];
 const FROM_SCRIPT = ['home', 'wellness', 'wellness_history']; // computed by the Google script from the kiosk check-ins
 const DATA = [...FROM_SCRIPT, ...UPLOADS];
@@ -27,6 +29,7 @@ export default {
   async fetch(req, env, ctx) {
     const path = new URL(req.url).pathname;
     try {
+      if (path.startsWith('/api/kiosk/')) return await kioskRoute(req, env, ctx, path); // public: the players' pages (no sign-in, no score sent back)
       if (path === '/api/upload' && req.method === 'POST') return await upload(req, env);
       if ((path === '/api/snapshot' || path === '/api/payload') && req.method === 'GET') return await keyRead(req, path, env);
       if (path === '/api/match-file' && req.method === 'GET') return await mfRead(req, env); // the online calculation (upload key)
@@ -51,7 +54,7 @@ export default {
       return json({ ok: false, error: String((err && err.message) || err) }, 500);
     }
   },
-  async scheduled(event, env, ctx) { ctx.waitUntil(refresh(env, true)); },
+  async scheduled(event, env, ctx) { ctx.waitUntil(Promise.allSettled([refresh(env, true), kioskMirror(env), kioskCompute(env)])); }, // + the answers copied to the sheets, the wellness of the new day
 };
 
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
@@ -225,7 +228,7 @@ async function refresh(env, force) {
   if (lines.length === 1) return out; // nothing new since the last re-read
   for (const line of lines.slice(1)) {
     const i = line.indexOf('\t'), name = line.slice(0, i), val = line.slice(i + 1);
-    const key = FROM_SCRIPT.includes(name) ? 'p:' + name : name === 'staff' || name === 'edits' ? name : null;
+    const key = name === 'players' ? 'kiosk:players' : FROM_SCRIPT.includes(name) && !(env.KIOSK_LIVE === '1' && /^wellness/.test(name)) ? 'p:' + name : name === 'staff' || name === 'edits' ? name : null; // once live, the wellness is computed here (kiosk.js)
     if (!key || !val || val === 'null') continue;
     if (name === 'staff') out.staff = JSON.parse(val);
     const etag = await hash(val.replace(/"generated_at":"[^"]*"/, ''));
