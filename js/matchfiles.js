@@ -42,7 +42,7 @@ function mfKind(name) {
 /** The match sheet of an XML (UTF-16 or UTF-8): home, away, date, competition, round. */
 async function mfXmlMeta(file) {
   const buf = await file.slice(0, 600000).arrayBuffer(), b = new Uint8Array(buf);
-  const text = new TextDecoder(b[0] === 0xff && b[1] === 0xfe ? 'utf-16le' : b[0] === 0xfe && b[1] === 0xff ? 'utf-16be' : 'utf-8').decode(buf);
+  const text = new TextDecoder((b[0] === 0xff && b[1] === 0xfe) || (b[0] && b[1] === 0) ? 'utf-16le' : (b[0] === 0xfe && b[1] === 0xff) || (b[0] === 0 && b[1]) ? 'utf-16be' : 'utf-8').decode(buf); // the provider's files have no BOM
   const attr = (tag, name) => { const m = new RegExp(`<${tag}\\b[^>]*\\b${name}="([^"]*)"`, 'i').exec(text); return m ? m[1] : ''; };
   const team = (type) => { const m = new RegExp(`<Team\\b[^>]*Type="${type}"[^>]*>`, 'i').exec(text); const n = m && /Name="([^"]*)"/.exec(m[0]); return n ? n[1] : ''; };
   const dt = attr('Match', 'DateAndTime'), d = /(\d{2})\/(\d{2})\/(\d{4})/.exec(dt);
