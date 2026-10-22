@@ -18,7 +18,8 @@
  */
 import { kioskRoute, kioskMirror, kioskCompute } from './kiosk.js'; // the players' wellness / RPE pages (2026-10-22)
 
-const UPLOADS = ['workload', 'sessions', 'objectives', 'calendar', 'tests', 'reports', 'staff_report', 'plan_lib', 'squad_stats', 'match_report', 'intensity'];
+const UPLOADS = ['workload', 'sessions', 'objectives', 'calendar', 'tests', 'reports', 'staff_report', 'plan_lib', 'squad_stats', 'match_report', 'intensity', 'tactical'];
+const ADMIN_ONLY = ['tactical']; // the match files' data (line-ups, scorers, tactics): the admin only, until he shares it
 const FROM_SCRIPT = ['home', 'wellness', 'wellness_history']; // computed by the Google script from the kiosk check-ins
 const DATA = [...FROM_SCRIPT, ...UPLOADS];
 const KEY_ONLY = ['player_photos', 'build_status']; // kept for the online calculation, not served here (the site reads the photos from the script); build_status → /api/me (admin)
@@ -92,6 +93,7 @@ async function sessionUser(req, env) {
 
 async function data(req, name, user, env, ctx) {
   if (!DATA.includes(name)) return json({ ok: false, error: 'unknown_action' }, 404);
+  if (ADMIN_ONLY.includes(name) && (!user || user.role !== 'admin')) return json({ ok: false, error: 'forbidden' }, 403);
   const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-cache', 'X-User': encodeURIComponent(JSON.stringify(user)) };
   if (name === 'calendar') { // + the staff's calendar edits (kept fresh by refresh)
     const [cal, edits] = await Promise.all([env.DATA.get('p:calendar', 'text'), env.DATA.get('edits', 'text')]);

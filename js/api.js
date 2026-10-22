@@ -8,7 +8,7 @@ function cacheSet(action, data) {
 
 /** The Cloudflare server (same address as the site): the data from storage in a fraction of a second, with the staff
  * session. Anything failing there → the Google script, as before. */
-const CF_DATA = ['home', 'wellness', 'wellness_history', 'workload', 'sessions', 'objectives', 'calendar', 'tests', 'reports', 'staff_report', 'plan_lib', 'squad_stats', 'match_report', 'intensity'];
+const CF_DATA = ['home', 'wellness', 'wellness_history', 'workload', 'sessions', 'objectives', 'calendar', 'tests', 'reports', 'staff_report', 'plan_lib', 'squad_stats', 'match_report', 'intensity', 'tactical'];
 const CF_FRESH = ['home', 'wellness', 'wellness_history']; // computed by the Google script from the check-ins: re-read when a page opens
 function cfOn() { return !AUTH.demo && !!AUTH.session && /\.workers\.dev$/.test(location.hostname); }
 function cfHeaders() { return { Authorization: 'Bearer ' + AUTH.session }; }
