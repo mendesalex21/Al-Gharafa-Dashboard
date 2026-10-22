@@ -107,7 +107,7 @@
   .q-label{font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:var(--gold); margin-bottom:10px; font-weight:700;}
   .q-text{font-size:clamp(24px,5vw,32px); font-weight:800; margin:0 0 34px;}
 
-  .scale-row{
+  .scale-row{ touch-action:none; -webkit-user-select:none; user-select:none; /* the drag never scrolls the page (it ate the next tap on OK) */
     display:flex; align-items:flex-end; gap:6px;
     width:100%; max-width:520px; margin:0 auto; height:150px;
     touch-action:none; cursor:pointer; -webkit-user-select:none; user-select:none;
@@ -148,6 +148,8 @@
   .done-check{width:96px;height:96px;border-radius:50%; background:var(--green); display:flex;align-items:center;justify-content:center; font-size:46px; margin-bottom:20px; color:#fff;}
   .done-wrap h2{margin:0 0 8px; font-size:26px;}
   .done-wrap p{color:var(--muted); margin:0 0 26px;}
+  .btn-primary{ touch-action:manipulation; transition:transform .08s ease, filter .08s ease; }
+  .btn-primary.pressed{ transform:scale(.94); filter:brightness(.88); }
   .btn-primary{background:var(--gold); color:var(--navy); border:none; font-weight:800; padding:14px 30px; border-radius:14px; font-size:15px; cursor:pointer;}
 
   .toast{
@@ -383,7 +385,7 @@
     validateBtn.style.display = "none";
       reveal(value);
       bars[value - 1].classList.add("picked");
-      setTimeout(function(){ answerQuestion(q.key, value); }, 260);
+      setTimeout(function(){ answerQuestion(q.key, value); }, 140);
     }
 
     row.onpointerdown = function(e){
@@ -408,9 +410,15 @@
       reveal(lastValue);
       validateBtn.style.display = "inline-block";
     };
-    validateBtn.onclick = function(){
-      if (lastValue) commit(lastValue);
+    var go = function(e){ // the first tap validates (pointer up, not the delayed click), once, with an immediate press
+      if (e) e.preventDefault();
+      if (!lastValue || committed) return;
+      validateBtn.classList.add("pressed");
+      setTimeout(function(){ validateBtn.classList.remove("pressed"); }, 160);
+      commit(lastValue);
     };
+    validateBtn.onpointerup = go;
+    validateBtn.onclick = go;
   }
 
   function answerQuestion(key, value){
