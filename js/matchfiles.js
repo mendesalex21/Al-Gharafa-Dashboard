@@ -46,7 +46,7 @@ async function mfXmlMeta(file) {
   const attr = (tag, name) => { const m = new RegExp(`<${tag}\\b[^>]*\\b${name}="([^"]*)"`, 'i').exec(text); return m ? m[1] : ''; };
   const team = (type) => { const m = new RegExp(`<Team\\b[^>]*Type="${type}"[^>]*>`, 'i').exec(text); const n = m && /Name="([^"]*)"/.exec(m[0]); return n ? n[1] : ''; };
   const dt = attr('Match', 'DateAndTime'), d = /(\d{2})\/(\d{2})\/(\d{4})/.exec(dt);
-  return { home: team('HomeTeam'), away: team('AwayTeam'), competition: attr('Match', 'CompetitionName'), round: attr('Match', 'MatchDay'), date: d ? `${d[3]}-${d[2]}-${d[1]}` : '' };
+  return { home: team('HomeTeam'), away: team('AwayTeam'), competition: attr('Match', 'CompetitionName'), round: attr('Match', 'MatchDay'), date: d ? `${d[3]}-${d[1]}-${d[2]}` : '' }; // the provider writes MM/DD/YYYY
 }
 
 async function mfAdd(files) {

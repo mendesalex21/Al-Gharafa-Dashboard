@@ -30,6 +30,9 @@ export default {
       if (path === '/api/upload' && req.method === 'POST') return await upload(req, env);
       if ((path === '/api/snapshot' || path === '/api/payload') && req.method === 'GET') return await keyRead(req, path, env);
       if (path === '/api/match-file' && req.method === 'GET') return await mfRead(req, env); // the online calculation (upload key)
+      if (path === '/api/match-files' && req.headers.get('X-Upload-Key')) { // the PC's bulk upload of match files (sync/upload_match_files.py)
+        return env.UPLOAD_KEY && same(req.headers.get('X-Upload-Key'), env.UPLOAD_KEY) ? await matchFiles(req, { role: 'admin', email: 'pc upload' }, env) : json({ ok: false, error: 'forbidden' }, 403);
+      }
       if (path === '/api/rebuild' && req.method === 'POST' && req.headers.get('X-Upload-Key')) { // the PC (tests); the site uses its staff session below
         return env.UPLOAD_KEY && same(req.headers.get('X-Upload-Key'), env.UPLOAD_KEY) ? await rebuild(env) : json({ ok: false, error: 'forbidden' }, 403);
       }
