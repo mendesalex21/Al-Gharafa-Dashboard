@@ -2136,3 +2136,15 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .am-bar{position:relative;flex:1;min-width:160px;display:flex;align-items:center}.am-bar input{width:100%;accent-color:#16269e}.am-bar i{position:absolute;top:-12px;font-style:normal;font-size:11px;transform:translateX(-50%);pointer-events:none}
 .am-cap{font-size:11.5px;color:var(--ink-muted)}
 @media (max-width: 900px) { .am-a, .rd-row, .rd-two, .tt-two, .tt-two.w { grid-template-columns: 1fr; } .am-list { max-height: 320px; } }
+/* Home: today's Session Plan — the groups, the compensatory group and its objectives (home.js) */
+.ho-grp { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.ho-grp span { font-size: 11.5px; border-radius: 999px; padding: 3px 9px; background: var(--surface-2); color: var(--ink-2); }
+.ho-grp span b { color: var(--ink); }
+.ho-grp .team { background: color-mix(in srgb, #34c759 16%, transparent); } .ho-grp .comp { background: color-mix(in srgb, #30b0c7 18%, transparent); } .ho-grp .recovery { background: color-mix(in srgb, #5ac8fa 16%, transparent); }
+.ho-cg { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.ho-cgh { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.ho-cgh b::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 3px; background: #30b0c7; margin-right: 6px; }
+.ho-prop { font-size: 11px; color: #b26a00; background: color-mix(in srgb, #ff9f0a 16%, transparent); border-radius: 999px; padding: 2px 8px; }
+.ho-cgp { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; }
+.ho-cgp span { display: inline-flex; align-items: center; gap: 5px; }
+.ho-cgp small { color: var(--ink-muted); font-size: 10.5px; }

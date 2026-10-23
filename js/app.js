@@ -10,7 +10,7 @@ const VIEW_RENDER = {
   reports: (o) => renderReports(o), roster: () => renderRoster(), plan: () => renderPlan(), matchfiles: () => renderMatchFiles(), tactical: () => renderTactical(),
 };
 const VIEW_REDRAW = {
-  home: () => drawHome(), longitudinal: () => drawLongitudinal(), sessions: (o) => drawSessions(o), objectives: () => drawObjectives(), intensity: () => drawIntensity(),
+  home: () => { hoLoadPlans(); drawHome(); }, longitudinal: () => drawLongitudinal(), sessions: (o) => drawSessions(o), objectives: () => drawObjectives(), intensity: () => drawIntensity(),
   team: () => drawTeam(), squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: () => drawCalendar(), reports: () => rpFit(), roster: () => drawRoster(), plan: () => splDraw(), matchfiles: () => drawMatchFiles(), tactical: () => drawTactical(),
 };
 let CURRENT_VIEW = null;
