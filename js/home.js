@@ -134,7 +134,6 @@ function hoToday(D) {
   if (compIds.length && D.comp) {
     const prop = !G && D.proposed;
     comp = `<div class="ho-cg"><div class="ho-cgh"><b>Compensatory session · ${compIds.length} players</b>${prop ? '<span class="ho-prop">proposed · not in the Session Plan yet</span>' : ''}</div>
-      <div class="ho-cgp">${(prop ? D.proposed : G.comp).map((p) => `<span title="${escapeHtml(p.why || '')}">${avatarHtml(p.id, playerName(p.id), 20)}${escapeHtml(playerName(p.id))}${p.why ? `<small>${escapeHtml(p.why)}</small>` : ''}</span>`).join('')}</div>
       <div class="ho-rows">${hoRows(D.comp)}</div><div class="ho-sub">objective = the mean of the last ${D.comp.n} compensatory sessions (team average) · band = their usual range${G && G.recovery.length ? ` · recovery: ${G.recovery.length} players (no GPS)` : ''}</div></div>`;
   }
   const none = D.dayOff ? '<p class="ho-none">Team day off.</p>' : `<p class="ho-none">No training planned today${next ? ` · next: ${escapeHtml(next.opponent)} ${hoDay(next.start, { weekday: 'short', day: 'numeric' })}` : ''}.</p>`;
@@ -183,11 +182,19 @@ function hoAttnData(D) {
   const ovV = (a) => (a.ov.length === 4 ? `all 4 · ${SV_ACS[a.ov[0].k]} ${a.ov[0].a.toFixed(2)}` : a.ov.slice(0, 2).map((o) => `${SV_ACS[o.k]} ${o.a.toFixed(2)}`).join(' · '));
   const over = at.filter((a) => a.over).sort((a, b) => b.ov.length - a.ov.length || b.ov[0].a - a.ov[0].a).map((a) => ({ p: a.p, v: ovV(a) + (a.p.ret && s.kind !== 'match' ? ` · return ${a.p.ret}/7` : ''), t: a.over }));
   const well = at.filter((a) => a.well || a.wdrop).sort((a, b) => !!b.well - !!a.well).map((a) => ({ p: a.p, v: a.well ? `${a.w} %` : `${a.dr.prev} → ${a.dr.now} %`, t: a.well || a.wdrop }));
+  let wellNote = '< 50 %, or −10 % two mornings';
+  if (s.date < D.today && D.w.date === D.today) { // no session yet today: the wellness of this morning (as the Wellness alerts card), not the last session's
+    const all = [...svFlat(s), ...svOffGps(s), ...svKeepers(s)], find = (id) => all.find((p) => p.id === id) || { id, cat: 't' };
+    well.length = 0;
+    D.red.forEach((x) => well.push({ p: find(x.id), v: `${x.v} %`, t: `Wellness ${x.v} % this morning — in the red.` }));
+    D.dr.forEach((x) => well.push({ p: find(x.id), v: `${x.d.prev} → ${x.d.now} %`, t: `Wellness below his average two mornings in a row (his average ${x.d.avg} %).` }));
+    wellNote = 'this morning: < 50 %, or −10 % two mornings';
+  }
   const big = at.filter((a) => a.big || a.week).map((a) => { const x = a.bigs.length ? a.bigs[0] : a.wk[0]; return { p: a.p, v: `${a.bigs.length ? 'today' : 'week'} ${SV_BIGS[x.k] || x.k} z ${fmtSigned(x.z)}`, t: [a.big, a.week].filter(Boolean).join(' ') }; });
   const speed = [...svFlat(s), ...svOffGps(s)].filter((p) => p.days_hsv >= 10 && p.cat !== 'r').sort((a, b) => b.days_hsv - a.days_hsv).map((p) => ({ p, v: `${p.days_hsv} days`, t: `No run at 90 % of his max speed for ${p.days_hsv} days.` }));
   return { s, n: svFlat(s).length + svOffGps(s).length + svKeepers(s).length, flagged: new Set([...over, ...well, ...big].map((x) => x.p.id)).size, G: [
     { k: 'over', c: 'red', t: '2 weeks overload', note: `A:C > ${SV_OVER} this week and last`, xs: over },
-    { k: 'well', c: 'red', t: 'Wellness', note: '< 50 %, or −10 % two mornings', xs: well },
+    { k: 'well', c: 'red', t: 'Wellness', note: wellNote, xs: well },
     { k: 'big', c: 'orange', t: 'Big change', note: 'today or week so far, |z| ≥ 2', xs: big },
     { k: 'speed', c: 'blue', t: 'Speed top-up', note: 'no run at 90 % of max speed ≥ 10 days', xs: speed }] };
 }
