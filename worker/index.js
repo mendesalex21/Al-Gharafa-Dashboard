@@ -10,6 +10,7 @@
  *   POST /api/rebuild      starts the online calculation (GitHub workflow) after a change on the site (staff session)
  *   GET/PUT/DELETE /api/match-files   the match files (XML + tracking) in R2 — the admin only (staff session)
  *   GET  /api/match-file   the online calculation reads a match file (upload key)
+ *   PUT  /api/tactical-2d  the online calculation stores a match's 2D clips (upload key) · GET = the Tactical tab (admin only)
  *   cron, every 15 min     the same re-read as /api/refresh
  * Staff session: "s1.<payload>.<sig>", issued by the Google script after a Google sign-in (30 days, Auth.gs):
  * HMAC-SHA256 with SESSION_SECRET, the same secret on both sides. The e-mail must still be in the Staff list (KV
@@ -34,6 +35,7 @@ export default {
       if (path === '/api/upload' && req.method === 'POST') return await upload(req, env);
       if ((path === '/api/snapshot' || path === '/api/payload') && req.method === 'GET') return await keyRead(req, path, env);
       if (path === '/api/match-file' && req.method === 'GET') return await mfRead(req, env); // the online calculation (upload key)
+      if (path === '/api/tactical-2d' && req.method === 'PUT') return await t2dPut(req, env); // the online calculation (upload key)
       if (path === '/api/match-files' && req.headers.get('X-Upload-Key')) { // the PC's bulk upload of match files (sync/upload_match_files.py)
         return env.UPLOAD_KEY && same(req.headers.get('X-Upload-Key'), env.UPLOAD_KEY) ? await matchFiles(req, { role: 'admin', email: 'pc upload' }, env) : json({ ok: false, error: 'forbidden' }, 403);
       }
@@ -49,6 +51,7 @@ export default {
       if (path === '/api/rebuild' && req.method === 'POST') return await rebuild(env);
       if (path === '/api/me' && req.method === 'GET') return json({ ok: true, user, build: user.role === 'admin' ? await env.DATA.get('p:build_status', 'json') : undefined }); // his banner when an online build was not sent
       if (path === '/api/match-files') return await matchFiles(req, user, env);
+      if (path === '/api/tactical-2d' && req.method === 'GET') return await t2dGet(req, user, env);
       if (path === '/api/refresh' && req.method === 'POST') { const r = await refresh(env, new URL(req.url).searchParams.get('force') === '1'); return json({ ok: true, changed: r.changed || [] }); }
       return json({ ok: false, error: 'not_found' }, 404);
     } catch (err) {
@@ -195,6 +198,22 @@ async function mfRead(req, env) {
   if (!env.FILES || !/^mf\/\d+\/[\w.$ -]+\.gz$/.test(key)) return json({ ok: false, error: 'bad_key' }, 400);
   const obj = await env.FILES.get(key);
   return obj ? new Response(obj.body, { headers: { 'Content-Type': 'application/gzip', 'Cache-Control': 'no-store' } }) : json({ ok: false, error: 'not_found' }, 404);
+}
+
+/** Match 2D (Tactical tab): one gzip JSON per match in R2 under t2d/<match>.json.gz — written by the online calculation,
+ * read by the admin's page (it unzips it itself). */
+async function t2dPut(req, env) {
+  if (!env.UPLOAD_KEY || !same(req.headers.get('X-Upload-Key') || '', env.UPLOAD_KEY)) return json({ ok: false, error: 'forbidden' }, 403);
+  const match = (new URL(req.url).searchParams.get('match') || '').replace(/\D/g, '');
+  if (!env.FILES || !match) return json({ ok: false, error: 'bad_match' }, 400);
+  const obj = await env.FILES.put(`t2d/${match}.json.gz`, req.body, { httpMetadata: { contentType: 'application/gzip' } });
+  return json({ ok: true, match, size: obj.size });
+}
+async function t2dGet(req, user, env) {
+  if (!user || user.role !== 'admin') return json({ ok: false, error: 'forbidden' }, 403);
+  const match = (new URL(req.url).searchParams.get('match') || '').replace(/\D/g, '');
+  const obj = env.FILES && match ? await env.FILES.get(`t2d/${match}.json.gz`) : null;
+  return obj ? new Response(obj.body, { headers: { 'Content-Type': 'application/gzip', 'Cache-Control': 'private, max-age=3600' } }) : json({ ok: false, error: 'not_found' }, 404);
 }
 
 /** Update dashboard: a payload (?name=workload…) or a PDF (?name=pdf:S75_2026-10-05_Staff_report.pdf, kept 120 days). */

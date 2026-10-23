@@ -101,6 +101,8 @@ async function mfShowLink() {
     const r = await fetch('/api/me', { headers: cfHeaders() }), j = await r.json();
     if (j.ok && j.user && j.user.role === 'admin') {
       document.getElementById('nav-matchfiles').hidden = false;
+      if (typeof tcShowLink === 'function') tcShowLink(); // the Tactical tab: the admin only too
+      if (typeof tcShowLink === 'function') tcShowLink(); // the Tactical tab: the admin only too
       buildBanner(j.build);
       if (!MF_POLL) MF_POLL = setInterval(mfShowLink, 120000); // the banner follows the online build's retries
     }
