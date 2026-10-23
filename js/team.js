@@ -6,6 +6,8 @@
  *             a month's average week vs the season's weeks;
  *   A:C     — the ratio that day, at the end of the week, on average over the month.
  * Plus the team's wellness (wellness_history payload), with the number of check-ins under it. A match day has a "G".
+ * Games (his ask, 2026-10-23): the matches only — the team's match average (sessions payload, whole-game players), each
+ * match against the last 15 games (grey box = their middle half, colour = z), and a match-by-match table.
  * The page takes the whole width (his choice, 2026-10-12): two charts per row, each drawn at the real width of its card
  * (TM.cw) so the type keeps its size; TM.fit = the number of bars that still take a value and a date each.
  */
@@ -32,7 +34,7 @@ function renderTeam() {
     <div class="tm-tiles" id="tm-tiles"></div>
     <div class="tm-bar">
       <div class="tm-dates"><label>From <input type="date" id="tm-from"></label><label>to <input type="date" id="tm-to"></label><button type="button" class="linkbtn" id="tm-reset" hidden>Reset</button></div>
-      <div class="tm-ctl"><span class="tm-lab">Colour</span>${segHtml('tm-color', [['z', 'z-score'], ['ac', 'A:C']], TM.color)}${segHtml('tm-view', [['day', 'Day'], ['week', 'Week'], ['month', 'Month']], TM.view)}</div>
+      <div class="tm-ctl"><span class="tm-lab">Colour</span>${segHtml('tm-color', [['z', 'z-score'], ['ac', 'A:C']], TM.color)}${segHtml('tm-view', [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['games', 'Games']], TM.view)}</div>
     </div>
     <div class="tm-legend" id="tm-legend"></div>
     <div class="tm-grid" id="tm-charts"><div class="panel"><div class="empty">Loading…</div></div></div>
@@ -52,7 +54,7 @@ function renderTeam() {
 /** The dates shown: his choice, else the last 5 weeks (Day), the weeks that fit — 12 or more (Week), the season (Month). */
 function tmRange() {
   const t = WL.data.team, asOf = WL.data.as_of;
-  if (!TM.custom) { TM.to = asOf; TM.from = TM.view === 'day' ? addDays(asOf, -34) : TM.view === 'week' ? addDays(asOf, -7 * Math.max(12, TM.fit || 12) + 1) : t.start; }
+  if (!TM.custom) { TM.to = asOf; TM.from = TM.view === 'day' ? addDays(asOf, -34) : TM.view === 'week' ? addDays(asOf, -7 * Math.max(12, TM.fit || 12) + 1) : t.start; } // month, games: the season
   if (TM.from < t.start) TM.from = t.start;
   if (TM.to > asOf) TM.to = asOf;
   return [TM.from, TM.to];
@@ -162,6 +164,24 @@ function drawTeam() {
       items: wd.map(({ x, o }, i) => { const st = o ? hist(x) : null, zz = o && st.sd ? tmZof(o.v, st) : null, s = B.sess[x];
         return { v: o ? o.v : 0, n: o ? o.n : 0, col: !o ? '#aeaeb2' : z ? TM_ZCOL[tmZ(zz)] : tmWell(o.v), game: !!(s && s.kind === 'match'), sep: dateOf(x).getUTCDay() === 0 && !few, tick: tick(x, i), label: few && o ? Math.round(o.v) : '',
           tip: o ? `${fmtDay(x)}: ${Math.round(o.v)} % · ${o.n} check-ins${zz == null ? '' : ' · z ' + tmS(zz) + ' vs the 4 weeks before'}` : '' }; }) })}</div>`;
+  } else if (view === 'games') {
+    const ms = Object.values(B.sess).filter((x) => x.kind === 'match' && x.date >= from && x.date <= to && x.team).sort((a, b) => (a.date < b.date ? -1 : 1)), few = ms.length <= fit;
+    const opp = (x) => (x.cycle && x.cycle.opponent) || 'Friendly', short = (x) => opp(x).replace(/^Al[\s-]+/i, '').slice(0, 3).toUpperCase(); // 3 letters under each bar
+    const roomy = ms.length <= fit / 2, tick = (x) => (roomy ? `${short(x)} ${fmtDay(x.date, { day: 'numeric', month: 'numeric' })}` : short(x));
+    cards = B.keys.map(([k, l, u]) => `<div class="tm-card">${head(l, `per match · team average of the whole-game players${u ? ' · ' + u : ''} · grey box = the last 15 games`)}${tmChart({ title: l, dots: few, strip: 'none',
+      items: ms.map((x) => { const v = x.team[k], r = x.team_ref ? x.team_ref[k] : null, j = B.idx[x.date], ac = j == null ? null : B.t.acwr[k][j];
+        return { v, col: z ? TM_ZCOL[tmZ(r ? r.z : null)] : tmZone(ac)[0], lo: r ? r.p25 : null, hi: r ? r.p75 : null, tick: tick(x), label: few && v > 0 ? tmK(v) : '', ac,
+          tip: `${fmtDay(x.date)} · ${opp(x)}${x.cycle && x.cycle.competition ? ' · ' + x.cycle.competition : ''}: ${fmtN(v)}${r ? ` · last 15 games ${fmtN(r.p25)}–${fmtN(r.p75)} · z ${tmS(r.z)}` : ''} · ${x.n_core} whole-game players` }; }) })}</div>`).join('');
+    cards += `<div class="tm-card">${head('Wellness', 'team score on the match morning · % · green band = 70 % or more')}${tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'count', dots: few,
+      items: ms.map((x) => { const o = B.well[x.date]; return { v: o ? o.v : 0, n: o ? o.n : 0, col: !o ? '#aeaeb2' : tmWell(o.v), tick: tick(x), label: few && o ? Math.round(o.v) : '', tip: o ? `${fmtDay(x.date)} · ${opp(x)}: ${Math.round(o.v)} % · ${o.n} check-ins` : `${fmtDay(x.date)}: no check-in` }; }) })}</div>`;
+    const GK = [['td', 'Distance'], ['d15', '&gt; 15 km/h'], ['hit', '&gt; 20 km/h'], ['spr', 'Sprint dist.'], ['spr_n', 'Sprints'], ['acc_dec', 'Acc + Dec'], ['srpe', 'sRPE']];
+    const cell = (x, k) => { const v = x.team[k], r = x.team_ref ? x.team_ref[k] : null; return `<td class="b">${v == null ? '—' : tmK(v)}</td><td>${r && r.z != null ? `<span class="mz ${tmZ(r.z)}">${tmS(r.z)}</span>` : ''}</td>`; };
+    const rows = ms.slice().reverse().map((x) => { const o = B.well[x.date];
+      return `<tr><td><b>${fmtDay(x.date, { weekday: 'short', day: 'numeric', month: 'short' })}</b></td><td class="l">${crestHtml(opp(x), 18)} ${escapeHtml(opp(x))}</td><td class="l">${escapeHtml((x.cycle && x.cycle.competition) || '')}</td><td>${x.minutes || '—'}'</td><td>${x.n_core}</td>${GK.map(([k]) => cell(x, k)).join('')}<td class="b">${o ? `<b style="color:${tmWell(o.v)}">${Math.round(o.v)} %</b>` : '—'}</td></tr>`; }).join('');
+    const rng = (k) => { const st = tmStats(ms.map((x) => x.team[k]).filter((v) => v != null)); return st.p25 == null ? '—' : `${tmK(st.p25)}–${tmK(st.p75)}`; };
+    table = `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Match by match</h2><span class="panel-note">the team's average of the whole-game players · z vs the last 15 games before each match · wellness of the match morning</span></div>
+      <div class="table-wrap"><table class="tm-tbl tm-wide"><thead><tr><th>Date</th><th class="l">Opponent</th><th class="l">Comp.</th><th>Length</th><th>Players</th>${GK.map(([, l]) => `<th class="b">${l}</th><th>z</th>`).join('')}<th class="b">Wellness</th></tr></thead>
+        <tbody>${rows}${ms.length >= 3 ? `<tr class="usu"><td colspan="5"><b>Usual match</b> <small class="muted">middle half of these ${ms.length} games</small></td>${GK.map(([k]) => `<td class="b u3" colspan="2">${rng(k)}</td>`).join('')}<td></td></tr>` : ''}</tbody></table></div></section>`;
   } else if (view === 'week') {
     const ws = B.weeks.filter((w) => w.end >= from && w.start <= to);
     cards = B.keys.map(([k, l, u]) => { const st = tmStats(B.real(k).map((w) => w[k]));
@@ -230,12 +250,12 @@ function drawTeam() {
   document.getElementById('tm-charts').innerHTML = cards;
   document.getElementById('tm-table').innerHTML = table;
   root.querySelectorAll('[data-wk]').forEach((el) => { el.onclick = () => tmWeekOpen(el.dataset.wk); el.onkeydown = (e) => { if (e.key === 'Enter') tmWeekOpen(el.dataset.wk); }; });
-  const ref ={ day: 'the usual same MD', week: 'the other full weeks of the season', month: 'the season\'s weeks' }[view], acAt = { day: 'A:C that day', week: 'A:C at the end of the week', month: 'average A:C of the month' }[view];
+  const ref = { day: 'the usual same MD', week: 'the other full weeks of the season', month: 'the season\'s weeks', games: 'the last 15 games' }[view], acAt = { day: 'A:C that day', week: 'A:C at the end of the week', month: 'average A:C of the month', games: 'A:C on the match day' }[view];
   const cols = z ? [['#1d5fae', 'z ≤ −2'], ['#7fb0ea', '−2…−1'], ['#34c759', `usual (|z| < 1) vs ${ref}`], ['#ff9f0a', '+1…+2'], ['#e5484d', 'z ≥ +2'], ['#aeaeb2', 'no usual']] : [['#1d5fae', `${acAt} under 0.5`], ['#7fb0ea', '0.5–0.78'], ['#34c759', '0.78–1.37'], ['#ff9f0a', '1.37–1.5'], ['#e5484d', 'above 1.5']];
   document.getElementById('tm-legend').innerHTML = cols.map(([c, l]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')
-    + (view === 'day' ? '<span><i class="u"></i>usual for that MD (middle half of the last 15)</span><span><b class="g">G</b>match day</span>' : '<span><i class="b"></i>usual week of the season (the middle half of its full weeks)</span>')
+    + (view === 'day' ? '<span><i class="u"></i>usual for that MD (middle half of the last 15)</span><span><b class="g">G</b>match day</span>' : view === 'games' ? '<span><i class="u"></i>the last 15 games before that match (middle half)</span>' : '<span><i class="b"></i>usual week of the season (the middle half of its full weeks)</span>')
     + (view === 'week' ? '<span>click a week: its detail day by day</span>' : '')
-    + '<span><em></em>under each chart: A:C 7:28 on the same dates · band 0.78–1.37 · dashes 1.5</span>' + (z ? '' : '<span>wellness: green 70 % or more · orange 50–70 · red under 50</span>');
+    + (view === 'games' ? '' : '<span><em></em>under each chart: A:C 7:28 on the same dates · band 0.78–1.37 · dashes 1.5</span>') + (z ? '' : '<span>wellness: green 70 % or more · orange 50–70 · red under 50</span>');
 }
 
 /**

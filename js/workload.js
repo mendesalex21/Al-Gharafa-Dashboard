@@ -281,6 +281,14 @@ function plTiles(B) {
   return tiles + wcs + rh + well;
 }
 
+/** His matches (A and B team games he played), each with its minutes, his z vs his usual match (per 90) and the opponent. */
+function plGames(B) {
+  const { s, days } = B, sess = Object.fromEntries(((TR.sessions && TR.sessions.sessions) || []).map((x) => [x.date, x]));
+  return days.map((x, i) => ({ x, i, c: s.cat[i], min: s.min[i] || 0 })).filter((g) => (g.c === 'm' || g.c === 'b') && g.min > 0).map((g) => {
+    const se = sess[g.x], q = se ? se.players.find((r) => r.id === B.p.id) : null, ref = q && q.mdref ? q.mdref : null;
+    return { ...g, se, q, ref, opp: g.c === 'b' ? 'B team' : (se && se.cycle && se.cycle.opponent) || 'Friendly', comp: g.c === 'b' ? 'B team' : (se && se.cycle && se.cycle.competition) || '' };
+  });
+}
 function plCharts(B) {
   const { s, days, d, t, L, A } = B, z = PL.color === 'z';
   const sw = (k) => (k === 'hit' || k === 'd15' ? segHtml('pl-hit', [['hit', '> 20'], ['d15', '> 15']], PL.hit) : k === 'spr' || k === 'spr_n' ? segHtml('pl-spr', [['spr', 'Distance'], ['spr_n', 'Number']], PL.spr) : '');
@@ -289,6 +297,20 @@ function plCharts(B) {
   const tval = (k, i) => (t.daily[k] && i >= 0 ? t.daily[k][i] : null), twk = (w, k) => (B.tw[w.start] && B.tw[w.start][k] != null ? B.tw[w.start][k] : null);
   const card = (inner) => `<div class="tm-card">${inner}</div>`;
   let out = '';
+  if (PL.view === 'games') { // his matches only (his ask, 2026-10-23): raw or per 90 min, against his usual match
+    const gs = plGames(B).slice(-Math.max(8, TM.fit || 14)), p90 = PL.g90 === 'p90', few = gs.length <= (TM.fit || 99);
+    const short = (g) => (g.c === 'b' ? 'B' : g.opp.replace(/^Al[\s-]+/i, '').slice(0, 3).toUpperCase()), roomy = gs.length <= (TM.fit || 99) / 2;
+    const tick = (g) => (roomy ? `${short(g)} ${fmtDay(g.x, { day: 'numeric', month: 'numeric' })}` : short(g));
+    out = plKeys().map((k) => { const [l, u] = PL_LAB[k];
+      return card(head(k, l, `per match${p90 ? ' · per 90 min' : ` · his minutes`}${u ? ' · ' + u : ''} · grey box = his usual match${p90 ? '' : ' for those minutes'} · colour = z per 90`) + tmChart({ title: l, dots: few, strip: 'none',
+        items: gs.map((g) => { const raw = L[k] ? L[k][g.i] || 0 : 0, f = p90 ? 90 / g.min : 1, v = raw * f, r = g.ref, m = r && r.mean ? r.mean[k] : null, sd = r && r.sd ? r.sd[k] : null, sc = p90 ? 1 : g.min / 90;
+          const zz = r && r.z ? r.z[k] : null, ac = A[k] ? A[k][g.i] : null;
+          return { v, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, lo: m != null && sd != null ? Math.max(0, (m - 0.67 * sd) * sc) : null, hi: m != null && sd != null ? (m + 0.67 * sd) * sc : null, tick: tick(g), label: few && v > 0 ? tmK(v) : '',
+            tip: `${fmtDay(g.x)} · ${g.opp}${g.comp && g.comp !== g.opp ? ' · ' + g.comp : ''} · ${g.min}': ${fmtN(raw)}${g.min ? ` (${fmtN(raw * 90 / g.min)} per 90)` : ''}${m != null ? ` · his usual ${fmtN(m)} per 90` : ''}${zz == null ? '' : ' · z ' + tmS(zz)}` }; }) })); }).join('');
+    out += card(head('', 'Minutes', 'per match') + tmChart({ title: 'Minutes', dots: few, strip: 'none', max: 110,
+      items: gs.map((g) => ({ v: g.min, col: g.min >= 80 ? '#16269e' : g.min >= 45 ? '#5a7bd8' : '#aab8e8', tick: tick(g), label: few ? g.min : '', tip: `${fmtDay(g.x)} · ${g.opp}: ${g.min}'` })) }));
+    return out;
+  }
   if (PL.view === 'day') {
     const ds = days.filter((x) => x >= addDays(d.as_of, -34)), few = ds.length <= (TM.fit || 99);
     const dtick = (x) => (few ? fmtDay(x, { weekday: 'short', day: 'numeric' }) : dateOf(x).getUTCDay() === 0 ? fmtDay(x, { day: 'numeric', month: 'short' }) : '');
@@ -324,6 +346,15 @@ function plCharts(B) {
   out += card(head('', 'Wellness', 'his average score of the week · % · green band = 70 % or more') + tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'none', dots: true,
     items: ws.map((w) => { const v = B.wellOf(w.start, w.end); return { v: v || 0, col: v == null ? '#aeaeb2' : tmWell(v), label: v == null ? '' : Math.round(v), tick: w.label, now: !w.done, soft: !w.done, go: w.start, tip: v == null ? '' : `${w.label}: ${Math.round(v)} %` }; }) }));
   return out;
+}
+
+function plGamesTable(B) {
+  const gs = plGames(B), K = [['td', 'Distance'], ['d15', '&gt; 15'], ['hit', '&gt; 20'], ['spr', 'Sprint dist.'], ['spr_n', 'Sprints'], ['acc_dec', 'Acc + Dec'], ['srpe', 'sRPE']], p90 = PL.g90 === 'p90';
+  const cell = (g, k) => { const raw = B.L[k] ? B.L[k][g.i] || 0 : 0, v = p90 && g.min ? raw * 90 / g.min : raw, zz = g.ref && g.ref.z ? g.ref.z[k] : null;
+    return `<td class="b">${raw > 0 ? tmK(v) : '—'}</td><td>${zz == null ? '' : `<span class="mz ${tmZ(zz)}">${tmS(zz)}</span>`}</td>`; };
+  const rows = gs.slice().reverse().map((g) => `<tr><td><b>${fmtDay(g.x, { weekday: 'short', day: 'numeric', month: 'short' })}</b></td><td class="l">${g.c === 'b' ? '' : crestHtml(g.opp, 18) + ' '}${escapeHtml(g.opp)}</td><td class="l">${escapeHtml(g.comp && g.comp !== g.opp ? g.comp : '')}</td><td class="b">${g.min}'</td>${K.map(([k]) => cell(g, k)).join('')}<td>${g.q && g.q.vmax ? fmtN(g.q.vmax, 1) : '—'}</td></tr>`).join('');
+  return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Match by match</h2><span class="panel-note">${p90 ? 'per 90 minutes' : 'his raw numbers'} · z vs his usual match, per 90 (his last games) · max speed in km/h</span></div>
+    <div class="table-wrap"><table class="tm-tbl tm-wide"><thead><tr><th>Date</th><th class="l">Opponent</th><th class="l">Comp.</th><th class="b">Minutes</th>${K.map(([, l]) => `<th class="b">${l}</th><th>z</th>`).join('')}<th>Max speed</th></tr></thead><tbody>${rows || '<tr><td colspan="19" class="muted">No match yet</td></tr>'}</tbody></table></div></section>`;
 }
 
 function plTable(B) {
@@ -464,13 +495,14 @@ function drawPlayerLoad(opts) {
     : [0.4, 0.6, 1, 1.4, 1.6].map((r) => `<span><i style="background:${tmZone(r)[0]}"></i>${tmZone(r)[1]}</span>`).join('');
   body.innerHTML = `<div class="tm-tiles pl-tiles">${plTiles(B)}</div>
     <div class="grid2">${box('Weekly load z-score', 'Sunday–Saturday weeks vs his previous 6 weeks', '<div class="table-wrap" id="pl-z"></div>')}${box(`Availability · last ${s.cat.length} days`, '', '<div id="pl-timeline"></div>')}</div>
-    <div class="tm-bar"><div class="tm-dates muted">${PL.view === 'day' ? 'The last 5 weeks' : PL.view === 'week' ? 'The last weeks' : 'The season'}</div>
-      <div class="tm-ctl"><span class="tm-lab">Team</span>${segHtml('pl-team', [['off', 'Off'], ['on', 'Show']], PL.team ? 'on' : 'off')}<span class="tm-lab">Colour</span>${segHtml('pl-color', [['z', 'z-score'], ['ac', 'A:C']], PL.color)}${segHtml('pl-view', [['day', 'Day'], ['week', 'Week'], ['month', 'Month']], PL.view)}</div></div>
+    <div class="tm-bar"><div class="tm-dates muted">${PL.view === 'day' ? 'The last 5 weeks' : PL.view === 'week' ? 'The last weeks' : PL.view === 'games' ? 'His last matches' : 'The season'}</div>
+      <div class="tm-ctl">${PL.view === 'games' ? segHtml('pl-g90', [['raw', 'Raw'], ['p90', 'Per 90']], PL.g90 || 'raw') : `<span class="tm-lab">Team</span>${segHtml('pl-team', [['off', 'Off'], ['on', 'Show']], PL.team ? 'on' : 'off')}`}<span class="tm-lab">Colour</span>${segHtml('pl-color', [['z', 'z-score'], ['ac', 'A:C']], PL.color)}${segHtml('pl-view', [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['games', 'Games']], PL.view)}</div></div>
     <div class="tm-legend">${legend}<span>G = match</span>${PL.view === 'week' ? '<span>click a week: its detail day by day</span>' : ''}${PL.team ? '<span><i style="background:#6b6b70"></i>the team</span>' : ''}</div>
-    <div class="tm-grid${PL.team ? ' pl-team' : ''}">${plCharts(B)}</div>
-    ${plTable(B)}
+    <div class="tm-grid${PL.team && PL.view !== 'games' ? ' pl-team' : ''}">${plCharts(B)}</div>
+    ${PL.view === 'games' ? plGamesTable(B) : plTable(B)}
     <div class="grid2">${box('Match references', p.top3_src === 'own' ? `top 3 of his last ${p.top3_n} games ≥ 70 min (A + B, at most since last season), extra time left out` : `no game of 70 min yet — ${p.top3_src} reference`, plRefs(B))}${box('Physical tests', '', '<div id="pl-tests"></div>', '<a class="link" id="pl-tests-link">Open tests</a>')}</div>`;
-  bindSeg('pl-team', (v) => { PL.team = v === 'on'; drawPlayerLoad(); });
+  if (document.getElementById('pl-team')) bindSeg('pl-team', (v) => { PL.team = v === 'on'; drawPlayerLoad(); });
+  if (document.getElementById('pl-g90')) bindSeg('pl-g90', (v) => { PL.g90 = v; drawPlayerLoad(); }); // Games: raw or per 90
   bindSeg('pl-color', (v) => { PL.color = v; drawPlayerLoad(); });
   bindSeg('pl-view', (v) => { PL.view = v; drawPlayerLoad(); });
   bindSeg('pl-hit', (v) => { PL.hit = v; drawPlayerLoad(); });
