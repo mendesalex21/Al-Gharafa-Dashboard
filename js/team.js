@@ -20,6 +20,7 @@ const tmZ = (z) => (z == null || Number.isNaN(z) ? 'na' : z <= -2 ? 'vlow' : z <
 const tmK = (v) => (v == null ? '—' : v >= 10000 ? (v / 1000).toFixed(1) + 'k' : fmtN(Math.round(v)));
 const tmS = (z) => fmtSigned(Math.round(z * 10) / 10 || 0); // −0.04 reads 0.0, not −0.0
 const tmWell = (v) => (v == null ? '#aeaeb2' : v >= 70 ? '#34c759' : v >= 50 ? '#ff9f0a' : '#e5484d');
+const tmLogo = (name) => { const sl = clubSlug(name); return CLUB_LOGOS.has(sl) ? `img/clubs/${sl}.png` : null; }; // the opponent's crest under a match bar
 function tmStats(xs) {
   if (!xs.length) return { mean: null, sd: null, p25: null, p75: null };
   const v = xs.slice().sort((a, b) => a - b), q = (f) => v[Math.min(v.length - 1, Math.max(0, Math.round(f * (v.length - 1))))], m = v.reduce((a, b) => a + b, 0) / v.length;
@@ -89,7 +90,8 @@ function tmChart(o) {
     if (x.v > 0) s += `<rect x="${cx - w / 2}" y="${Y(x.v)}" width="${w}" height="${top + H1 - Y(x.v)}" rx="${Math.min(4, w / 3)}" fill="${x.col}"${x.soft ? ' opacity=".55"' : ''}><title>${escapeHtml(x.tip || '')}</title></rect>`;
     if (x.label) s += `<text x="${cx}" y="${Y(Math.max(x.v || 0, x.hi || 0)) - 5}" class="tm-val" text-anchor="middle">${x.label}</text>`;
     if (x.game) s += `<text x="${cx}" y="${top + H1 + 11}" class="tm-game" text-anchor="middle">G</text>`;
-    if (x.tick) s += `<text x="${cx}" y="${y2 + H2 + 14}" class="tm-ax${x.now ? ' now' : ''}" text-anchor="middle">${x.tick}</text>`;
+    if (x.logo) s += `<image href="${x.logo}" x="${cx - 8}" y="${y2 + H2 + 2}" width="16" height="16"><title>${escapeHtml(x.tip || '')}</title></image>`;
+    else if (x.tick) s += `<text x="${cx}" y="${y2 + H2 + 14}" class="tm-ax${x.now ? ' now' : ''}" text-anchor="middle">${x.tick}</text>`;
     if (x.go) s += `<rect x="${cx - bw / 2}" y="${top - 14}" width="${bw}" height="${H1 + 14}" class="tm-hit" data-wk="${x.go}"><title>${escapeHtml((x.tip ? x.tip + ' — ' : '') + 'click for the detail of the week')}</title></rect>`;
   });
   s += `<line x1="${padL}" x2="${W - padR}" y1="${top + H1}" y2="${top + H1}" class="tm-base"/>`;
@@ -170,18 +172,17 @@ function drawTeam() {
     const roomy = ms.length <= fit / 2, tick = (x) => (roomy ? `${short(x)} ${fmtDay(x.date, { day: 'numeric', month: 'numeric' })}` : short(x));
     cards = B.keys.map(([k, l, u]) => `<div class="tm-card">${head(l, `per match · team average of the whole-game players${u ? ' · ' + u : ''} · grey box = the last 15 games`)}${tmChart({ title: l, dots: few, strip: 'none',
       items: ms.map((x) => { const v = x.team[k], r = x.team_ref ? x.team_ref[k] : null, j = B.idx[x.date], ac = j == null ? null : B.t.acwr[k][j];
-        return { v, col: z ? TM_ZCOL[tmZ(r ? r.z : null)] : tmZone(ac)[0], lo: r ? r.p25 : null, hi: r ? r.p75 : null, tick: tick(x), label: few && v > 0 ? tmK(v) : '', ac,
+        return { v, col: z ? TM_ZCOL[tmZ(r ? r.z : null)] : tmZone(ac)[0], lo: r ? r.p25 : null, hi: r ? r.p75 : null, tick: tick(x), logo: tmLogo(opp(x)), label: few && v > 0 ? tmK(v) : '', ac,
           tip: `${fmtDay(x.date)} · ${opp(x)}${x.cycle && x.cycle.competition ? ' · ' + x.cycle.competition : ''}: ${fmtN(v)}${r ? ` · last 15 games ${fmtN(r.p25)}–${fmtN(r.p75)} · z ${tmS(r.z)}` : ''} · ${x.n_core} whole-game players` }; }) })}</div>`).join('');
-    cards += `<div class="tm-card">${head('Wellness', 'team score on the match morning · % · green band = 70 % or more')}${tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'count', dots: few,
-      items: ms.map((x) => { const o = B.well[x.date]; return { v: o ? o.v : 0, n: o ? o.n : 0, col: !o ? '#aeaeb2' : tmWell(o.v), tick: tick(x), label: few && o ? Math.round(o.v) : '', tip: o ? `${fmtDay(x.date)} · ${opp(x)}: ${Math.round(o.v)} % · ${o.n} check-ins` : `${fmtDay(x.date)}: no check-in` }; }) })}</div>`;
+    // no wellness card here: the players do not fill in the check-in on match days
     const GK = [['td', 'Distance'], ['d15', '&gt; 15 km/h'], ['hit', '&gt; 20 km/h'], ['spr', 'Sprint dist.'], ['spr_n', 'Sprints'], ['acc_dec', 'Acc + Dec'], ['srpe', 'sRPE']];
     const cell = (x, k) => { const v = x.team[k], r = x.team_ref ? x.team_ref[k] : null; return `<td class="b">${v == null ? '—' : tmK(v)}</td><td>${r && r.z != null ? `<span class="mz ${tmZ(r.z)}">${tmS(r.z)}</span>` : ''}</td>`; };
-    const rows = ms.slice().reverse().map((x) => { const o = B.well[x.date];
-      return `<tr><td><b>${fmtDay(x.date, { weekday: 'short', day: 'numeric', month: 'short' })}</b></td><td class="l">${crestHtml(opp(x), 18)} ${escapeHtml(opp(x))}</td><td class="l">${escapeHtml((x.cycle && x.cycle.competition) || '')}</td><td>${x.minutes || '—'}'</td><td>${x.n_core}</td>${GK.map(([k]) => cell(x, k)).join('')}<td class="b">${o ? `<b style="color:${tmWell(o.v)}">${Math.round(o.v)} %</b>` : '—'}</td></tr>`; }).join('');
+    const rows = ms.slice().reverse().map((x) => {
+      return `<tr><td><b>${fmtDay(x.date, { weekday: 'short', day: 'numeric', month: 'short' })}</b></td><td class="l">${crestHtml(opp(x), 18)} ${escapeHtml(opp(x))}</td><td class="l">${escapeHtml((x.cycle && x.cycle.competition) || '')}</td><td>${x.minutes || '—'}'</td><td>${x.n_core}</td>${GK.map(([k]) => cell(x, k)).join('')}</tr>`; }).join('');
     const rng = (k) => { const st = tmStats(ms.map((x) => x.team[k]).filter((v) => v != null)); return st.p25 == null ? '—' : `${tmK(st.p25)}–${tmK(st.p75)}`; };
-    table = `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Match by match</h2><span class="panel-note">the team's average of the whole-game players · z vs the last 15 games before each match · wellness of the match morning</span></div>
-      <div class="table-wrap"><table class="tm-tbl tm-wide"><thead><tr><th>Date</th><th class="l">Opponent</th><th class="l">Comp.</th><th>Length</th><th>Players</th>${GK.map(([, l]) => `<th class="b">${l}</th><th>z</th>`).join('')}<th class="b">Wellness</th></tr></thead>
-        <tbody>${rows}${ms.length >= 3 ? `<tr class="usu"><td colspan="5"><b>Usual match</b> <small class="muted">middle half of these ${ms.length} games</small></td>${GK.map(([k]) => `<td class="b u3" colspan="2">${rng(k)}</td>`).join('')}<td></td></tr>` : ''}</tbody></table></div></section>`;
+    table = `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Match by match</h2><span class="panel-note">the team's average of the whole-game players · z vs the last 15 games before each match</span></div>
+      <div class="table-wrap"><table class="tm-tbl tm-wide"><thead><tr><th>Date</th><th class="l">Opponent</th><th class="l">Comp.</th><th>Length</th><th>Players</th>${GK.map(([, l]) => `<th class="b">${l}</th><th>z</th>`).join('')}</tr></thead>
+        <tbody>${rows}${ms.length >= 3 ? `<tr class="usu"><td colspan="5"><b>Usual match</b> <small class="muted">middle half of these ${ms.length} games</small></td>${GK.map(([k]) => `<td class="b u3" colspan="2">${rng(k)}</td>`).join('')}</tr>` : ''}</tbody></table></div></section>`;
   } else if (view === 'week') {
     const ws = B.weeks.filter((w) => w.end >= from && w.start <= to);
     cards = B.keys.map(([k, l, u]) => { const st = tmStats(B.real(k).map((w) => w[k]));

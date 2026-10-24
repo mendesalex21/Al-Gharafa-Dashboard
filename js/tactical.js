@@ -4,11 +4,13 @@
  *   League      every team from the files (a table built from them), a team's matches, then the match sheet
  *   Team style  each QSL team against the league average or another team: overview, with the ball, without the ball
  *               (centre = the fewest, dotted ring = the league average, edge = the most; tables = season totals)
- *   Match 2D    our matches with a tracking: the key moments (shots, high regains) and each player's sprints in 2D */
-const TC = { s: 'us', id: null, team: 'Al Gharafa', rd: { team: 'Al Gharafa', vs: 'league', open: new Set() }, data: null };
+ *   Players     the pass rankings (2026-10-24): players eliminated by the pass, line-breaking passes — top 10 and a
+ *               player's pass map, or the full table; League shows who breaks the lines in the team picked
+ *   Match 2D    our matches with a tracking: the key moments (shots, high regains, line-breaking passes) and each player's sprints */
+const TC = { s: 'us', id: null, team: 'Al Gharafa', rd: { team: 'Al Gharafa', vs: 'league', open: new Set() }, pk: { team: 'all', grp: 'all', min: 270, pl: null, full: false, sort: 'elim90' }, data: null };
 const TC_US = 'Al Gharafa';
 const TC_ICON = { goal: '⚽', pen: '⚽', og: '⚽', yellow: '🟨', red: '🟥', sub: '⇄' };
-const TC_SECTIONS = [['us', 'Al Gharafa'], ['league', 'League'], ['style', 'Team style'], ['2d', 'Match 2D']];
+const TC_SECTIONS = [['us', 'Al Gharafa'], ['league', 'League'], ['players', 'Players'], ['style', 'Team style'], ['2d', 'Match 2D']];
 
 function renderTactical() {
   const root = document.getElementById('view-tactical');
@@ -25,9 +27,11 @@ function drawTactical() {
   if (TC.s !== '2d') AM2.stop();
   if (TC.s === 'style') { box.innerHTML = d.radar ? tcStyle() : emptyState('No QSL match read yet'); tcStyleBind(); return; }
   if (TC.s === '2d') { tc2d(box); return; }
+  if (TC.s === 'players') { box.innerHTML = d.packing ? tcPlayers() : emptyState('No QSL match with a tracking read yet'); tcPlayersBind(); return; }
   if (!M.length) { box.innerHTML = emptyState('No match file yet — drop them on Admin › Match files'); return; }
   const sel = M.find((m) => m.id === TC.id) || M[0];
   box.innerHTML = TC.s === 'league' ? tcLeague(M, sel, TC.team) : tcSeason(M, sel);
+  box.querySelectorAll('[data-pkpl]').forEach((b) => b.addEventListener('click', () => { TC.pk.pl = b.dataset.pkpl; TC.pk.full = false; TC.s = 'players'; document.querySelectorAll('#tc-seg button').forEach((x) => x.classList.toggle('active', x.dataset.v === 'players')); drawTactical(); }));
   box.querySelectorAll('[data-id]').forEach((b) => b.addEventListener('click', () => { TC.id = b.dataset.id; drawTactical(); document.getElementById('tc-match').scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
   box.querySelectorAll('[data-team]').forEach((b) => b.addEventListener('click', () => { TC.team = b.dataset.team; const m = M.find((x) => x.home === TC.team || x.away === TC.team); if (m) TC.id = m.id; drawTactical(); }));
 }
@@ -89,7 +93,83 @@ function tcLeague(M, sel, team) {
   const rows = Object.values(T).sort((a, b) => (b.w * 3 + b.d) - (a.w * 3 + a.d) || (b.gf - b.ga) - (a.gf - a.ga)).map((t) => `<tr data-team="${escapeHtml(t.n)}" class="${t.n === team ? 'on' : ''}${t.n === TC_US ? ' us' : ''}"><td class="l">${crestHtml(t.n, 18)} ${escapeHtml(t.n)}</td><td>${t.p}</td><td>${t.w}-${t.d}-${t.l}</td><td>${t.gf}:${t.ga}</td><td><b>${t.w * 3 + t.d}</b></td><td>${(t.eff / t.p).toFixed(0)}'</td><td>${(t.ball / t.p).toFixed(0)}%</td><td>${(t.sh / t.p).toFixed(1)}</td></tr>`).join('');
   const tm = M.filter((m) => m.home === team || m.away === team);
   return `<div class="tt-c"><div class="tt-two w"><div class="tt-card"><h4>League — from the files you have <small>${M.filter((m) => m.competition === 'QSL').length} QSL matches · click a team</small></h4><div class="tc-scroll"><table class="tt-tbl"><thead><tr><th class="l">Team</th><th>P</th><th>W-D-L</th><th>Goals</th><th>Pts</th><th>In play</th><th>Ball</th><th>Shots</th></tr></thead><tbody>${rows}</tbody></table></div></div>
-    <div class="tt-card tc-list"><h4>${crestHtml(team, 22)} ${escapeHtml(team)} — its matches</h4>${tm.map((m) => `<button class="tt-li${m.id === sel.id ? ' on' : ''}" data-id="${m.id}"><small>${tcDay(m.date)} · ${escapeHtml(m.competition)}</small><span>${escapeHtml(m.home)} <b>${m.score[0]}–${m.score[1]}</b> ${escapeHtml(m.away)}</span></button>`).join('')}</div></div>${tcMatch(sel)}</div>`;
+    <div class="tt-card tc-list"><h4>${crestHtml(team, 22)} ${escapeHtml(team)} — its matches</h4>${tm.map((m) => `<button class="tt-li${m.id === sel.id ? ' on' : ''}" data-id="${m.id}"><small>${tcDay(m.date)} · ${escapeHtml(m.competition)}</small><span>${escapeHtml(m.home)} <b>${m.score[0]}–${m.score[1]}</b> ${escapeHtml(m.away)}</span></button>`).join('')}</div></div>${pkFocus(team)}${tcMatch(sel)}</div>`;
+}
+
+// ---------------------------------------------------------------- Players: the pass rankings
+const PK_GRP = (p) => (/Forward/.test(p) ? 'FWD' : /Midfield/.test(p) ? 'MID' : /Defender/.test(p) ? 'DEF' : 'MID');
+const PK_COLS = [['elim90', 'Players eliminated', '/90'], ['def90', 'Defenders eliminated', '/90'], ['lb90', 'Line-breaking passes', '/90'], ['elim', 'Players eliminated', 'total'], ['lb', 'Line-breaking passes', 'total'], ['elim_pp', 'Eliminated per pass', '']];
+const PK_TOP = ['#f59e0b', '#22d3ee', '#f472b6'];
+const pkOrd = (r) => r + (r % 10 === 1 && r !== 11 ? 'st' : r % 10 === 2 && r !== 12 ? 'nd' : r % 10 === 3 && r !== 13 ? 'rd' : 'th');
+function pkPlayers() { return (TC.data.packing.players || []).map((p) => ({ ...p, grp: PK_GRP(p.pos) })); }
+function pkList() { const F = TC.pk; return pkPlayers().filter((p) => p.min >= F.min && (F.team === 'all' || p.team === F.team) && (F.grp === 'all' || p.grp === F.grp)); }
+/** A pitch with line-breaking passes (we attack →): one player's, or a team's with its top 3 passers in colour. */
+function pkMap(filter, top = []) {
+  const w = 600, h = w * 68 / 105, s = w / 105, X = (x) => x * s, Y = (y) => y * s, by = Object.fromEntries(pkPlayers().map((p) => [p.pid, p]));
+  const ps = (TC.data.packing.passes || []).filter((q) => filter(by[q[0]] || {}, q[0]));
+  const L = 'stroke="rgba(255,255,255,.8)" stroke-width="1.3" fill="none"';
+  let svg = `<svg viewBox="0 -14 ${w} ${h + 18}" class="pk-map"><defs>${['#5aa7ff', '#c084fc'].map((c, i) => `<marker id="pka${i}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${c}"/></marker>`).join('')}</defs>
+    <rect width="${w}" height="${h}" rx="8" fill="#2f8a4c"/><rect width="${w}" height="${h}" rx="8" ${L}/><line x1="${X(52.5)}" y1="0" x2="${X(52.5)}" y2="${h}" ${L}/><circle cx="${X(52.5)}" cy="${Y(34)}" r="${X(9.15)}" ${L}/>
+    <rect x="0" y="${Y(13.84)}" width="${X(16.5)}" height="${Y(40.32)}" ${L}/><rect x="${X(88.5)}" y="${Y(13.84)}" width="${X(16.5)}" height="${Y(40.32)}" ${L}/><text x="${w - 4}" y="-3" text-anchor="end" font-size="10" fill="var(--ink-muted)">attack →</text>`;
+  if (top.length) ps.sort((a, b) => top.indexOf(a[0]) - top.indexOf(b[0])).forEach((q) => { const k = top.indexOf(q[0]);
+    svg += k < 0 ? `<line x1="${X(q[1])}" y1="${Y(q[2])}" x2="${X(q[3])}" y2="${Y(q[4])}" stroke="rgba(255,255,255,.18)" stroke-width="1"/>`
+      : `<line x1="${X(q[1])}" y1="${Y(q[2])}" x2="${X(q[3])}" y2="${Y(q[4])}" stroke="${PK_TOP[k]}" stroke-width="1.6"/><circle cx="${X(q[3])}" cy="${Y(q[4])}" r="2.2" fill="${PK_TOP[k]}"/>`; });
+  else ps.sort((a, b) => a[6] - b[6]).forEach((q) => { const c = q[6] >= 2 ? '#c084fc' : '#5aa7ff';
+    svg += `<line x1="${X(q[1])}" y1="${Y(q[2])}" x2="${X(q[3])}" y2="${Y(q[4])}" stroke="${c}" stroke-width="${1 + Math.min(q[5], 8) * 0.25}" opacity=".8" marker-end="url(#pka${q[6] >= 2 ? 1 : 0})"/>`; });
+  return { svg: svg + '</svg>', n: ps.length, two: ps.filter((q) => q[6] >= 2).length };
+}
+const PK_LEG = '<div class="pk-leg"><span><i style="background:#5aa7ff"></i>breaks 1 line</span><span><i style="background:#c084fc"></i>breaks both lines (midfield + defence)</span><span>thicker = more players eliminated</span></div>';
+function pkFilters() {
+  const F = TC.pk, teams = [...new Set(pkPlayers().map((p) => p.team))].sort(), opt = (sel, xs) => xs.map(([v, l]) => `<option value="${escapeHtml(v)}" ${v === sel ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('');
+  return `<section class="panel pk-top"><select class="select" id="pk-team">${opt(F.team, [['all', 'All teams'], ...teams.map((t) => [t, t])])}</select>
+    <select class="select" id="pk-grp">${opt(F.grp, [['all', 'All positions'], ['DEF', 'Defenders'], ['MID', 'Midfielders'], ['FWD', 'Forwards']])}</select>
+    <select class="select" id="pk-min">${opt(String(F.min), [['90', '90 min or more'], ['270', '270 min or more'], ['450', '450 min or more']])}</select>
+    ${segHtml('pk-view', [['top', 'Top 10 + pass map'], ['full', 'Full table']], F.full ? 'full' : 'top')}
+    <p class="pk-note">QSL · ${TC.data.packing.n_matches} matches with a tracking · <b>players eliminated</b>: ${escapeHtml(TC.data.packing.defs.elim)} · <b>line-breaking pass</b>: ${escapeHtml(TC.data.packing.defs.lb)} Per 90 minutes on the pitch.</p></section>`;
+}
+function pkBoard(k, title, sub) {
+  const rows = pkList().sort((a, b) => b[k] - a[k]).slice(0, 10), mx = rows.length ? rows[0][k] || 1 : 1;
+  return `<section class="panel"><span class="pk-k">${title} <small>${sub}</small></span>${rows.map((p, i) => `<button class="pk-bar ${p.team === TC_US ? 'us' : ''} ${p.pid === TC.pk.pl ? 'on' : ''}" data-pl="${p.pid}"><span class="n">${i + 1}</span><span><b>${crestHtml(p.team, 16)}${escapeHtml(p.n)} <small>${escapeHtml(p.team)} · ${p.grp} · ${p.min}'</small></b><i style="width:${p[k] / mx * 100}%"></i></span><span class="v">${p[k]}</span></button>`).join('') || emptyState('No player')}</section>`;
+}
+function tcPlayers() {
+  const F = TC.pk, L = pkList();
+  if (F.full) {
+    const rows = L.sort((a, b) => b[F.sort] - a[F.sort]);
+    const th = PK_COLS.map(([k, l, u]) => `<th class="${k === F.sort ? 'on' : ''}" data-sort="${k}">${l}${u ? ` <small>${u}</small>` : ''}${k === F.sort ? ' ▾' : ''}</th>`).join('');
+    return pkFilters() + `<section class="panel"><span class="pk-k">${rows.length} players <small>click a column to sort · a name opens his pass map</small></span><div class="tc-scroll"><table class="pk-tbl"><thead><tr><th class="l"></th><th class="l">Player</th><th class="l">Team</th><th>Min</th><th>Passes</th>${th}</tr></thead><tbody>
+      ${rows.map((p, i) => `<tr class="${p.team === TC_US ? 'us' : ''}"><td class="l pk-rk">${i + 1}</td><td class="l"><button class="linkbtn" data-pl="${p.pid}">${escapeHtml(p.n)}</button><small>${p.grp}</small></td><td class="l">${crestHtml(p.team, 18)}${escapeHtml(p.team)}</td><td>${p.min}</td><td>${p.passes}</td>${PK_COLS.map(([k]) => `<td class="${k === F.sort ? 'hot' : ''}">${p[k]}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`;
+  }
+  const all = pkPlayers();
+  if (!F.pl || !all.some((p) => p.pid === F.pl)) F.pl = (L.slice().sort((a, b) => b.lb90 - a.lb90)[0] || all[0]).pid;
+  const p = all.find((x) => x.pid === F.pl), m = pkMap((q, pid) => pid === p.pid), ok = all.filter((q) => q.min >= F.min);
+  const ours = all.filter((q) => q.team === TC_US && q.min >= F.min).sort((a, b) => b.lb90 - a.lb90).slice(0, 6), mxo = Math.max(1, ...ours.map((q) => q.lb90));
+  return pkFilters() + `<div class="pk-two">${pkBoard('elim90', 'Players eliminated by the pass', 'per 90 · top 10')}${pkBoard('lb90', 'Line-breaking passes', 'per 90 · top 10')}</div>
+    <div class="pk-wide"><section class="panel"><span class="pk-k">${crestHtml(p.team, 18)} ${escapeHtml(p.n)} <small>${escapeHtml(p.team)} · ${escapeHtml(p.pos)} · ${p.min} min · ${p.matches} matches</small></span>
+      <div class="pk-stat"><div><b>${p.elim90}</b><span>players eliminated / 90</span></div><div><b>${p.def90}</b><span>defenders eliminated / 90</span></div><div><b>${p.lb90}</b><span>line-breaking passes / 90</span></div><div><b>${p.elim_pp}</b><span>eliminated per pass</span></div></div>
+      <p class="pk-note">Rank in the league (${F.min}+ min): ${pkOrd(1 + ok.filter((q) => q.elim90 > p.elim90).length)} for players eliminated, ${pkOrd(1 + ok.filter((q) => q.lb90 > p.lb90).length)} for line-breaking passes.</p>
+      <span class="pk-k" style="margin-top:8px">Al Gharafa · line-breaking passes / 90</span>${ours.map((q) => `<button class="pk-bar us ${q.pid === F.pl ? 'on' : ''}" data-pl="${q.pid}"><span class="n">${1 + ok.filter((x) => x.lb90 > q.lb90).length}</span><span><b>${escapeHtml(q.n)} <small>${PK_GRP(q.pos)} · ${q.min}'</small></b><i style="width:${q.lb90 / mxo * 100}%"></i></span><span class="v">${q.lb90}</span></button>`).join('')}</section>
+    <section class="panel"><span class="pk-k">His line-breaking passes <small>${m.n} passes · ${m.two} through both lines · he attacks →</small></span>${m.svg}${PK_LEG}</section></div>`;
+}
+function tcPlayersBind() {
+  const box = document.getElementById('tc-body'), F = TC.pk;
+  [['pk-team', 'team'], ['pk-grp', 'grp'], ['pk-min', 'min']].forEach(([id, k]) => { const el = document.getElementById(id); if (el) el.onchange = () => { F[k] = k === 'min' ? +el.value : el.value; drawTactical(); }; });
+  if (document.getElementById('pk-view')) bindSeg('pk-view', (v) => { F.full = v === 'full'; drawTactical(); });
+  box.querySelectorAll('[data-sort]').forEach((th) => (th.onclick = () => { F.sort = th.dataset.sort; drawTactical(); }));
+  box.querySelectorAll('[data-pl]').forEach((b) => (b.onclick = () => { F.pl = b.dataset.pl; F.full = false; drawTactical(); }));
+}
+/** League: who breaks the lines in the team picked — its passers and its line-breaking passes (top 3 in colour). */
+function pkFocus(team) {
+  const K = TC.data.packing;
+  if (!K) return '';
+  const all = pkPlayers(), pl = all.filter((p) => p.team === team && p.min >= 90).sort((a, b) => b.elim90 - a.elim90);
+  if (!pl.length) return '';
+  const tot = pl.reduce((a, p) => a + p.lb, 0) || 1, top3 = all.filter((p) => p.team === team).sort((a, b) => b.lb - a.lb).slice(0, 3), m = pkMap((q) => q.team === team, top3.map((p) => p.pid));
+  const games = Math.max(...all.filter((p) => p.team === team).map((p) => p.matches));
+  return `<div class="tt-two w"><div class="tt-card"><h4>${crestHtml(team, 20)} Who breaks the lines <small>${escapeHtml(team)} · 90 min or more · share of the team's line-breaking passes · a name opens his pass map</small></h4>
+      <table class="tt-tbl"><thead><tr><th class="l">Player</th><th>Min</th><th>Eliminated /90</th><th>Line-breaking /90</th><th>Share</th></tr></thead><tbody>
+      ${pl.slice(0, 11).map((p) => `<tr data-pkpl="${p.pid}"><td class="l"><b>${escapeHtml(p.n)}</b> <small class="muted">${PK_GRP(p.pos)}</small></td><td>${p.min}</td><td><b>${p.elim90}</b></td><td>${p.lb90}</td><td>${Math.round(p.lb / tot * 100)} %</td></tr>`).join('')}</tbody></table>
+      <p class="tt-note">The top two make ${Math.round(pl.slice().sort((a, b) => b.lb - a.lb).slice(0, 2).reduce((a, p) => a + p.lb, 0) / tot * 100)} % of ${escapeHtml(team)}'s line-breaking passes.</p></div>
+    <div class="tt-card"><h4>Its line-breaking passes <small>${m.n} in ${games} matches · they attack →</small></h4>${m.svg}<div class="pk-leg">${top3.map((p, k) => `<span><i style="background:${PK_TOP[k]}"></i>${escapeHtml(p.n)} · ${p.lb}</span>`).join('')}<span><i style="background:#c8c8c8"></i>the others</span><span>dot = where the ball is received</span></div></div></div>`;
 }
 
 // ---------------------------------------------------------------- Team style (radar)
@@ -161,7 +241,7 @@ function tcStyleBind() {
 
 // ---------------------------------------------------------------- Match 2D
 const AM2_COL = [{ f: '#f5c518', k: '#16269e', gk: '#1f2937', gkk: '#f5c518' }, { f: '#d63b3b', k: '#fff', gk: '#7c3aed', gkk: '#fff' }];
-const AM2_FILTERS = [['all', 'All', () => true], ['us', 'Our shots', (c) => c.type === 'shot' && c.t === 0], ['op', 'Shots conceded', (c) => c.type === 'shot' && c.t === 1],
+const AM2_FILTERS = [['all', 'All', (c) => c.type !== 'lbp'], ['lbp', 'Line-breaking passes', (c) => c.type === 'lbp'], ['us', 'Our shots', (c) => c.type === 'shot' && c.t === 0], ['op', 'Shots conceded', (c) => c.type === 'shot' && c.t === 1],
   ['regain', 'High regains', (c) => c.type === 'regain' || c.regain], ['big', 'Chances xG ≥ 0.10', (c) => c.xg >= 0.1]];
 const AM2_KIND = { 'With the ball': '#2a78d6', 'Run in behind': '#7c3aed', 'Support run': '#0ca30c', Pressing: '#e5484d', 'Recovery run': '#e09a00', 'Defensive run': '#898781', 'Loose ball': '#b5b4aa' };
 const AM2 = { files: {}, match: null, d: null, mode: 'tac', c: 0, t: 0, play: false, sp: 1, f: 'all', pl: null, opt: { trails: true, names: true, line: true, block: false }, last: null, raf: null, cv: null, cx: null,
@@ -199,7 +279,7 @@ const am2List = () => am2Arr().map((c, i) => [c, i]).filter(([c]) => (AM2.mode =
 const am2Min = (c) => `${Math.floor(c.minute) + 1}'`;
 function am2Items() {
   if (AM2.mode === 'phys') return am2List().map(([c, i]) => `<button class="am-li" data-i="${i}"><span class="t">${am2Min(c)}</span><span class="am-kd" style="background:${AM2_KIND[c.kind]}"></span><span><b>${c.kind}</b><small>${c.dist} m · ${c.dur} s</small></span><span class="am-xg">${c.top ? '⚡ ' : ''}${c.vmax}</span></button>`).join('') || emptyState('No sprint');
-  return am2List().map(([c, i]) => `<button class="am-li" data-i="${i}"><span class="t">${am2Min(c)}</span><span class="am-ic ${c.t ? 'op' : 'us'}">${c.kind === 'goal' ? '⚽' : c.type === 'regain' ? '↺' : c.kind === 'on' ? '◎' : '○'}</span><span><b>${c.label}</b><small>${escapeHtml(c.who)}</small></span><span class="am-xg">${c.xg != null ? c.xg.toFixed(2) : ''}</span></button>`).join('') || emptyState('No moment');
+  return am2List().map(([c, i]) => `<button class="am-li" data-i="${i}"><span class="t">${am2Min(c)}</span><span class="am-ic ${c.t ? 'op' : 'us'}">${c.type === 'lbp' ? '⇢' : c.kind === 'goal' ? '⚽' : c.type === 'regain' ? '↺' : c.kind === 'on' ? '◎' : '○'}</span><span><b>${c.label}</b><small>${escapeHtml(c.who)}</small></span><span class="am-xg">${c.xg != null ? c.xg.toFixed(2) : ''}</span></button>`).join('') || emptyState('No moment');
 }
 function am2Render() {
   const d = AM2.d, phys = AM2.mode === 'phys', body = document.getElementById('am-body');
@@ -334,7 +414,8 @@ function am2Draw() {
   if (s.ball) { cx.beginPath(); cx.arc(X(s.ball[0]), Y(s.ball[1]), 6, 0, 7); cx.fillStyle = '#fff'; cx.fill(); cx.strokeStyle = '#111'; cx.lineWidth = 1.5; cx.stroke(); }
   const lastEv = c.events.filter((e) => e.ms <= t).pop();
   if (lastEv && t - lastEv.ms < 1800 && lastEv.who != null && P[lastEv.who]) {
-    const txt = `${lastEv.name} · ${P[lastEv.who].n}`; cx.font = '800 15px system-ui';
+    const pk = lastEv.el != null && (lastEv.el > 0 || lastEv.ln > 0) ? ` · ${lastEv.el} eliminated${lastEv.ln ? ` · ${lastEv.ln === 2 ? 'both lines' : '1 line'}` : ''}` : '';
+    const txt = `${lastEv.name} · ${P[lastEv.who].n}${pk}`; cx.font = '800 15px system-ui';
     const w = cx.measureText(txt).width + 26; cx.fillStyle = 'rgba(17,24,39,.82)'; cx.beginPath(); cx.roundRect(W / 2 - w / 2, H - PAD - 44, w, 32, 16); cx.fill();
     cx.fillStyle = '#fff'; cx.textAlign = 'center'; cx.fillText(txt, W / 2, H - PAD - 27);
   }

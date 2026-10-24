@@ -305,10 +305,10 @@ function plCharts(B) {
       return card(head(k, l, `per match${p90 ? ' · per 90 min' : ` · his minutes`}${u ? ' · ' + u : ''} · grey box = his usual match${p90 ? '' : ' for those minutes'} · colour = z per 90`) + tmChart({ title: l, dots: few, strip: 'none',
         items: gs.map((g) => { const raw = L[k] ? L[k][g.i] || 0 : 0, f = p90 ? 90 / g.min : 1, v = raw * f, r = g.ref, m = r && r.mean ? r.mean[k] : null, sd = r && r.sd ? r.sd[k] : null, sc = p90 ? 1 : g.min / 90;
           const zz = r && r.z ? r.z[k] : null, ac = A[k] ? A[k][g.i] : null;
-          return { v, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, lo: m != null && sd != null ? Math.max(0, (m - 0.67 * sd) * sc) : null, hi: m != null && sd != null ? (m + 0.67 * sd) * sc : null, tick: tick(g), label: few && v > 0 ? tmK(v) : '',
+          return { v, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, lo: m != null && sd != null ? Math.max(0, (m - 0.67 * sd) * sc) : null, hi: m != null && sd != null ? (m + 0.67 * sd) * sc : null, tick: tick(g), logo: g.c === 'b' ? null : tmLogo(g.opp), label: few && v > 0 ? tmK(v) : '',
             tip: `${fmtDay(g.x)} · ${g.opp}${g.comp && g.comp !== g.opp ? ' · ' + g.comp : ''} · ${g.min}': ${fmtN(raw)}${g.min ? ` (${fmtN(raw * 90 / g.min)} per 90)` : ''}${m != null ? ` · his usual ${fmtN(m)} per 90` : ''}${zz == null ? '' : ' · z ' + tmS(zz)}` }; }) })); }).join('');
     out += card(head('', 'Minutes', 'per match') + tmChart({ title: 'Minutes', dots: few, strip: 'none', max: 110,
-      items: gs.map((g) => ({ v: g.min, col: g.min >= 80 ? '#16269e' : g.min >= 45 ? '#5a7bd8' : '#aab8e8', tick: tick(g), label: few ? g.min : '', tip: `${fmtDay(g.x)} · ${g.opp}: ${g.min}'` })) }));
+      items: gs.map((g) => ({ v: g.min, col: g.min >= 80 ? '#16269e' : g.min >= 45 ? '#5a7bd8' : '#aab8e8', tick: tick(g), logo: g.c === 'b' ? null : tmLogo(g.opp), label: few ? g.min : '', tip: `${fmtDay(g.x)} · ${g.opp}: ${g.min}'` })) }));
     return out;
   }
   if (PL.view === 'day') {
