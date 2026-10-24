@@ -197,6 +197,13 @@ function splLibOf(name) {
 }
 /** The drill categories (his ask, 2026-10-24 — sync/drill_cats.py): every drill is forecast from its category's per-minute
  * load; the possessions in his three styles (small up to 5v5, medium 6v6–8v8, large 9v9 and more). */
+/** A drill's (or category's) profile as on the physical coach's site: sprint m/10', top speed, % of the match per minute. */
+const splPctMatch = (l) => { const m = SPL.lib.match_ref || {}; return l && l.td && m.td ? Math.round(l.td / m.td * 100) : null; };
+function splProfTip(l) {
+  const m = SPL.lib.match_ref || {}, pc = (k) => (l[k] != null && m[k] ? ` (${Math.round(l[k] / m[k] * 100)} % of a match)` : '');
+  return [`${Math.round(l.td)} m/min${pc('td')}`, l.hit != null ? `> 20 km/h ${l.hit.toFixed(1)} m/min${pc('hit')}` : '', l.spr != null ? `sprint ${(l.spr * 10).toFixed(1)} m/10'${pc('spr')}` : '',
+    l.acc_dec != null ? `Acc+Dec ${(l.acc_dec * 10).toFixed(1)} /10'${pc('acc_dec')}` : '', l.vmax ? `top speed ${l.vmax} km/h (median)` : ''].filter(Boolean).join(' · ');
+}
 const splCats = () => Object.fromEntries((SPL.lib.categories || []).map((c) => [c.key, c]));
 const splCatShort = (k) => { const c = splCats()[k]; return c ? c.label.replace(/\s*\(.*$/, '') : k === 'other' ? 'Not a team drill' : k; };
 const splSide = (t) => { const m = /(\d+)\s*vs?\s*(\d+)/i.exec(String(t || '')); return m ? Math.max(Number(m[1]), Number(m[2])) : 0; };
@@ -364,9 +371,12 @@ function splPlanHtml() {
   const team = p.drills.filter((d) => !SPL_NOT_TEAM.test(splName(d.name))), tot = team.reduce((a, d) => a + (Number(d.min) || 0), 0);
   const titleOf = {}; Object.entries({ ...SPL.lib.titles, ...SPL.saved.titles }).forEach(([t, n]) => { if (!titleOf[splName(n)]) titleOf[splName(n)] = t; });
   const ch = splChoices(), opt = (n, cur) => `<option ${splKey(n) === splKey(cur) ? 'selected' : ''}>${escapeHtml(n)}</option>`;
-  const cats = SPL.lib.categories || [], byCat = {}; // the drills by category (the possession styles first in theirs)
-  SPL.lib.library.slice().sort((a, b) => (b.style ? 1 : 0) - (a.style ? 1 : 0) || b.n - a.n).forEach((x) => { (byCat[x.cat || 'other'] = byCat[x.cat || 'other'] || []).push(splName(x.name)); });
-  const grouped = (cur) => [...cats.map((c) => c.key), 'other'].filter((k, i, a) => a.indexOf(k) === i && byCat[k]).map((k) => `<optgroup label="${escapeHtml(splCatShort(k))}">${byCat[k].map((n) => opt(n, cur)).join('')}</optgroup>`).join('');
+  // the drills under the physical coach's five families (Activation, Technical-tactical, Possession, Games, Physical — his
+  // site), by category inside a family, the most used first
+  const cats = SPL.lib.categories || [], fams = SPL.lib.families || [], famOf = Object.fromEntries(cats.map((c) => [c.key, c.family || 'other'])), catIdx = Object.fromEntries(cats.map((c, i) => [c.key, i])), byFam = {};
+  SPL.lib.library.slice().sort((a, b) => (catIdx[a.cat] ?? 99) - (catIdx[b.cat] ?? 99) || b.n - a.n).forEach((x) => { const f = famOf[x.cat] || 'other'; (byFam[f] = byFam[f] || []).push(splName(x.name)); });
+  const grouped = (cur) => (fams.length ? fams : [['other', 'Drills']]).filter(([k]) => byFam[k]).map(([k, l]) => `<optgroup label="${escapeHtml(l)}">${byFam[k].map((n) => opt(n, cur)).join('')}</optgroup>`).join('')
+    + (fams.length ? '' : Object.keys(byFam).filter((k) => k !== 'other').map((k) => byFam[k].map((n) => opt(n, cur)).join('')).join(''));
   const list = (cur) => (cats.length ? grouped(cur) : ch.names.map((n) => opt(n, cur)).join('')) + (ch.extra.length ? `<optgroup label="Created here · no data yet">${ch.extra.map((n) => opt(n, cur)).join('')}</optgroup>` : '');
   const opts = (cur) => `<option value="">Choose a drill…</option>${list(cur)}${cur && ![...ch.names, ...ch.extra].some((n) => splKey(n) === splKey(cur)) ? `<option selected>${escapeHtml(cur)}</option>` : ''}`;
   const rows = p.drills.map((d, i) => { const r8 = splRateOf(d.name), own = SPL_NOT_TEAM.test(splName(d.name)), ss = titleOf[splName(d.name)];
@@ -375,7 +385,7 @@ function splPlanHtml() {
     return `<div class="sp-dr"><span class="sp-ord"><button type="button" data-up="${i}" ${i ? '' : 'disabled'} aria-label="Move up">▲</button><button type="button" data-down="${i}" ${i < p.drills.length - 1 ? '' : 'disabled'} aria-label="Move down">▼</button></span><span class="no" style="background:${splColor(d.name)}">${i + 1}</span>
       <span class="nm"><select data-drill="${i}">${opts(d.name)}</select><small>${cap}${own ? '' : `<button type="button" class="sp-ed" data-card-edit="${i}">${splDef(d.name) ? '✎ card' : '+ pitch / players'}</button>`}</small></span>
       <span class="sp-min"><button type="button" data-min="${i}" data-step="-1">−</button><input type="number" min="1" max="120" value="${d.min || ''}" data-mins="${i}" aria-label="Minutes"><button type="button" data-min="${i}" data-step="1">+</button></span>
-      <span class="sp-int">${r8 && r8.l.td ? `≈ ${Math.round(r8.l.td)} m/min` : ''}</span><button type="button" class="x" data-del="${i}" aria-label="Remove">×</button></div>`; }).join('');
+      <span class="sp-int"${r8 ? ` title="${escapeHtml(splProfTip(r8.l))}"` : ''}>${r8 && r8.l.td ? `≈ ${Math.round(r8.l.td)} m/min${splPctMatch(r8.l) != null ? ` · <b>${splPctMatch(r8.l)} %</b> of a match` : ''}` : ''}</span><button type="button" class="x" data-del="${i}" aria-label="Remove">×</button></div>`; }).join('');
   const last = Object.keys(SPL.lib.recent).filter((d) => d < date && SPL.lib.recent[d].md === tag && SPL.lib.recent[d].drills.length).sort().pop();
   const sugg = lib.filter((x) => x.md.includes(tag) && !p.drills.some((d) => splName(d.name) === splName(x.name))).slice(0, 4);
   const line = team.map((d) => `<i style="flex:${d.min || 1};background:${splColor(d.name)}" title="${escapeHtml(d.name)}"><b>${d.min || ''}'</b></i>`).join('');
