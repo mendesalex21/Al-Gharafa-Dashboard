@@ -190,9 +190,25 @@ function splDrillInfo(name) {
   return [d.players == null ? '' : String(d.players).trim(), dim].filter(Boolean).join(' · ') || null;
 }
 function splLibOf(name) { const k = splKey(name); return k ? SPL.lib.library.find((x) => splKey(x.name) === k) || null : null; }
-/** The per-minute load the forecast uses: the drill's own history, else the drill its card borrows from (until it has data). */
+/** The drill categories (his ask, 2026-10-24 — sync/drill_cats.py): every drill is forecast from its category's per-minute
+ * load; the possessions in his three styles (small up to 5v5, medium 6v6–8v8, large 9v9 and more). */
+const splCats = () => Object.fromEntries((SPL.lib.categories || []).map((c) => [c.key, c]));
+const splCatShort = (k) => { const c = splCats()[k]; return c ? c.label.replace(/\s*\(.*$/, '') : k === 'other' ? 'Not a team drill' : k; };
+const splSide = (t) => { const m = /(\d+)\s*vs?\s*(\d+)/i.exec(String(t || '')); return m ? Math.max(Number(m[1]), Number(m[2])) : 0; };
+/** A drill's category: the library's (or its "forecast like" drill's); a possession drill takes its style from the players
+ * written in its name or card (4v4+2 → small, 7v7 → medium, 9v9 → large). */
+function splCatOf(name) {
+  const l = splLibOf(name), d = splDef(name);
+  let ck = l ? l.cat : null;
+  if (!ck && d && d.like) { const ll = splLibOf(d.like); ck = ll ? ll.cat : null; }
+  if (ck && /^poss_/.test(ck) && !(l && l.style)) { const sd = splSide(`${name} ${d ? d.players || '' : ''}`); if (sd) ck = sd <= 5 ? 'poss_s' : sd <= 8 ? 'poss_m' : 'poss_l'; }
+  return ck;
+}
+/** The per-minute load the forecast uses: its category's; without categories (an older payload), the drill's own history,
+ * else the drill its card borrows from. */
 function splRateOf(name) {
-  const own = splLibOf(name);
+  const own = splLibOf(name), ck = splCatOf(name), c = ck && ck !== 'other' ? splCats()[ck] : null;
+  if (c) return { l: { ...c, name: splCatShort(ck), min: own ? own.min : c.min }, own: false, cat: ck };
   if (own) return { l: own, own: true };
   const d = splDef(name), like = d && d.like ? splLibOf(d.like) : null;
   return like ? { l: like, own: false } : null;
@@ -343,11 +359,14 @@ function splPlanHtml() {
   const team = p.drills.filter((d) => !SPL_NOT_TEAM.test(splName(d.name))), tot = team.reduce((a, d) => a + (Number(d.min) || 0), 0);
   const titleOf = {}; Object.entries({ ...SPL.lib.titles, ...SPL.saved.titles }).forEach(([t, n]) => { if (!titleOf[splName(n)]) titleOf[splName(n)] = t; });
   const ch = splChoices(), opt = (n, cur) => `<option ${splKey(n) === splKey(cur) ? 'selected' : ''}>${escapeHtml(n)}</option>`;
-  const list = (cur) => ch.names.map((n) => opt(n, cur)).join('') + (ch.extra.length ? `<optgroup label="Created here · no data yet">${ch.extra.map((n) => opt(n, cur)).join('')}</optgroup>` : '');
+  const cats = SPL.lib.categories || [], byCat = {}; // the drills by category (the possession styles first in theirs)
+  SPL.lib.library.slice().sort((a, b) => (b.style ? 1 : 0) - (a.style ? 1 : 0) || b.n - a.n).forEach((x) => { (byCat[x.cat || 'other'] = byCat[x.cat || 'other'] || []).push(splName(x.name)); });
+  const grouped = (cur) => [...cats.map((c) => c.key), 'other'].filter((k, i, a) => a.indexOf(k) === i && byCat[k]).map((k) => `<optgroup label="${escapeHtml(splCatShort(k))}">${byCat[k].map((n) => opt(n, cur)).join('')}</optgroup>`).join('');
+  const list = (cur) => (cats.length ? grouped(cur) : ch.names.map((n) => opt(n, cur)).join('')) + (ch.extra.length ? `<optgroup label="Created here · no data yet">${ch.extra.map((n) => opt(n, cur)).join('')}</optgroup>` : '');
   const opts = (cur) => `<option value="">Choose a drill…</option>${list(cur)}${cur && ![...ch.names, ...ch.extra].some((n) => splKey(n) === splKey(cur)) ? `<option selected>${escapeHtml(cur)}</option>` : ''}`;
   const rows = p.drills.map((d, i) => { const r8 = splRateOf(d.name), own = SPL_NOT_TEAM.test(splName(d.name)), ss = titleOf[splName(d.name)];
     const cap = own ? 'individual / rehab work' : [ss ? 'StatSports: ' + escapeHtml(ss) : '', escapeHtml(splDefTxt(splDef(d.name))), escapeHtml(splWcsTxt(d.name)),
-      !r8 ? '<span class="sp-warn">no data yet — not in the forecast</span>' : r8.own ? '' : `forecast like ${escapeHtml(splName(r8.l.name))}`].filter(Boolean).join(' · ');
+      !r8 ? '<span class="sp-warn">no data yet — not in the forecast</span>' : r8.cat ? `forecast: ${escapeHtml(r8.l.name)}` : r8.own ? '' : `forecast like ${escapeHtml(splName(r8.l.name))}`].filter(Boolean).join(' · ');
     return `<div class="sp-dr"><span class="sp-ord"><button type="button" data-up="${i}" ${i ? '' : 'disabled'} aria-label="Move up">▲</button><button type="button" data-down="${i}" ${i < p.drills.length - 1 ? '' : 'disabled'} aria-label="Move down">▼</button></span><span class="no" style="background:${splColor(d.name)}">${i + 1}</span>
       <span class="nm"><select data-drill="${i}">${opts(d.name)}</select><small>${cap}${own ? '' : `<button type="button" class="sp-ed" data-card-edit="${i}">${splDef(d.name) ? '✎ card' : '+ pitch / players'}</button>`}</small></span>
       <span class="sp-min"><button type="button" data-min="${i}" data-step="-1">−</button><input type="number" min="1" max="120" value="${d.min || ''}" data-mins="${i}" aria-label="Minutes"><button type="button" data-min="${i}" data-step="1">+</button></span>
@@ -424,7 +443,7 @@ function splLoadHtml(date, p) {
     return `<div class="sp-lr"><span class="l">${label}</span><span class="sp-lt">${u ? `<i class="band" style="left:${pc(u[1])}%;width:${pc(u[2]) - pc(u[1])}%"></i><i class="mean" style="left:${pc(u[0])}%"></i>` : ''}<i class="dot ${lv}" style="left:${pc(v)}%"></i></span>
       <b>${k === 'td' ? (v / 1000).toFixed(1) + 'k' : Math.round(v)}<small> ${unit}</small></b><em class="${lv}">${lv === 'ok' ? 'usual ✓' : lv === 'lo' ? 'lighter' : lv === 'hi' ? 'heavier' : '—'}</em><small class="sp-acc">${(c[k] || {}).err != null ? (k === 'hit' ? 'indicative' : `±${c[k].err} %`) : ''}</small></div>`;
   };
-  return `<div class="sp-load"><div class="sp-h3">Planned team load <small>each drill's usual per-minute load × its planned minutes${ref ? ` · grey = usual ${splTag(date)} of a ${typ} microcycle (p25–p75, ${ref.n} sessions), line = average` : ' · no usual reference for this day'}</small></div>
+  return `<div class="sp-load"><div class="sp-h3">Planned team load <small>${(SPL.lib.categories || []).length ? 'each drill\'s category (its usual per-minute load)' : 'each drill\'s usual per-minute load'} × its planned minutes${ref ? ` · grey = usual ${splTag(date)} of a ${typ} microcycle (p25–p75, ${ref.n} sessions), line = average` : ' · no usual reference for this day'}</small></div>
     ${bar('td', 'Total distance', 'm')}${bar('acc_dec', 'Acc + Dec', '')}${bar('hit', '> 20 km/h', 'm')}
     ${none.length ? `<p class="sp-note warn">Not in the forecast (no data yet): ${none.map(escapeHtml).join(', ')} — open its card (+ pitch / players) and choose “Forecast like”.</p>` : ''}</div>`;
 }
