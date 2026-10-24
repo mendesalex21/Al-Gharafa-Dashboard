@@ -189,7 +189,12 @@ function splDrillInfo(name) {
   const dim = Number(d.length) && Number(d.width) ? `${Math.round(Number(d.length))}x${Math.round(Number(d.width))} m` : '';
   return [d.players == null ? '' : String(d.players).trim(), dim].filter(Boolean).join(' · ') || null;
 }
-function splLibOf(name) { const k = splKey(name); return k ? SPL.lib.library.find((x) => splKey(x.name) === k) || null : null; }
+function splLibOf(name) {
+  const k = splKey(name), f = (n) => SPL.lib.library.find((x) => splKey(x.name) === splKey(n)) || null;
+  if (!k) return null;
+  const a = (SPL.lib.alias || {})[String(name).split(/\s+/).join(' ').trim().toUpperCase()]; // a merged name (an old plan) → the drill kept (2026-10-24)
+  return f(name) || (a ? f(a) : null);
+}
 /** The drill categories (his ask, 2026-10-24 — sync/drill_cats.py): every drill is forecast from its category's per-minute
  * load; the possessions in his three styles (small up to 5v5, medium 6v6–8v8, large 9v9 and more). */
 const splCats = () => Object.fromEntries((SPL.lib.categories || []).map((c) => [c.key, c]));
