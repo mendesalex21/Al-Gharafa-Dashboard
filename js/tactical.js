@@ -6,11 +6,14 @@
  *               (centre = the fewest, dotted ring = the league average, edge = the most; tables = season totals)
  *   Players     the pass rankings (2026-10-24): players eliminated by the pass, line-breaking passes — top 10 and a
  *               player's pass map, or the full table; League shows who breaks the lines in the team picked
- *   Match 2D    our matches with a tracking: the key moments (shots, high regains, line-breaking passes) and each player's sprints */
-const TC = { s: 'us', id: null, team: 'Al Gharafa', rd: { team: 'Al Gharafa', vs: 'league', open: new Set() }, pk: { team: 'all', grp: 'all', min: 270, pl: null, full: false, sort: 'elim90' }, data: null };
+ *   Set pieces  corners (2026-10-24): players in the box, man / zonal marking, where the ball goes, shots — any team
+ *   Match 2D    our matches with a tracking: the key moments (shots, high regains, line-breaking passes) and each player's sprints
+ * The tracking ideas (payload tactical.ideas, sync/tactical_ideas.py): Team style › Transitions (rest defence, counter-press)
+ * and Space control · Players › Runs & receptions · Set pieces · the match sheet's shapes, pass network and space control. */
+const TC = { s: 'us', id: null, team: 'Al Gharafa', rd: { team: 'Al Gharafa', vs: 'league', open: new Set() }, pk: { team: 'all', grp: 'all', min: 270, pl: null, full: false, runs: false, sort: 'elim90' }, sp: { team: 'Al Gharafa' }, side: 'home', data: null };
 const TC_US = 'Al Gharafa';
 const TC_ICON = { goal: '⚽', pen: '⚽', og: '⚽', yellow: '🟨', red: '🟥', sub: '⇄' };
-const TC_SECTIONS = [['us', 'Al Gharafa'], ['league', 'League'], ['players', 'Players'], ['style', 'Team style'], ['2d', 'Match 2D']];
+const TC_SECTIONS = [['us', 'Al Gharafa'], ['league', 'League'], ['players', 'Players'], ['style', 'Team style'], ['set', 'Set pieces'], ['2d', 'Match 2D']];
 
 function renderTactical() {
   const root = document.getElementById('view-tactical');
@@ -27,10 +30,12 @@ function drawTactical() {
   if (TC.s !== '2d') AM2.stop();
   if (TC.s === 'style') { box.innerHTML = d.radar ? tcStyle() : emptyState('No QSL match read yet'); tcStyleBind(); return; }
   if (TC.s === '2d') { tc2d(box); return; }
+  if (TC.s === 'set') { box.innerHTML = d.ideas && d.ideas.corners.length ? ixSet() : emptyState('No QSL match with a tracking read yet'); ixSetBind(); return; }
   if (TC.s === 'players') { box.innerHTML = d.packing ? tcPlayers() : emptyState('No QSL match with a tracking read yet'); tcPlayersBind(); return; }
   if (!M.length) { box.innerHTML = emptyState('No match file yet — drop them on Admin › Match files'); return; }
   const sel = M.find((m) => m.id === TC.id) || M[0];
   box.innerHTML = TC.s === 'league' ? tcLeague(M, sel, TC.team) : tcSeason(M, sel);
+  if (document.getElementById('ix-side')) bindSeg('ix-side', (v) => { TC.side = v; drawTactical(); });
   box.querySelectorAll('[data-pkpl]').forEach((b) => b.addEventListener('click', () => { TC.pk.pl = b.dataset.pkpl; TC.pk.full = false; TC.s = 'players'; document.querySelectorAll('#tc-seg button').forEach((x) => x.classList.toggle('active', x.dataset.v === 'players')); drawTactical(); }));
   box.querySelectorAll('[data-id]').forEach((b) => b.addEventListener('click', () => { TC.id = b.dataset.id; drawTactical(); document.getElementById('tc-match').scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
   box.querySelectorAll('[data-team]').forEach((b) => b.addEventListener('click', () => { TC.team = b.dataset.team; const m = M.find((x) => x.home === TC.team || x.away === TC.team); if (m) TC.id = m.id; drawTactical(); }));
@@ -75,7 +80,7 @@ function tcStats(m) {
   return `<div class="tt-card"><h4>Team numbers</h4>${K.map(([k, l]) => { const a = m.stats.home[k] || 0, b = m.stats.away[k] || 0, t = a + b || 1;
     return `<div class="tt-st"><b>${a}</b><div><i class="h" style="width:${a / t * 100}%"></i><i class="a" style="width:${b / t * 100}%"></i></div><b>${b}</b><span>${l}</span></div>`; }).join('')}</div>`;
 }
-const tcMatch = (m) => `<div class="tt-match" id="tc-match">${tcHeader(m)}${tcTimeline(m)}<div class="tt-two">${tcEffective(m)}${tcStats(m)}</div>${tcLineups(m)}</div>`;
+const tcMatch = (m) => `<div class="tt-match" id="tc-match">${tcHeader(m)}${tcTimeline(m)}<div class="tt-two">${tcEffective(m)}${tcStats(m)}</div>${tcLineups(m)}${ixMatch(m)}</div>`;
 
 // ---------------------------------------------------------------- Al Gharafa · League
 function tcSeason(M, sel) {
@@ -124,7 +129,7 @@ function pkFilters() {
   return `<section class="panel pk-top"><select class="select" id="pk-team">${opt(F.team, [['all', 'All teams'], ...teams.map((t) => [t, t])])}</select>
     <select class="select" id="pk-grp">${opt(F.grp, [['all', 'All positions'], ['DEF', 'Defenders'], ['MID', 'Midfielders'], ['FWD', 'Forwards']])}</select>
     <select class="select" id="pk-min">${opt(String(F.min), [['90', '90 min or more'], ['270', '270 min or more'], ['450', '450 min or more']])}</select>
-    ${segHtml('pk-view', [['top', 'Top 10 + pass map'], ['full', 'Full table']], F.full ? 'full' : 'top')}
+    ${segHtml('pk-view', [['top', 'Top 10 + pass map'], ['full', 'Full table'], ...(TC.data.ideas ? [['runs', 'Runs & receptions']] : [])], F.runs ? 'runs' : F.full ? 'full' : 'top')}
     <p class="pk-note">QSL · ${TC.data.packing.n_matches} matches with a tracking · <b>players eliminated</b>: ${escapeHtml(TC.data.packing.defs.elim)} · <b>line-breaking pass</b>: ${escapeHtml(TC.data.packing.defs.lb)} Per 90 minutes on the pitch.</p></section>`;
 }
 function pkBoard(k, title, sub) {
@@ -133,6 +138,7 @@ function pkBoard(k, title, sub) {
 }
 function tcPlayers() {
   const F = TC.pk, L = pkList();
+  if (F.runs && TC.data.ideas) return pkFilters() + ixRuns();
   if (F.full) {
     const rows = L.sort((a, b) => b[F.sort] - a[F.sort]);
     const th = PK_COLS.map(([k, l, u]) => `<th class="${k === F.sort ? 'on' : ''}" data-sort="${k}">${l}${u ? ` <small>${u}</small>` : ''}${k === F.sort ? ' ▾' : ''}</th>`).join('');
@@ -153,9 +159,9 @@ function tcPlayers() {
 function tcPlayersBind() {
   const box = document.getElementById('tc-body'), F = TC.pk;
   [['pk-team', 'team'], ['pk-grp', 'grp'], ['pk-min', 'min']].forEach(([id, k]) => { const el = document.getElementById(id); if (el) el.onchange = () => { F[k] = k === 'min' ? +el.value : el.value; drawTactical(); }; });
-  if (document.getElementById('pk-view')) bindSeg('pk-view', (v) => { F.full = v === 'full'; drawTactical(); });
+  if (document.getElementById('pk-view')) bindSeg('pk-view', (v) => { F.full = v === 'full'; F.runs = v === 'runs'; drawTactical(); });
   box.querySelectorAll('[data-sort]').forEach((th) => (th.onclick = () => { F.sort = th.dataset.sort; drawTactical(); }));
-  box.querySelectorAll('[data-pl]').forEach((b) => (b.onclick = () => { F.pl = b.dataset.pl; F.full = false; drawTactical(); }));
+  box.querySelectorAll('[data-pl]').forEach((b) => (b.onclick = () => { F.pl = b.dataset.pl; F.full = false; F.runs = false; drawTactical(); }));
 }
 /** League: who breaks the lines in the team picked — its passers and its line-breaking passes (top 3 in colour). */
 function pkFocus(team) {
@@ -229,7 +235,106 @@ function tcStyle() {
       <p class="rd-note">QSL · ${R.n_matches} matches with an XML · every axis the same way: centre = the league's lowest team · dotted ring = league average · edge = the highest · the radar is per match, the tables give the season totals · rank 1 = the most · ⓘ = how it is calculated</p></section>
     <section class="panel"><div class="rd-hd"><span class="rd-k">Overview</span><small>results, set pieces and style · ${R.teams[S.team].n} matches</small></div><div class="rd-row"><div>${rdRadar(R, RD_AX.G, S.team, S.vs)}</div><div>${rdTable(R, RD_AX.G, S.team, S.vs)}</div></div></section>
     <div class="rd-two"><section class="panel"><span class="rd-k">With the ball</span>${rdRadar(R, RD_AX.C1, S.team, S.vs, 420)}${rdTable(R, RD_AX.C1, S.team, S.vs)}</section>
-      <section class="panel"><span class="rd-k">Without the ball</span>${rdRadar(R, RD_AX.C2, S.team, S.vs, 440)}${rdTable(R, RD_AX.C2, S.team, S.vs)}</section></div>`;
+      <section class="panel"><span class="rd-k">Without the ball</span>${rdRadar(R, RD_AX.C2, S.team, S.vs, 440)}${rdTable(R, RD_AX.C2, S.team, S.vs)}</section></div>
+    ${TC.data.ideas && ixQsl(S.team).length ? ixTransitions(S.team) + ixSpace(S.team) : ''}`;
+}
+
+// ---------------------------------------------------------------- the tracking ideas (2026-10-24)
+const IX = () => TC.data.ideas || { teams: {}, players: [], corners: [] };
+const ixQsl = (t) => ((IX().teams || {})[t] || []).filter((m) => m.qsl);
+const ixTeams = () => Object.keys(IX().teams || {}).filter((t) => ixQsl(t).length).sort();
+const ixAvg = (t, f) => { const xs = ixQsl(t).map(f).filter((v) => v != null); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
+const ixF = (v, d = 1) => (v == null ? '—' : v.toFixed(d));
+/** Every QSL team on one metric (its average over its matches), the team picked highlighted. */
+function ixBoard(title, sub, f, d = 1, asc = false, suf = '', hl = TC_US) {
+  const rows = ixTeams().map((t) => [t, ixAvg(t, f)]).filter((r) => r[1] != null).sort((a, b) => (asc ? a[1] - b[1] : b[1] - a[1])), mx = Math.max(...rows.map((r) => r[1])) || 1;
+  const lg = rows.length ? rows.reduce((a, r) => a + r[1], 0) / rows.length : null;
+  return `<section class="panel"><span class="pk-k">${title} <small>${sub}</small></span>${rows.map(([t, v], i) => `<div class="pk-bar ix ${t === hl ? 'us' : ''}"><span class="n">${i + 1}</span><span><b>${crestHtml(t, 16)}${escapeHtml(t)}</b><i style="width:${v / mx * 100}%"></i></span><span class="v">${ixF(v, d)}${suf}</span></div>`).join('')}
+    <p class="pk-note">League average ${ixF(lg, d)}${suf}${asc ? ' · sorted from the lowest' : ''}</p></section>`;
+}
+function ixKpi(t, label, f, d = 1, suf = '') {
+  const v = ixAvg(t, f), all = ixTeams().map((x) => ixAvg(x, f)).filter((y) => y != null), lg = all.length ? all.reduce((a, b) => a + b, 0) / all.length : null, r = 1 + all.filter((y) => y > v).length;
+  return `<div><span>${label}</span><b>${ixF(v, d)}${suf}</b><small>league ${ixF(lg, d)}${suf} · ${r}/${all.length}</small></div>`;
+}
+function ixTransitions(t) {
+  const M = ((IX().teams || {})[t] || []).slice().sort((a, b) => ((a.date || '') < (b.date || '') ? 1 : -1));
+  const rows = M.map((m) => { const r = m.rest || {}, c = m.cpress || {};
+    return `<tr><td class="l">${m.date ? tcDay(m.date) : ''}</td><td class="l">${crestHtml(m.opp, 16)} ${m.home ? 'vs' : '@'} ${escapeHtml(m.opp)}${m.qsl ? '' : ' <small class="muted">cup / Asia</small>'}</td><td>${(m.score || []).join('–')}</td><td>${ixF(r.own_half)}</td><td>${ixF(r.up3)}</td><td>${c.losses || '—'}</td><td>${ixF(c.near2)}</td><td>${ixF(c.back5)}</td><td>${ixF(c.regain5, 0)} %</td><td>${c.shots ?? '—'}</td><td>${ixF(c.shot15)} %</td></tr>`; }).join('');
+  return `<section class="panel"><div class="rd-hd"><span class="rd-k">Transitions</span><small>rest defence and counter-press · from the tracking</small></div>
+      <p class="pk-note"><b>Rest defence</b>: with the ball in the opponent's last third, the team's outfield players still in its own half, against the opponent's players left up there. <b>Counter-press</b>: every ball lost in open play — the team's players within 10 m of the ball 2 s later, its players goal-side 5 s later, the balls won back within 5 s, the losses that end in an opponent shot within 15 s. League averages and ranks from the QSL matches.</p>
+      <div class="ix-kpis">${ixKpi(t, 'Players kept back', (m) => m.rest && m.rest.own_half)}${ixKpi(t, 'Opponents left up', (m) => m.rest && m.rest.up3)}${ixKpi(t, 'Near the ball +2 s', (m) => m.cpress && m.cpress.near2)}${ixKpi(t, 'Goal-side +5 s', (m) => m.cpress && m.cpress.back5)}${ixKpi(t, 'Won back ≤ 5 s', (m) => m.cpress && m.cpress.regain5, 1, ' %')}${ixKpi(t, 'Loss → shot ≤ 15 s', (m) => m.cpress && m.cpress.shot15, 1, ' %')}</div></section>
+    <div class="ix-three">${ixBoard('Players kept back', 'ball in their last third · in own half', (m) => m.rest && m.rest.own_half, 2, false, '', t)}${ixBoard('Won back within 5 s', '% of the balls lost in open play', (m) => m.cpress && m.cpress.regain5, 1, false, ' %', t)}${ixBoard('A shot conceded within 15 s', '% of the balls lost · fewest first', (m) => m.cpress && m.cpress.shot15, 1, true, ' %', t)}</div>
+    <section class="panel"><span class="pk-k">${crestHtml(t, 18)} ${escapeHtml(t)} · match by match</span><div class="tc-scroll"><table class="tt-tbl"><thead><tr><th class="l">Date</th><th class="l">Opponent</th><th>Score</th><th>Kept back</th><th>Opp. left up</th><th>Balls lost</th><th>Near ball +2 s</th><th>Goal-side +5 s</th><th>Won back ≤ 5 s</th><th>Shots after loss</th><th>% of losses</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+}
+function ixSpace(t) {
+  return `<section class="panel"><div class="rd-hd"><span class="rd-k">Space control</span><small>every 2 s, each square of the pitch (2.5 m) goes to the team of the nearest player — speed and direction not counted</small></div>
+      <p class="pk-note"><b>With the ball</b>: the share of the opponent's half and of its last third the team controls when it attacks — how much room it finds. <b>Without the ball</b>: the share of the pitch it holds. Each match's minute by minute is in its match sheet.</p></section>
+    <div class="ix-three">${ixBoard('Opponent\'s last third controlled', 'with the ball · %', (m) => m.space && m.space.third_in, 1, false, ' %', t)}${ixBoard('Opponent\'s half controlled', 'with the ball · %', (m) => m.space && m.space.half_in, 1, false, ' %', t)}${ixBoard('Pitch held without the ball', '% of the pitch', (m) => m.space && m.space.all_out, 1, false, ' %', t)}</div>`;
+}
+/** Players › Runs & receptions: runs in behind (served) and receptions between the lines, per 90 — the filters of the page. */
+function ixRuns() {
+  const F = TC.pk, P = (IX().players || []).map((p) => ({ ...p, grp: PK_GRP(p.pos) })).filter((p) => p.min >= F.min && (F.team === 'all' || p.team === F.team) && (F.grp === 'all' || p.grp === F.grp));
+  const board = (k, title, sub, extra) => { const rows = P.slice().sort((a, b) => b[k] - a[k]).slice(0, 12), mx = rows[0] ? rows[0][k] || 1 : 1;
+    return `<section class="panel"><span class="pk-k">${title} <small>${sub}</small></span>${rows.map((p, i) => `<div class="pk-bar ix ${p.team === TC_US ? 'us' : ''}"><span class="n">${i + 1}</span><span><b>${crestHtml(p.team, 16)}${escapeHtml(p.n)} <small>${escapeHtml(p.team)} · ${p.grp} · ${p.min}'</small></b><i style="width:${p[k] / mx * 100}%"></i></span><span class="v">${p[k]}${extra ? `<small> ${extra(p)}</small>` : ''}</span></div>`).join('') || emptyState('No player')}</section>`; };
+  const team = F.team === 'all' ? TC_US : F.team, ours = (IX().players || []).filter((p) => p.team === team && p.min >= 90).sort((a, b) => b.between90 - a.between90);
+  return `<section class="panel"><p class="pk-note"><b>Run in behind</b>: a player of the team in possession going past the opponent's last outfield defender, faster than 4 m/s towards goal (that line at least 55 m from his goal); <b>served</b> = he receives a pass between 1 s before and 3 s after. <b>Between the lines</b>: a reception between the opponent's defensive unit (4 deepest) and its midfield unit (next 4), inside their width. <b>Space owned</b>: the area of the pitch nearest to him when his team has the ball.</p></section>
+    <div class="pk-two">${board('runs90', 'Runs in behind', 'per 90 · % served', (p) => `${p.served_pct} %`)}${board('between90', 'Receptions between the lines', 'per 90')}</div>
+    <section class="panel"><span class="pk-k">${crestHtml(team, 18)} ${escapeHtml(team)} <small>90 min or more</small></span><div class="tc-scroll"><table class="tt-tbl"><thead><tr><th class="l">Player</th><th>Min</th><th>Runs in behind</th><th>/90</th><th>Served</th><th>Receptions</th><th>Between the lines</th><th>/90</th><th>Space owned</th></tr></thead><tbody>
+      ${ours.map((p) => `<tr><td class="l"><b>${escapeHtml(p.n)}</b> <small class="muted">${PK_GRP(p.pos)}</small></td><td>${p.min}</td><td>${p.runs}</td><td>${p.runs90}</td><td>${p.served_pct} %</td><td>${p.recv}</td><td>${p.between}</td><td><b>${p.between90}</b></td><td>${p.space ? p.space + ' m²' : '—'}</td></tr>`).join('')}</tbody></table></div></section>`;
+}
+/** A pitch (we attack →), the whole of it or its attacking half. */
+function ixPitch(w, inner, half = false) {
+  const x0 = half ? 52.5 : 0, W = half ? 52.5 : 105, sc = w / W, h = 68 * sc, X = (x) => (x - x0) * sc, Y = (y) => y * sc, L = 'stroke="rgba(255,255,255,.85)" stroke-width="1.4" fill="none"';
+  let p = `<svg viewBox="-4 -4 ${w + 8} ${h + 8}" class="pk-map"><rect width="${w}" height="${h}" rx="8" fill="#2f8a4c"/><rect width="${w}" height="${h}" rx="8" ${L}/>`;
+  if (!half) p += `<line x1="${X(52.5)}" y1="0" x2="${X(52.5)}" y2="${h}" ${L}/><circle cx="${X(52.5)}" cy="${Y(34)}" r="${9.15 * sc}" ${L}/><rect x="0" y="${Y(13.84)}" width="${16.5 * sc}" height="${40.32 * sc}" ${L}/>`;
+  return p + `<rect x="${X(88.5)}" y="${Y(13.84)}" width="${16.5 * sc}" height="${40.32 * sc}" ${L}/><rect x="${X(99.5)}" y="${Y(24.84)}" width="${5.5 * sc}" height="${18.32 * sc}" ${L}/>` + inner(X, Y, sc) + '</svg>';
+}
+const IX_ZONES = ['near post', 'six-yard box', 'central', 'far post', 'edge of the box', 'short'];
+function ixSet() {
+  const t = TC.sp.team, C = IX().corners, teams = [...new Set(C.map((c) => c.team))].sort(), att = C.filter((c) => c.team === t), def = C.filter((c) => c.opp === t);
+  const avg = (xs, f) => ixF(xs.length ? xs.reduce((a, c) => a + f(c), 0) / xs.length : null), shot = (xs) => (xs.length ? Math.round(xs.filter((c) => c.shot).length / xs.length * 100) : 0);
+  const zb = (xs) => IX_ZONES.map((z) => { const n = xs.filter((c) => c.zone === z).length; return `<div class="ix-z"><span>${z}</span><div><i style="width:${xs.length ? n / xs.length * 100 : 0}%"></i></div><span>${n}</span></div>`; }).join('');
+  const dots = (xs) => ixPitch(420, (X, Y) => xs.filter((c) => c.ball).map((c) => `<circle cx="${X(c.ball[0])}" cy="${Y(c.ball[1])}" r="5" fill="${c.goal ? '#f5c518' : c.shot ? '#e5484d' : 'rgba(255,255,255,.75)'}" stroke="#0b0b0b" stroke-width=".8"/>`).join('')
+    + `<circle cx="${X(105)}" cy="${Y(0)}" r="6" fill="#16269e"/><text x="${X(103)}" y="${Y(4)}" font-size="9" fill="#fff" text-anchor="end">corner side</text>`, true);
+  const lg = (f) => { const v = teams.map((x) => { const a = C.filter((c) => c.team === x); return a.length ? a.reduce((s2, c) => s2 + f(c), 0) / a.length : null; }).filter((y) => y != null); return ixF(v.length ? v.reduce((a, b) => a + b, 0) / v.length : null); };
+  const rows = teams.map((x) => { const a = C.filter((c) => c.team === x), d = C.filter((c) => c.opp === x);
+    return `<tr class="${x === t ? 'on' : ''}${x === TC_US ? ' us' : ''}" data-spteam="${escapeHtml(x)}"><td class="l">${crestHtml(x, 16)} ${escapeHtml(x)}</td><td>${a.length}</td><td>${avg(a, (c) => c.att_box)}</td><td>${shot(a)} %</td><td>${a.filter((c) => c.goal).length}</td><td>${d.length}</td><td>${avg(d, (c) => c.def_box)}</td><td>${avg(d, (c) => c.man)}</td><td>${avg(d, (c) => c.zonal)}</td><td>${shot(d)} %</td><td>${d.filter((c) => c.goal).length}</td></tr>`; }).join('');
+  return `<section class="panel pk-top"><select class="select" id="sp-team">${teams.map((x) => `<option ${x === t ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('')}</select>
+      <p class="pk-note">Corners of the QSL matches with a tracking. At the delivery: the attackers and the defenders inside the box (goalkeepers left out); <b>man-marking</b> = attackers with a defender within 1.5 m, <b>zonal</b> = defenders in the box with no attacker within 2 m. Where the ball goes = the ball at the first contact; every corner drawn as if taken from the same side. Shot = a shot by the attacking team within 10 s.</p></section>
+    <div class="pk-two"><section class="panel"><span class="pk-k">${crestHtml(t, 18)} ${escapeHtml(t)} attacking · ${att.length} corners</span>
+        <div class="ix-kpis"><div><span>Attackers in the box</span><b>${avg(att, (c) => c.att_box)}</b><small>league ${lg((c) => c.att_box)}</small></div><div><span>A shot</span><b>${shot(att)} %</b></div><div><span>Goals</span><b>${att.filter((c) => c.goal).length}</b></div></div>
+        ${dots(att)}<div class="pk-leg"><span><i class="dot" style="background:#fff;border:1px solid #333"></i>no shot</span><span><i class="dot" style="background:#e5484d"></i>shot</span><span><i class="dot" style="background:#f5c518"></i>goal</span></div>${zb(att)}</section>
+      <section class="panel"><span class="pk-k">${crestHtml(t, 18)} ${escapeHtml(t)} defending · ${def.length} corners</span>
+        <div class="ix-kpis"><div><span>Defenders in the box</span><b>${avg(def, (c) => c.def_box)}</b></div><div><span>Man-marking</span><b>${avg(def, (c) => c.man)}</b><small>attackers marked</small></div><div><span>Zonal</span><b>${avg(def, (c) => c.zonal)}</b><small>defenders in a zone</small></div><div><span>A shot conceded</span><b>${shot(def)} %</b></div></div>
+        ${dots(def)}${zb(def)}</section></div>
+    <section class="panel"><span class="pk-k">Every team <small>click a team</small></span><div class="tc-scroll"><table class="tt-tbl"><thead><tr><th class="l">Team</th><th>Corners for</th><th>Attackers in box</th><th>Shot</th><th>Goals</th><th>Corners against</th><th>Defenders in box</th><th>Man-marked</th><th>Zonal</th><th>Shot conceded</th><th>Goals conceded</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+}
+function ixSetBind() {
+  const box = document.getElementById('tc-body'), sel = document.getElementById('sp-team');
+  if (sel) sel.onchange = () => { TC.sp.team = sel.value; drawTactical(); };
+  box.querySelectorAll('[data-spteam]').forEach((r) => (r.onclick = () => { TC.sp.team = r.dataset.spteam; drawTactical(); }));
+}
+/** The match sheet: each team's shapes (with the ball: settled attacks, with its pass network · without the ball) and
+ * the space control minute by minute — matches with a tracking. */
+function ixMatch(m) {
+  const T = IX().teams || {}, e = (team) => (T[team] || []).find((x) => x.match === m.id);
+  const eh = e(m.home), ea = e(m.away);
+  if (!eh || !ea) return '';
+  const side = TC.side === 'away' ? 'away' : 'home', team = m[side], E2 = side === 'home' ? eh : ea, S = E2.shape, col = team === TC_US ? '#f5c518' : side === 'home' ? '#1f3a9e' : '#d63b3b', ink = team === TC_US ? '#16269e' : '#fff';
+  const draw = (ph, net) => ixPitch(500, (X, Y) => { const pos = Object.fromEntries((S[ph] || []).map((q) => [q.pid, q])), mx = Math.max(1, ...(S.net || []).map((n) => n[2]));
+    let out = net ? (S.net || []).filter((n) => pos[n[0]] && pos[n[1]]).map(([a, b, n]) => `<line x1="${X(pos[a].x)}" y1="${Y(pos[a].y)}" x2="${X(pos[b].x)}" y2="${Y(pos[b].y)}" stroke="rgba(255,255,255,${(0.15 + 0.6 * n / mx).toFixed(2)})" stroke-width="${(1 + 5 * n / mx).toFixed(1)}"/>`).join('') : '';
+    out += (S[ph] || []).map((q) => `<circle cx="${X(q.x)}" cy="${Y(q.y)}" r="11" fill="${q.gk ? '#1f2937' : col}" stroke="#fff" stroke-width="1.5"/><text x="${X(q.x)}" y="${Y(q.y) + 4}" text-anchor="middle" font-size="10" font-weight="800" fill="${q.gk ? '#fff' : ink}">${q.num}</text><text x="${X(q.x)}" y="${Y(q.y) + 22}" text-anchor="middle" font-size="9" fill="#fff">${escapeHtml(q.n.length > 11 ? q.n.slice(0, 10) + '.' : q.n)}</text>`).join('');
+    return out + `<text x="${X(103)}" y="${Y(3)}" text-anchor="end" font-size="10" fill="rgba(255,255,255,.8)">attack →</text>`; });
+  const W = 1000, H = 150, xs = (mn) => 30 + mn / 95 * (W - 40), ys = (v) => H - 20 - Math.min(v, 45) / 45 * (H - 30);
+  const line = (pts, c) => `<polyline points="${(pts || []).map(([mn, v]) => `${xs(mn + 2.5).toFixed(1)},${ys(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${c}" stroke-width="2.5"/>`;
+  const chart = `<svg viewBox="0 0 ${W} ${H}" class="pk-map">${[0, 15, 30, 45].map((v) => `<line x1="30" x2="${W - 10}" y1="${ys(v)}" y2="${ys(v)}" stroke="var(--hairline)"/><text x="24" y="${ys(v) + 3}" font-size="10" text-anchor="end" fill="var(--ink-muted)">${v}%</text>`).join('')}
+    ${[0, 15, 30, 45, 60, 75, 90].map((mn) => `<text x="${xs(mn)}" y="${H - 4}" font-size="10" text-anchor="middle" fill="var(--ink-muted)">${mn}'</text>`).join('')}<line x1="${xs(45)}" x2="${xs(45)}" y1="6" y2="${H - 20}" stroke="var(--ink-muted)" stroke-dasharray="3 3"/>
+    ${line(eh.space && eh.space.timeline, m.home === TC_US ? '#e0a800' : '#1f3a9e')}${line(ea.space && ea.space.timeline, m.away === TC_US ? '#e0a800' : '#d63b3b')}</svg>`;
+  return `<div class="tt-card"><h4>Shapes &amp; pass network <small>average positions, the team attacking → · with the ball = settled attacks (ball past 60 m) · lines detected from the depths</small></h4>
+      <div class="ix-shh">${segHtml('ix-side', [['home', m.home], ['away', m.away]], side)}<span><b>${S.out_lines || '—'}</b> without the ball · width ${ixF(S.out_w)} m · length ${ixF(S.out_l)} m</span><span><b>${S.in_lines || '—'}</b> with the ball · width ${ixF(S.in_w)} m · length ${ixF(S.in_l)} m</span></div>
+      <div class="tt-two"><div><div class="tt-side">With the ball · pass network</div>${draw('in', true)}</div><div><div class="tt-side">Without the ball</div>${draw('out', false)}</div></div></div>
+    <div class="tt-card"><h4>Space control <small>the opponent's last third controlled with the ball, every 5 minutes</small></h4>${chart}
+      <div class="pk-leg"><span><i style="background:${m.home === TC_US ? '#e0a800' : '#1f3a9e'}"></i>${escapeHtml(m.home)} ${ixF(eh.space && eh.space.third_in)} %</span><span><i style="background:${m.away === TC_US ? '#e0a800' : '#d63b3b'}"></i>${escapeHtml(m.away)} ${ixF(ea.space && ea.space.third_in)} %</span><span>match average with the ball</span></div></div>`;
 }
 function tcStyleBind() {
   const box = document.getElementById('tc-body');
