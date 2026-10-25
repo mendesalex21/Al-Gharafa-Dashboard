@@ -2176,3 +2176,7 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .ix-shh { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); } .ix-shh b { font-size: 15px; color: var(--ink); }
 .tt-tbl tr[data-spteam] { cursor: pointer; }
 @media (max-width: 900px) { .ix-three { grid-template-columns: 1fr; } }
+/* Session Plan: the players without GPS, one compact line each (2026-10-25) */
+.sp-nogps .sp-mi { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px 6px 0; margin-right: 14px; font-size: 12.5px; }
+.sp-nogps .sp-mi small { color: var(--ink-muted); } .sp-nogps .sp-mi select { font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); max-width: 210px; }
+.sp-nogps .sp-mi.done { opacity: .6; }

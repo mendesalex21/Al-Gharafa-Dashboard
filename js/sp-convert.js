@@ -156,7 +156,7 @@ function spMatchDay(a) {
     if (a.alone[g]) solo[g] = { ...base, type: st === 'Rehab' ? 'Rehab' : 'INDIVIDUAL' };
     if (a.played[g]) return;
     if (!a.alone[g] && (SP_OUT.has(st) || st === 'Rehab')) { zero.push({ ...base, type: st }); return; }
-    const v = (a.squad || {})[id] || (a.apart.has(g) ? 'NC' : 'Game');
+    const v = (a.squad || {})[id] || (st === 'NC' || a.apart.has(g) ? 'NC' : 'Game'); // NC set in the plan: not called by default
     zero.push({ ...base, type: v });
     squad.push({ id, g, name: q ? q.name : g, v, work: !!a.alone[g] });
   });

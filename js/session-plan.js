@@ -14,7 +14,7 @@ const SPL = { lib: null, cal: null, events: null, matches: [], saved: null, week
 const SPL_STATUS = [['ProTraining', 'Team session', '#34c759'], ['Partial', 'Partial', '#7ac142'], ['INDIVIDUAL', 'Individual', '#a463f2'], ['Rehab', 'Rehab', '#ff9f0a'],
   ['Injury', 'Injured', '#e5484d'], ['Injury_no_muscular', 'Injured (not muscular)', '#ef7d80'], ['Sick', 'Sick', '#8e5bd6'], ['NT', 'National team', '#2a78d6'],
   ['Compensatory', 'Compensatory', '#30b0c7'], ['Recovery', 'Recovery', '#5ac8fa'], ['Game_B', 'B-team game', '#8e1b4f'], ['Training_TeamB', 'B-team training', '#b5577f'],
-  ['GYM', 'Gym', '#8e8e93'], ['Authorized', 'Authorized absence', '#aeaeb2'], ['Unauthorized', 'Unauthorized absence', '#aeaeb2'], ['Day_Off', 'Day off', '#c7c7cc']];
+  ['GYM', 'Gym', '#8e8e93'], ['Authorized', 'Authorized absence', '#aeaeb2'], ['Unauthorized', 'Unauthorized absence', '#aeaeb2'], ['NC', 'Not called (NC)', '#98989d'], ['Day_Off', 'Day off', '#c7c7cc']]; // NC: not in the match squad (2026-10-25)
 const SPL_KEEP = new Set(['Injury', 'Injury_no_muscular', 'Rehab', 'NT', 'Sick']); // statuses carried over to the next session
 const SPL_IN_SESSION = new Set(['ProTraining', 'Partial', 'ProTraining+ExtraWork']); // expected in the GPS file
 const SPL_NOT_TEAM = /^(INDIVIDUAL|Individual|Rehab|GYM|STRENGTH)$/; // drills that are not the team's (left out of the forecast)
@@ -1051,11 +1051,14 @@ function splFillGps(p, lib, fullRows, drillRows, st) {
  * = he trained but his unit failed: nothing to write for him, as before (no row without GPS data). */
 function splMissingHtml(b, p) {
   const ok = p.noGpsOk || {}, n = b.missLeft;
-  const opts = [['Injury', 'Injured'], ['Rehab', 'Rehab'], ['Sick', 'Sick'], ['NT', 'National team'], ['Authorized', 'Authorized absence'], ['Unauthorized', 'Unauthorized absence'], ['Day_Off', 'Day off']];
+  const opts = [['INDIVIDUAL', 'Individual'], ['Recovery', 'Recovery'], ['Injury', 'Injured'], ['Rehab', 'Rehab'], ['Sick', 'Sick'], ['NT', 'National team'], ['NC', 'Not called (NC)'], ['Authorized', 'Authorized absence'], ['Unauthorized', 'Unauthorized absence'], ['Day_Off', 'Day off']];
   const btn = (attr, label, on) => `<button type="button" class="sp-fx${on ? ' on' : ''}" ${attr}>${label}</button>`;
   if (!b.missing.length) return `<div class="sp-checks sp-nogps clear"><div class="sp-h3">✓ GPS filled from the teammates <small>written as his rows in the data</small></div>${(b.filled || []).map((f) => `<div class="sp-ci done"><b>${escapeHtml(f.name)}</b><span>GPS off · his rows = the ${escapeHtml(f.how)}, drill by drill · his own RPE</span><span class="sp-cb"><button type="button" class="sp-fx" data-miss-avg="${escapeHtml(f.id)}" data-v="">Undo</button></span></div>`).join('')}</div>`;
-  return `<div class="sp-checks sp-nogps${n ? '' : ' clear'}"><div class="sp-h3">${n ? `⚠ ${n} player${n > 1 ? 's' : ''} in the team session without GPS <small>in the plan as Team session, not in the StatSports file — injured, sick, absent? one click sets his status</small>` : `✓ No GPS for ${b.missing.length} player${b.missing.length > 1 ? 's' : ''} in the session — marked as trained <small>no GPS data: no row for them, as before</small>`}</div>
-    ${b.missing.map((q) => `<div class="sp-ci${ok[q.id] ? ' done' : ''}"><b>${escapeHtml(q.name)}</b><span>${escapeHtml(q.pos || '')} · Team session in the plan · no row in the GPS file</span><span class="sp-cb">${opts.map(([v, l]) => btn(`data-miss-st="${escapeHtml(q.id)}" data-v="${v}"`, l)).join('')}${btn(`data-miss-avg="${escapeHtml(q.id)}" data-v="pos"`, 'Trained · position average')}${btn(`data-miss-avg="${escapeHtml(q.id)}" data-v="team"`, 'Trained · team average')}${btn(`data-miss-ok="${escapeHtml(q.id)}"`, 'Trained · GPS missing', ok[q.id])}</span></div>`).join('')}
+  return `<div class="sp-checks sp-nogps${n ? '' : ' clear'}"><div class="sp-h3">${n ? `⚠ ${n} player${n > 1 ? 's' : ''} in the team session without GPS <small>in the plan as Team session, not in the StatSports file — choose for each: GPS off (his position's average) or did not train</small>` : `✓ No GPS for ${b.missing.length} player${b.missing.length > 1 ? 's' : ''} in the session — marked as trained <small>no GPS data: no row for them, as before</small>`}</div>
+    ${b.missing.map((q) => `<div class="sp-mi${ok[q.id] ? ' done' : ''}"><b>${escapeHtml(q.name)}</b><small>${escapeHtml(q.pos || '')}</small>
+      <select data-miss-sel="${escapeHtml(q.id)}" aria-label="What happened to ${escapeHtml(q.name)}"><option value="">${ok[q.id] ? 'Trained · GPS missing' : 'Choose…'}</option>
+        <optgroup label="Trained, GPS off">${[['avg:pos', 'Position average'], ['avg:team', 'Team average'], ['ok', 'No GPS data (no row)']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</optgroup>
+        <optgroup label="Not in the team session">${opts.map(([v, l]) => `<option value="st:${v}">${l}</option>`).join('')}</optgroup></select></div>`).join('')}
     ${(b.filled || []).map((f) => `<div class="sp-ci done"><b>${escapeHtml(f.name)}</b><span>GPS off · his rows = the ${escapeHtml(f.how.replace(/^average of the /, 'average of the '))}, drill by drill · his own RPE</span><span class="sp-cb">${btn(`data-miss-avg="${escapeHtml(f.id)}" data-v=""`, 'Undo')}</span></div>`).join('')}</div>`;
 }
 function splImportHtml() {
@@ -1234,6 +1237,13 @@ function splChange(e) {
   if (t.dataset.files != null) { splReadFiles([...t.files]); return; }
   if (t.dataset.ntfiles != null) { splReadNtFiles([...t.files]); return; }
   if (t.dataset.ntmap) { splNtMap(t.dataset.ntmap, t.value); return; }
+  if (t.dataset.missSel) { // a player of the session without GPS (compact choice, 2026-10-25)
+    const pp = splEnsure(date), id = t.dataset.missSel, [k, v] = t.value.split(':');
+    if (k === 'st') { pp.status[id] = v; if (pp.noGpsOk) delete pp.noGpsOk[id]; }
+    if (k === 'avg') { (pp.noGpsAvg || (pp.noGpsAvg = {}))[id] = v; if (pp.noGpsOk) delete pp.noGpsOk[id]; }
+    if (k === 'ok') (pp.noGpsOk || (pp.noGpsOk = {}))[id] = 1;
+    splTouch(date); splDraw(); return;
+  }
   if (t.dataset.ntrpe && SPL.nt) { SPL.nt.rpe = { ...(SPL.nt.rpe || {}), [t.dataset.ntrpe]: t.value }; return; } // used at Publish (RPE × time)
   if (t.dataset.norpe) { splSaveNoRpe(date, t.dataset.norpe, t); return; } // an RPE typed for a session in the data
   if (t.dataset.md != null) { // the day's MD chosen here (also in the Calendar): saved with the calendar edits, the data follows
