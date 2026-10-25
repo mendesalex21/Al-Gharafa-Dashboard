@@ -193,7 +193,7 @@ function splHead(date, step) {
   const p = splPlan(date), m = splMatchOn(date), next = SPL.matches.find((x) => x.date > date), r = SPL.lib.recent[date];
   const dd = next ? daysBetween(date, next.date) : null, canOff = !m && !(r && /^S\d+$/.test(r.sid)); // a club match or a session in the data: never a day off
   return `<div class="sp-head"><div class="sp-id"><span class="sp-k">${p.off ? 'Team day off' : 'Session'}</span><b>${p.off ? '<input class="sp-sid" value="/" disabled aria-label="No session number">' : `<input class="sp-sid" data-f="sid" value="${escapeHtml(p.sid || splSid(date))}" aria-label="Session number">`} · ${SPL_DAY(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</b></div>
-    <div class="sp-auto"><span><small>Week</small>${splWeekNo(date)}</span><span><small>MD</small>${m ? 'MD' : `<select class="sp-md" data-md aria-label="MD of this day"><option value="">${DAY_MD[date] ? 'Automatic' : splTag(date) || '—'}</option>${DAY_MD_TAGS.map((t) => `<option ${DAY_MD[date] === t ? 'selected' : ''}>${t}</option>`).join('')}</select>`}</span><span><small>Week MD session</small><input class="sp-lbl" data-f="label" value="${escapeHtml(p.label || splLabel(date))}" aria-label="Week MD session"></span>
+    <div class="sp-auto"><span><small>Week</small>${splWeekNo(date)}</span><span><small>MD</small>${m ? 'MD' : `<select class="sp-md" data-md aria-label="MD of this day"><option value="">${DAY_MD[date] || p.off ? 'Automatic' : splTag(date) || '—'}</option>${DAY_MD_TAGS.map((t) => `<option ${!p.off && DAY_MD[date] === t ? 'selected' : ''}>${t}</option>`).join('')}${canOff ? `<option value="OFF" ${p.off ? 'selected' : ''}>Day off</option>` : ''}</select>`}</span><span><small>Week MD session</small><input class="sp-lbl" data-f="label" value="${escapeHtml(p.label || splLabel(date))}" aria-label="Week MD session"></span>
       ${m ? `<span><small>Match</small>${escapeHtml(m.e.opponent || '')}</span>` : next ? `<span><small>Next match</small>${SPL_DAY(next.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${dd === 1 ? 'tomorrow' : `in ${dd} days`}</span>` : ''}</div>
     ${canOff ? `<div class="seg sp-ampm"><button type="button" data-off class="${p.off ? 'active' : ''}" aria-pressed="${!!p.off}" title="No team session: the players who worked (B team, individual, rehab) are written on their own, everyone else Day off">Team day off</button></div>` : ''}
     ${p.off ? '' : `<div class="seg sp-ampm">${['AM', 'PM'].map((v) => `<button type="button" data-ampm="${v}" class="${(p.ampm || 'PM') === v ? 'active' : ''}">${v}</button>`).join('')}</div>`}</div>
@@ -1271,13 +1271,16 @@ function splChange(e) {
   if (t.dataset.ntrpe && SPL.nt) { SPL.nt.rpe = { ...(SPL.nt.rpe || {}), [t.dataset.ntrpe]: t.value }; return; } // used at Publish (RPE × time)
   if (t.dataset.norpe) { splSaveNoRpe(date, t.dataset.norpe, t); return; } // an RPE typed for a session in the data
   if (t.dataset.md != null) { // the day's MD chosen here (also in the Calendar): saved with the calendar edits, the data follows
-    const v = t.value;
+    const v = t.value, pp = splEnsure(date), off = v === 'OFF';
+    if (off !== !!pp.off) { splSetOff(pp, off); SPL.view = 'plan'; SPL.files = {}; SPL.card = null; splTouch(date); } // Day off in the list = the Team day off button
+    SPL.offPending = date;
     SPL.state = 'Saving the MD…'; splStateLine();
-    saveCalendarEdit('day:' + date, dayEditWith(SPL.cal, date, { md: v })).then((edits) => {
+    saveCalendarEdit('day:' + date, dayEditWith(SPL.cal, date, off ? { md: '', off: true } : { md: v, off: false })).then((edits) => {
+      SPL.offPending = null;
       SPL.cal.edits = edits; SPL.events = applyCalendarEdits(SPL.cal); splMatches();
       if (typeof cacheSet === 'function') cacheSet('calendar', SPL.cal);
-      SPL.state = `MD ${v || 'automatic'} saved ✓ — the session's data follows at the next update`; splDraw();
-    }).catch((err) => { SPL.state = 'MD not saved — ' + (err.message || err); splDraw(); });
+      SPL.state = off ? 'Day off saved ✓ (Calendar too)' : `MD ${v || 'automatic'} saved ✓ — the session's data follows at the next update`; splDraw();
+    }).catch((err) => { SPL.offPending = null; SPL.state = 'MD not saved — ' + (err.message || err); splDraw(); });
     return;
   }
   if (t.dataset.cf) { splCorrEdit(t); return; } // the correction table
