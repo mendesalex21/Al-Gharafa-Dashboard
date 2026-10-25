@@ -881,8 +881,9 @@ function splBuild() {
   // those players are written apart, as in his Excel (Game_B, session "/", MD), and published with the session (date_OFF)
   const bHalves = match ? {} : splHalves(allDrills), hasB = Object.keys(bHalves).length > 0, notB = (r) => !bHalves[spName(r['Player First Name'])];
   const fullRows = allFull.filter(notB), drillRows = allDrills.filter(notB);
-  const byGps = Object.fromEntries(lib.players.map((q) => [q.gps, q])), inGps = new Set(fullRows.map((r) => spName(r['Player First Name'])));
   const st = (q) => p.status[q.id] || 'ProTraining';
+  const filled = splFillGps(p, lib, fullRows, drillRows, st); // a player whose unit failed: his teammates' average (his ask, 2026-10-25)
+  const byGps = Object.fromEntries(lib.players.map((q) => [q.gps, q])), inGps = new Set(fullRows.map((r) => spName(r['Player First Name'])));
   const players = {};
   inGps.forEach((g) => { const q = byGps[g]; players[g] = q ? { name: q.gps, pos: q.pos, type: st(q) } : { name: g, pos: '', type: 'ProTraining' }; });
   const extra = lib.players.filter((q) => !inGps.has(q.gps) && !bHalves[q.gps] && !SPL_IN_SESSION.has(st(q))).map((q) => ({ name: q.gps, pos: q.pos, type: st(q) }));
@@ -940,7 +941,7 @@ function splBuild() {
   }));
   checks.left = checks.time.filter((x) => !x.fix).length + checks.drill.filter((x) => !x.done).length + checks.cut.filter((x) => !x.fix).length;
   const ownTime = new Set(Object.keys(fixT).filter((g) => fixT[g] === 'own')), cutOwn = new Set(Object.keys(fixC).filter((k) => fixC[k] === 'own'));
-  let fullText = hasB ? spToCsv(fullRows) : fullTxt, drillText = hasB ? spToCsv(drillRows) : drillTxt;
+  let fullText = hasB || filled.length ? spToCsv(fullRows) : fullTxt, drillText = hasB || filled.length ? spToCsv(drillRows) : drillTxt;
   const halfInfo = {}; // a match: the halves' minutes written (shown in the drills column)
   if (skipped.size) drillText = spToCsv(drillRows.filter((r) => !skipped.has(titleOfRow(r))));
   let day = null; // a match day's rows (sp-convert.js spMatchDay)
@@ -985,7 +986,7 @@ function splBuild() {
     bList = bo.full.map((r) => ({ name: (byGps[r.Players] || {}).name || r.Players, t: r.Time }));
   }
   const missLeft = day ? 0 : missing.filter((q) => !(p.noGpsOk || {})[q.id]).length; // planned in the session, no GPS, not answered yet
-  return { ...out, fileDate, missLeft, missing: day ? [] : missing, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk, checks, match, halfInfo, squad: day ? day.squad : null, bList };
+  return { ...out, fileDate, missLeft, missing: day ? [] : missing, filled, mapping, sessionTime, unknown: [...inGps].filter((g) => !byGps[g]), plan, fromKiosk, checks, match, halfInfo, squad: day ? day.squad : null, bList };
 }
 /** The checks above the three columns: each flagged time with its one-click fixes (the chosen one stays highlighted). */
 function splChecksHtml(b) {
@@ -1017,6 +1018,34 @@ function splChecksHtml(b) {
   }
   return `<div class="sp-checks${c.left ? '' : ' clear'}"><div class="sp-h3">${c.left ? `To check before publishing <small>${c.left} left · times far from the session, from the plan or from the teammates</small>` : `✓ Times checked <small>${n} looked at · the preview shows what is written</small>`}</div>${rows.join('')}</div>`;
 }
+/** A team-session player with no GPS (his unit off or failed): rows made from his teammates of the day — the average of
+ * the team-session players of his position ('pos', the whole team when fewer than 2 there) or of the whole team ('team'),
+ * drill by drill (each StatSports title), numbers averaged, the rest copied; his own RPE stays his. Added to the raw rows,
+ * so he goes through the import as any player. → [{id, name, how, n}] */
+function splFillGps(p, lib, fullRows, drillRows, st) {
+  const want = p.noGpsAvg || {}, out = [];
+  const inGps = new Set(fullRows.map((r) => spName(r['Player First Name'])));
+  const num = (v) => /^-?\d+([.,]\d+)?$/.test(String(v ?? '').trim());
+  const avg = (rows, gps) => { const r0 = rows[0], o = {};
+    Object.keys(r0).forEach((c) => { o[c] = rows.every((r) => num(r[c])) ? String(Math.round(rows.reduce((a, r) => a + spNum(r[c]), 0) / rows.length * 100) / 100) : (/^Player/i.test(c) ? '' : r0[c]); });
+    o['Player First Name'] = gps; return o; };
+  lib.players.forEach((q) => {
+    const how = want[q.id];
+    if (!how || inGps.has(q.gps) || !SPL_IN_SESSION.has(st(q))) return;
+    const onGps = lib.players.filter((x) => x.id !== q.id && x.pos !== 'GK' && inGps.has(x.gps)), inTeam = onGps.filter((x) => SPL_IN_SESSION.has(st(x)));
+    const mates = inTeam.length >= 3 ? inTeam : onGps; // the team-session players (or everyone on the GPS when the plan's statuses are not set)
+    const LINE = { CD: 'defenders', WD: 'defenders', DM: 'midfielders', CM: 'midfielders', AM: 'midfielders', WM: 'wide players and forwards', W: 'wide players and forwards', FW: 'wide players and forwards' };
+    const samePos = mates.filter((x) => x.pos === q.pos), sameLine = mates.filter((x) => LINE[x.pos] && LINE[x.pos] === LINE[q.pos]);
+    const use = how !== 'pos' ? mates : samePos.length >= 2 ? samePos : sameLine.length >= 2 ? sameLine : mates, g = new Set(use.map((x) => x.gps));
+    if (!use.length) return;
+    const fr = fullRows.filter((r) => g.has(spName(r['Player First Name'])));
+    if (fr.length) fullRows.push(avg(fr, q.gps));
+    const titles = [...new Set(drillRows.filter((r) => g.has(spName(r['Player First Name']))).map((r) => String(r['Drill Title'] || '').trim()))];
+    titles.forEach((t) => { const dr = drillRows.filter((r) => g.has(spName(r['Player First Name'])) && String(r['Drill Title'] || '').trim() === t && !/individual|rehab/i.test(t)); if (dr.length) drillRows.push(avg(dr, q.gps)); });
+    out.push({ id: q.id, name: q.name, how: use === samePos ? `average of the ${use.length} ${q.pos} players` : use === sameLine ? `average of the ${use.length} ${LINE[q.pos]}` : `average of the ${use.length} team-session players`, n: use.length });
+  });
+  return out;
+}
 /** Players in the team session in the plan but with no GPS row (forgotten as injured, absent…): a red block at the top
  * of the import, one click per status — the plan and the rows follow (his ask, 2026-10-21). "Trained · GPS missing"
  * = he trained but his unit failed: nothing to write for him, as before (no row without GPS data). */
@@ -1024,8 +1053,10 @@ function splMissingHtml(b, p) {
   const ok = p.noGpsOk || {}, n = b.missLeft;
   const opts = [['Injury', 'Injured'], ['Rehab', 'Rehab'], ['Sick', 'Sick'], ['NT', 'National team'], ['Authorized', 'Authorized absence'], ['Unauthorized', 'Unauthorized absence'], ['Day_Off', 'Day off']];
   const btn = (attr, label, on) => `<button type="button" class="sp-fx${on ? ' on' : ''}" ${attr}>${label}</button>`;
+  if (!b.missing.length) return `<div class="sp-checks sp-nogps clear"><div class="sp-h3">✓ GPS filled from the teammates <small>written as his rows in the data</small></div>${(b.filled || []).map((f) => `<div class="sp-ci done"><b>${escapeHtml(f.name)}</b><span>GPS off · his rows = the ${escapeHtml(f.how)}, drill by drill · his own RPE</span><span class="sp-cb"><button type="button" class="sp-fx" data-miss-avg="${escapeHtml(f.id)}" data-v="">Undo</button></span></div>`).join('')}</div>`;
   return `<div class="sp-checks sp-nogps${n ? '' : ' clear'}"><div class="sp-h3">${n ? `⚠ ${n} player${n > 1 ? 's' : ''} in the team session without GPS <small>in the plan as Team session, not in the StatSports file — injured, sick, absent? one click sets his status</small>` : `✓ No GPS for ${b.missing.length} player${b.missing.length > 1 ? 's' : ''} in the session — marked as trained <small>no GPS data: no row for them, as before</small>`}</div>
-    ${b.missing.map((q) => `<div class="sp-ci${ok[q.id] ? ' done' : ''}"><b>${escapeHtml(q.name)}</b><span>${escapeHtml(q.pos || '')} · Team session in the plan · no row in the GPS file</span><span class="sp-cb">${opts.map(([v, l]) => btn(`data-miss-st="${escapeHtml(q.id)}" data-v="${v}"`, l)).join('')}${btn(`data-miss-ok="${escapeHtml(q.id)}"`, 'Trained · GPS missing', ok[q.id])}</span></div>`).join('')}</div>`;
+    ${b.missing.map((q) => `<div class="sp-ci${ok[q.id] ? ' done' : ''}"><b>${escapeHtml(q.name)}</b><span>${escapeHtml(q.pos || '')} · Team session in the plan · no row in the GPS file</span><span class="sp-cb">${opts.map(([v, l]) => btn(`data-miss-st="${escapeHtml(q.id)}" data-v="${v}"`, l)).join('')}${btn(`data-miss-avg="${escapeHtml(q.id)}" data-v="pos"`, 'Trained · position average')}${btn(`data-miss-avg="${escapeHtml(q.id)}" data-v="team"`, 'Trained · team average')}${btn(`data-miss-ok="${escapeHtml(q.id)}"`, 'Trained · GPS missing', ok[q.id])}</span></div>`).join('')}
+    ${(b.filled || []).map((f) => `<div class="sp-ci done"><b>${escapeHtml(f.name)}</b><span>GPS off · his rows = the ${escapeHtml(f.how.replace(/^average of the /, 'average of the '))}, drill by drill · his own RPE</span><span class="sp-cb">${btn(`data-miss-avg="${escapeHtml(f.id)}" data-v=""`, 'Undo')}</span></div>`).join('')}</div>`;
 }
 function splImportHtml() {
   const date = SPL.date, p = splEnsure(date), b = splBuild();
@@ -1063,7 +1094,7 @@ function splImportHtml() {
     <div class="sp-files"><div class="sp-file ok"><span class="ic">CSV</span><div><b>${escapeHtml(SPL.files.full.name)}</b><small>${gpsRows.length} players · ${b.fileDate ? SPL_DAY(b.fileDate, { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'no date'}${b.off ? '' : ` · session ${b.sessionTime}'`}</small></div></div>
       ${b.off ? '' : `<div class="sp-file ${SPL.files.drills ? 'ok' : 'miss'}"><span class="ic">CSV</span><div><b>${SPL.files.drills ? escapeHtml(SPL.files.drills.name) : 'Drills file missing'}</b><small>${SPL.files.drills ? `${b.mapping.length} drills · ${b.drills.length} rows` : 'drop S##_Drills.csv too'}</small></div></div>`}
       <label class="sp-drop small"><input type="file" accept=".csv,text/csv" multiple hidden data-files>Drop other files to replace</label></div>
-    ${!b.off && b.missing.length ? splMissingHtml(b, p) : ''}
+    ${!b.off && (b.missing.length || (b.filled || []).length) ? splMissingHtml(b, p) : ''}
     ${!b.off && (SPL.files.drills || b.checks.time.length) ? splChecksHtml(b) : ''}
     <div class="sp-three">${b.off ? offCols : `
       <div class="sp-chk"><div class="sp-h3"><i class="n">1</i>Drills <small>StatSports title → the drill of the plan</small></div>${mapRows || '<p class="sp-note">No drills file yet.</p>'}
@@ -1140,6 +1171,7 @@ function splClick(e) {
   if (t.dataset.unswap) { const pp = p(), s = { ...(pp.swap || {}) }; delete s[t.dataset.unswap]; pp.swap = s; splTouch(date); splDraw(); return; }
   // a player of the session without GPS: his status (one click), or kept as trained without GPS (data-miss-*; data-nogps is the day off below)
   if (t.dataset.missSt) { const pp = p(); pp.status[t.dataset.missSt] = t.dataset.v; if (pp.noGpsOk) delete pp.noGpsOk[t.dataset.missSt]; splTouch(date); splDraw(); return; }
+  if (t.dataset.missAvg != null) { const pp = p(), m = pp.noGpsAvg || (pp.noGpsAvg = {}); if (t.dataset.v) m[t.dataset.missAvg] = t.dataset.v; else delete m[t.dataset.missAvg]; if (pp.noGpsOk) delete pp.noGpsOk[t.dataset.missAvg]; splTouch(date); splDraw(); return; }
   if (t.dataset.missOk) { const pp = p(), m = pp.noGpsOk || (pp.noGpsOk = {}); if (m[t.dataset.missOk]) delete m[t.dataset.missOk]; else m[t.dataset.missOk] = 1; splTouch(date); splDraw(); return; }
   if (t.dataset.nogps != null) { SPL.files = { full: { name: 'No GPS this day', text: '' } }; SPL.view = 'import'; SPL.state = ''; splDraw(); return; }
   // correct a session in the data
