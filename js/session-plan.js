@@ -131,7 +131,30 @@ function splPlan(date) {
   const status = {};
   const off = typeof DAY_OFF !== 'undefined' && !!DAY_OFF[date] && !splMatchOn(date); // set as a team day off in the Calendar
   SPL.lib.players.forEach((p) => { const t = types[p.id] || p.type; status[p.id] = SPL_KEEP.has(t) ? t : 'ProTraining'; if (off && SPL_IN_SESSION.has(status[p.id])) status[p.id] = 'Day_Off'; });
-  return { ampm: 'PM', drills: [], status, rpe: {}, fresh: true, ...(off ? { off: true } : {}) };
+  return { ampm: 'PM', drills: [], status, rpe: {}, fresh: true, ...(off ? { off: true, offCal: true } : {}) };
+}
+/** A team day off on or off: the players planned in the session go Day off (and come back when it is switched off). */
+function splSetOff(p, on) {
+  p.off = on; p.offCal = true; // offCal: kept the same as the Calendar's day off (plans from before have no link)
+  SPL.lib.players.forEach((q) => { const s = p.status[q.id] || 'ProTraining'; if (on && SPL_IN_SESSION.has(s)) p.status[q.id] = 'Day_Off'; else if (!on && s === 'Day_Off') p.status[q.id] = 'ProTraining'; });
+}
+/** The Calendar's day off → the plan (a day not in the data yet): set there, the plan follows; removed there, a linked plan follows. */
+function splSyncOff(date) {
+  const p = (SPL.saved.plans || {})[date];
+  if (!p || typeof DAY_OFF === 'undefined' || date <= SPL.lib.last_date || splMatchOn(date) || SPL.offPending === date) return; // pending: the Calendar is being saved
+  if (DAY_OFF[date] && !p.off) { splSetOff(p, true); splTouch(date); }
+  else if (!DAY_OFF[date] && p.off && p.offCal) { splSetOff(p, false); splTouch(date); }
+}
+/** The plan's day off → the Calendar (same edit as the day's MD). */
+function splSaveOffCal(date, on) {
+  if (!SPL.cal || typeof saveCalendarEdit !== 'function' || !!(typeof DAY_OFF !== 'undefined' && DAY_OFF[date]) === on) return;
+  SPL.offPending = date;
+  saveCalendarEdit('day:' + date, dayEditWith(SPL.cal, date, { off: on })).then((edits) => {
+    SPL.offPending = null;
+    SPL.cal.edits = edits; SPL.events = applyCalendarEdits(SPL.cal); splMatches();
+    if (typeof cacheSet === 'function') cacheSet('calendar', SPL.cal);
+    SPL.state = `Day off ${on ? 'set' : 'removed'} in the Calendar too ✓`; splDraw();
+  }).catch((err) => { SPL.offPending = null; SPL.state = 'Day off not saved in the Calendar — ' + (err.message || err); splStateLine(); });
 }
 function splEnsure(date) { const p = splPlan(date); if (p.fresh) { delete p.fresh; SPL.saved.plans[date] = p; } return p; }
 
@@ -147,6 +170,7 @@ function splDraw() {
   }
   document.getElementById('spl-wk').textContent = `${splWeekNo(SPL.week)} · ${SPL_DAY(SPL.week, { day: 'numeric', month: 'short' })} – ${SPL_DAY(addDays(SPL.week, 6), { day: 'numeric', month: 'short' })}`;
   document.getElementById('spl-sub').textContent = `Plan before training · drop the two StatSports files after it · data up to ${SPL_DAY(SPL.lib.last_date, { day: 'numeric', month: 'short' })} (${'S' + SPL.lib.last_sid})`;
+  splSyncOff(SPL.date);
   splDrawWeek();
   if (SPL.view === 'correct' && !splCorrKey(SPL.date)) SPL.view = 'plan'; // nothing to correct on that day
   document.getElementById('spl-main').innerHTML = SPL.view === 'correct' ? splCorrectHtml() : SPL.view === 'import' && SPL.files.full ? splImportHtml() : splPlanHtml();
@@ -159,7 +183,7 @@ function splDrawWeek() {
     const corr = r && (SPL.saved.corrections || {})[`${d}_${r.sid}`];
     const badge = r && /^S\d+$/.test(r.sid) ? `<span class="sp-b done">${r.sid} · ${r.pub ? 'published' : 'in the data'} ✓${corr ? ' · ✎' : ''}</span>` : pub ? '<span class="sp-b done">Published ✓</span>'
       : m ? `<span class="sp-b match">${crestHtml(m.e.opponent, 16)}${escapeHtml([m.e.round || m.e.competition, m.e.opponent].filter(Boolean).join(' · '))}</span>`
-        : p && p.off ? '<span class="sp-b plan">Day off</span>' : p && (p.drills || []).length ? '<span class="sp-b plan">Planned</span>' : '<span class="sp-b none">+ Plan</span>';
+        : (p && p.off) || (!p && typeof DAY_OFF !== 'undefined' && DAY_OFF[d]) ? '<span class="sp-b plan">Day off</span>' : p && (p.drills || []).length ? '<span class="sp-b plan">Planned</span>' : '<span class="sp-b none">+ Plan</span>';
     return `<button type="button" class="sp-day${d === SPL.date ? ' on' : ''}${m ? ' m' : ''}" data-day="${d}"><b>${SPL_DAY(d, { weekday: 'short', day: 'numeric' })}</b>${tag ? `<span class="sp-md${tag === 'MD' ? ' mdm' : ''}">${tag}</span>` : '<span class="sp-md off">—</span>'}${badge}</button>`;
   }).join('');
   el.onclick = (e) => { const b = e.target.closest('[data-day]'); if (b) { SPL.date = b.dataset.day; SPL.view = 'plan'; SPL.files = {}; SPL.card = null; splDraw(); } };
@@ -1157,11 +1181,10 @@ function splClick(e) {
   if (!t || !SPL.date) return;
   const date = SPL.date, p = () => splEnsure(date);
   if (t.dataset.ampm) { p().ampm = t.dataset.ampm; splTouch(date); splDraw(); return; }
-  // a team day off: the players planned in the session go Day off (and come back when it is switched off)
+  // a team day off (the Calendar's day off follows)
   if (t.dataset.off != null) {
-    const pp = p(); pp.off = !pp.off;
-    SPL.lib.players.forEach((q) => { const s = pp.status[q.id] || 'ProTraining'; if (pp.off && SPL_IN_SESSION.has(s)) pp.status[q.id] = 'Day_Off'; else if (!pp.off && s === 'Day_Off') pp.status[q.id] = 'ProTraining'; });
-    SPL.view = 'plan'; SPL.files = {}; SPL.card = null; splTouch(date); splDraw(); return;
+    const pp = p(); splSetOff(pp, !pp.off);
+    SPL.view = 'plan'; SPL.files = {}; SPL.card = null; splTouch(date); splSaveOffCal(date, pp.off); splDraw(); return;
   }
   if (t.dataset.offtype) { // what a player on StatSports did that day: the next one
     const pp = p(), i = SPL_OFF_TYPES.indexOf(t.dataset.v);
