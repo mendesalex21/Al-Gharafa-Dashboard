@@ -411,7 +411,7 @@ function planDays(o, cyc) {
   return cyc.days.map((d) => {
     const cell = objectiveFor(o, cyc.type, d.tag) || objectiveFor(o, 'long', d.tag) || objectiveFor(o, 'normal', d.tag); // MD-6/MD-5 only exist in long cycles
     const past = d.date <= o.as_of;
-    const why = d.tag === 'MD+1' ? 'Recovery' : !cell ? 'No reference' : past && !d.actual ? 'No team session' : !past && TR.off[cyc.id + '|' + d.date] ? 'Off' : null;
+    const why = d.tag === 'MD+1' ? 'Recovery' : !cell ? 'No reference' : past && !d.actual ? 'No team session' : !past && typeof DAY_OFF !== 'undefined' && DAY_OFF[d.date] ? 'Day off' : !past && TR.off[cyc.id + '|' + d.date] ? 'Off' : null;
     return { ...d, cell, past, off: !!why, why };
   });
 }

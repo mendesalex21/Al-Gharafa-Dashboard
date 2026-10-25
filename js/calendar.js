@@ -20,10 +20,17 @@ const CAL_METRICS = [['td', 'TD'], ['hit', 'HIT'], ['acc_dec', 'A/D'], ['srpe', 
 /** The MD of a day chosen by the staff (Session Plan or the day's sheet here): an edit "day:yyyy-mm-dd" {md}. It wins over
  * the tag in the data and over the rule (two days after a match and two before the next: MD+2 or MD-2 is his call). */
 const DAY_MD = {};
+/** A team day off set by the staff on the day's sheet: the same edit "day:yyyy-mm-dd" {off: true} (the MD may sit next to it). */
+const DAY_OFF = {};
 const DAY_MD_TAGS = ['MD+1', 'MD+2', 'MD+3', 'MD-6', 'MD-5', 'MD-4', 'MD-3', 'MD-2', 'MD-1'];
 function applyCalendarEdits(cal) {
   Object.keys(DAY_MD).forEach((k) => { delete DAY_MD[k]; });
-  (cal.edits || []).forEach((ed) => { if (/^day:\d{4}-\d{2}-\d{2}$/.test(ed.id) && ed.data && ed.data.md) DAY_MD[ed.id.slice(4)] = ed.data.md; });
+  Object.keys(DAY_OFF).forEach((k) => { delete DAY_OFF[k]; });
+  (cal.edits || []).forEach((ed) => {
+    if (!/^day:\d{4}-\d{2}-\d{2}$/.test(ed.id) || !ed.data) return;
+    if (ed.data.md) DAY_MD[ed.id.slice(4)] = ed.data.md;
+    if (ed.data.off) DAY_OFF[ed.id.slice(4)] = true;
+  });
   const events = cal.events.map((e) => ({ ...e }));
   const byId = Object.fromEntries(events.map((e) => [e.id, e]));
   (cal.edits || []).forEach((ed) => {
@@ -54,6 +61,14 @@ function applyCalendarEdits(cal) {
 }
 
 /** Al Gharafa match dates: played (GPS) + upcoming fixtures (confirmed date, else first day of the window). */
+/** The day's edit with a change (md / off), or null when nothing is left: what saveCalendarEdit('day:' + iso, …) takes. */
+function dayEditWith(cal, iso, change) {
+  const ed = (cal.edits || []).find((x) => x.id === 'day:' + iso);
+  const v = { ...((ed && ed.data) || {}), ...change };
+  Object.keys(v).forEach((k) => { if (!v[k]) delete v[k]; });
+  return Object.keys(v).length ? v : null;
+}
+
 function gharafaMatchDates(cal, events) {
   const set = new Set(cal.match_days || []);
   events.forEach((e) => { if (e.kind === 'match' && e.gharafa === 'yes' && !e.played_date) set.add(e.confirmed_date || e.start); });
@@ -239,7 +254,8 @@ function drawMonth(events, today) {
     const camp = evs.find((e) => e.kind === 'camp');
     let kind = g ? g.kind : null, tag = g ? (g.kind === 'match' ? 'MD' : DAY_MD[iso] || g.md) : null, planned = false;
     if (match) { kind = 'match'; tag = 'MD'; }
-    if (future && !g) {
+    if (DAY_OFF[iso] && !match && (!g || g.kind !== 'training')) { kind = 'off'; tag = null; }
+    else if (future && !g) {
       const prev = matchDates.filter((x) => x < iso).pop(), next = matchDates.find((x) => x > iso);
       tag = match ? 'MD' : computedTag(iso, prev, next);
       planned = !match;
@@ -353,11 +369,12 @@ function drawDay() {
     return `<div><span>${METRIC_LONG[k]}${g.per90 ? ' <small>/90</small>' : ''}</span><b>${fmtN(v[0])}</b>${lv ? `<span class="zs ${lv}">${Z_LABEL[lv]} · z ${fmtSigned(v[1])}</span>` : '<small class="muted">no reference</small>'}</div>`;
   }).join('')}</div>` : '';
   // the day's MD, chosen by the staff when the rule is not what they do that day (not on a match day)
-  const mds = gharafaMatchDates(d, events), isMd = mds.includes(iso) || (g && g.kind === 'match');
+  const mds = gharafaMatchDates(d, events), isMd = mds.includes(iso) || (g && g.kind === 'match'), off = !!DAY_OFF[iso];
   const autoTag = (g && g.md) || computedTag(iso, mds.filter((x) => x < iso).pop(), mds.find((x) => x > iso), true) || '—';
-  const mdPick = isMd ? '' : `<label class="sh-md"><span>MD of this day</span><select id="sh-md"><option value="">Automatic${DAY_MD[iso] ? '' : ' · ' + autoTag}</option>${DAY_MD_TAGS.map((t) => `<option ${DAY_MD[iso] === t ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+  const offPick = isMd ? '' : `<div class="sh-md"><span>Team day off</span><div class="seg"><button type="button" data-dayoff="0" class="${off ? '' : 'active'}">No</button><button type="button" data-dayoff="1" class="${off ? 'active' : ''}">Day off</button></div></div>`;
+  const mdPick = isMd || off ? '' : `<label class="sh-md"><span>MD of this day</span><select id="sh-md"><option value="">Automatic${DAY_MD[iso] ? '' : ' · ' + autoTag}</option>${DAY_MD_TAGS.map((t) => `<option ${DAY_MD[iso] === t ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
     <p class="note">Change it when the day is not what the calendar says — e.g. two days after a match and two before the next: MD+2 (recovery, compensatory) or MD-2. The session's data follows a few minutes later.</p>`;
-  const kindTxt = g ? ({ match: 'Match', training: `${g.comp ? 'Compensatory session' : 'Training'}${DAY_MD[iso] || g.md ? ' · ' + (DAY_MD[iso] || g.md) : ''}`, off: 'Day off', individual: 'Recovery / individual work', none: 'No team session' }[g.kind]) : iso > d.as_of ? 'Upcoming' : 'No GPS data';
+  const kindTxt = off && (!g || g.kind !== 'training') ? 'Team day off' : g ? ({ match: 'Match', training: `${g.comp ? 'Compensatory session' : 'Training'}${DAY_MD[iso] || g.md ? ' · ' + (DAY_MD[iso] || g.md) : ''}`, off: 'Day off', individual: 'Recovery / individual work', none: 'No team session' }[g.kind]) : iso > d.as_of ? 'Upcoming' : 'No GPS data';
 
   const evRow = (e) => `<div class="li"><i style="background:${eventColor(e)}"></i><div><b>${escapeHtml(eventTitle(e))}${e.edit ? ' <span class="edited">edited</span>' : ''}</b><small>${e.start === e.end ? fmtDay(e.start) : `${fmtDay(e.start, { day: 'numeric', month: 'short' })} – ${fmtDay(e.end, { day: 'numeric', month: 'short' })} · date TBC`}${e.time ? ' · ' + escapeHtml(e.time) : ''}${e.venue ? ' · ' + escapeHtml(e.venue) : ''}${e.edit ? ` · by ${escapeHtml(String(e.edit.by || '').split('@')[0])}` : ''}</small></div><button type="button" class="btn-light" data-edit="${e.id}">Edit</button></div>`;
 
@@ -366,6 +383,8 @@ function drawDay() {
     ${g && g.comp && metrics ? '<p class="note">Average of the players who did not play the match (the others recovered, no GPS) · z vs the past compensatory sessions.</p>' : ''}
     ${metrics}
     ${sess ? `<button type="button" class="btn-light wide" id="sh-open">Open the session report ›</button>` : ''}
+    ${offPick}
+    ${off && !isMd ? '<p class="note">No team session this day: the Home page, the Session Plan (a new plan starts as a team day off) and the week plan follow.</p>' : ''}
     ${mdPick}
     ${other.length ? `<div class="sh-notes">${other.map((e) => `<span class="cnote">${escapeHtml(eventTitle(e))}</span>`).join('')}</div>` : ''}
     <h3 class="sh-sub">Fixtures</h3>
@@ -376,9 +395,18 @@ function drawDay() {
   const mdSel = el.querySelector('#sh-md');
   if (mdSel) mdSel.onchange = async () => {
     mdSel.disabled = true;
-    try { CAL.data.edits = await saveCalendarEdit('day:' + iso, mdSel.value ? { md: mdSel.value } : null); cacheSet('calendar', CAL.data); drawCalendar(); }
+    try { CAL.data.edits = await saveCalendarEdit('day:' + iso, dayEditWith(CAL.data, iso, { md: mdSel.value })); cacheSet('calendar', CAL.data); drawCalendar(); }
     catch (err) { alert(err.message || err); mdSel.disabled = false; }
   };
+  el.querySelectorAll('[data-dayoff]').forEach((b) => {
+    b.onclick = async () => {
+      const on = b.dataset.dayoff === '1';
+      if (on === off) return;
+      el.querySelectorAll('[data-dayoff]').forEach((x) => { x.disabled = true; });
+      try { CAL.data.edits = await saveCalendarEdit('day:' + iso, dayEditWith(CAL.data, iso, { off: on })); cacheSet('calendar', CAL.data); drawCalendar(); }
+      catch (err) { alert(err.message || err); el.querySelectorAll('[data-dayoff]').forEach((x) => { x.disabled = false; }); }
+    };
+  });
   const open = el.querySelector('#sh-open');
   if (open) open.onclick = () => { closeDay(); switchView('sessions', { date: iso }); };
   const add = el.querySelector('#sh-add');

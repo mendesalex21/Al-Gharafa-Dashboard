@@ -68,7 +68,8 @@ function hoData() {
     : tag && T[tag] ? Object.fromEntries(HO_K.filter(([k]) => T[tag][k]).map(([k]) => [k, { ...T[tag][k], med: T[tag][k].med }])) : null;
   const pl = P.workload.players.filter((p) => p.pos !== 'GK'); // outfield players: the GPS to hand out
   const tp = hoTodayPlan(today), st = tp && tp.status ? tp.status : null;
-  const dayOff = !!(tp && tp.off) || (P.calendar.events || []).some((e) => e.kind === 'off' && e.start <= today && (e.end || e.start) >= today);
+  const dayOff = !!(tp && tp.off) || (P.calendar.events || []).some((e) => e.kind === 'off' && e.start <= today && (e.end || e.start) >= today)
+    || (P.calendar.edits || []).some((ed) => ed.id === 'day:' + today && ed.data && ed.data.off); // set in the Calendar
   let out, groups = null;
   if (st && !(tp && tp.off)) { // today's Session Plan: who trains, in which group, who is out
     out = pl.filter((p) => HO_OUT[st[p.id]]).map((p) => ({ ...p, planStatus: HO_OUT[st[p.id]] }));

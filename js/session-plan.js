@@ -129,8 +129,9 @@ function splPlan(date) {
   if (plans[date]) return plans[date];
   const last = Object.keys(SPL.lib.recent).filter((d) => d < date).sort().pop(), types = last ? SPL.lib.recent[last].types : {};
   const status = {};
-  SPL.lib.players.forEach((p) => { const t = types[p.id] || p.type; status[p.id] = SPL_KEEP.has(t) ? t : 'ProTraining'; });
-  return { ampm: 'PM', drills: [], status, rpe: {}, fresh: true };
+  const off = typeof DAY_OFF !== 'undefined' && !!DAY_OFF[date] && !splMatchOn(date); // set as a team day off in the Calendar
+  SPL.lib.players.forEach((p) => { const t = types[p.id] || p.type; status[p.id] = SPL_KEEP.has(t) ? t : 'ProTraining'; if (off && SPL_IN_SESSION.has(status[p.id])) status[p.id] = 'Day_Off'; });
+  return { ampm: 'PM', drills: [], status, rpe: {}, fresh: true, ...(off ? { off: true } : {}) };
 }
 function splEnsure(date) { const p = splPlan(date); if (p.fresh) { delete p.fresh; SPL.saved.plans[date] = p; } return p; }
 
@@ -1249,7 +1250,7 @@ function splChange(e) {
   if (t.dataset.md != null) { // the day's MD chosen here (also in the Calendar): saved with the calendar edits, the data follows
     const v = t.value;
     SPL.state = 'Saving the MD…'; splStateLine();
-    saveCalendarEdit('day:' + date, v ? { md: v } : null).then((edits) => {
+    saveCalendarEdit('day:' + date, dayEditWith(SPL.cal, date, { md: v })).then((edits) => {
       SPL.cal.edits = edits; SPL.events = applyCalendarEdits(SPL.cal); splMatches();
       if (typeof cacheSet === 'function') cacheSet('calendar', SPL.cal);
       SPL.state = `MD ${v || 'automatic'} saved ✓ — the session's data follows at the next update`; splDraw();
