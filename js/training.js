@@ -222,7 +222,7 @@ function drawSessions(opts) {
       <p class="note" id="se-mdz-note"></p>
       <div id="se-mdz"></div>
     </section>
-    ${s.drills.length ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Drills</h2><span class="panel-note">team average per drill · "vs match" = per-minute intensity as % of the players' match intensity · tap a drill for players</span></div><div class="drills-wrap" id="se-drills"></div></section>` : ''}`;
+    ${s.drills.length ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">${s.kind === 'match' ? 'Drills' : 'Drills vs the match'}</h2><span class="panel-note">${s.kind === 'match' ? 'team average per drill · "vs match" = per-minute intensity as % of the players’ match intensity · tap a drill for players' : 'median of the players · each one vs his own match · the players of a drill: Individual training › Drills above'}</span></div><div class="drills-wrap" id="se-drills"></div></section>` : ''}`;
 
   drawMdz(s);
   const corr = body.querySelector('[data-correct]');
@@ -340,6 +340,7 @@ function playerName(id) {
 }
 
 function drawDrills(s) {
+  if (s.kind !== 'match') { document.getElementById('se-drills').innerHTML = svDrillsVsMatch(s.drills, new Set(s.drills.map((x) => x.ampm)).size > 1); return; } // training: all drills vs the match (his mockup A)
   const totalTd = s.drills.reduce((a, dr) => a + (dr.team.td || 0), 0) || 1;
   const vs = (v) => (v == null ? '<span class="muted">—</span>' : `<span class="${v > 110 ? 'chip-v orange' : 'num'}">${v}%</span>`);
   document.getElementById('se-drills').innerHTML = `

@@ -375,11 +375,10 @@ function svDrillsHtml(s) {
   const strip = `<div class="sv-dstrip"><b>${d.no} · ${escapeHtml(svDrillName(d))}</b><span>${fmtN(d.min)}' · ${rows.length} player${rows.length > 1 ? 's' : ''}</span><span>team ${avg} m/min${d.team && d.team.vmax ? ` · max speed ${fmtN(d.team.vmax, 1)} km/h` : ''}</span>
     ${s.kind === 'match' ? '' : `<span class="sv-dvs" title="Median of the players' per-minute output in the drill vs their own per-minute match output">Intensity vs his match (per min): TD <b>${pc(vm.td)}</b> · &gt; 15 <b>${pc(vm.d15)}</b> · &gt; 20 <b>${pc(vm.hit)}</b> · Acc+Dec <b>${pc(vm.acc_dec)}</b></span>`}</div>`;
   return `<div class="sv-dchips">${chips}</div>${strip}${svTable(rows, SV_DCOLS, { sort: SV.dsort, team: svAvgRow(rows, SV_DCOLS, (r) => r.pro) })}
-    <div class="rt-leg"><span>Time = minutes in the drill · m/min = his intensity in the drill</span><span><i class="sv-lg-b sv-lg-t"></i>team max in this drill</span><span>Ranked by ${SV.dsort ? svLabel(SV.dsort) : 'position'} · click a column to rank by it (Players = by position)</span></div>
-    ${s.kind === 'match' ? '' : svDrillsVsMatch(list, twoParts)}`;
+    <div class="rt-leg"><span>Time = minutes in the drill · m/min = his intensity in the drill</span><span><i class="sv-lg-b sv-lg-t"></i>team max in this drill</span><span>Ranked by ${SV.dsort ? svLabel(SV.dsort) : 'position'} · click a column to rank by it (Players = by position)</span></div>`;
 }
 
-/** All drills vs the match (his mockup A, 2026-10-26): per drill, the players' median per-minute output vs their match
+/** All drills vs the match (his mockup A, 2026-10-26; the Drills panel at the end of the page, training days): per drill, the players' median per-minute output vs their match
  * minute, the median % of their max speed, the WCS (median % of their worst case of a match, in the drill's window) and
  * the RHIE (the group's bouts a minute vs its match minute) — one colour scale for every %. A metric the drill hardly
  * has (a few metres) reads "—": its % would mean nothing. */
@@ -396,10 +395,9 @@ function svDrillsVsMatch(list, twoParts) {
       ${SV_DVM.map(([k]) => cell(low(d, k) ? null : v[k])).join('')}${cell(v.vmax)}
       ${w ? cell(w.td, `${w.win}' window`) + cell(low(d, 'hit') ? null : w.hi, `${w.win}' window`) : '<td class="dvm-na">—<small>no window</small></td><td class="dvm-na">—</td>'}
       ${r ? cell(r.pct, `${fmtN(r.per10, 1)} / 10' · match ${fmtN(r.m10, 1)}`) : '<td class="dvm-na">—</td>'}</tr>`; }).join('');
-  return `<div class="dvm"><div class="dvm-head"><h3>All drills vs the match</h3><span class="muted">median of the players · each one vs his own match</span></div>
-    <div class="table-wrap"><table class="dvm-t"><thead><tr class="g"><th></th><th colspan="6" style="--gc:#ff9500">Per minute vs his match</th><th style="--gc:#34c759">Speed</th><th colspan="2" style="--gc:#5856d6">WCS · vs his match worst case</th><th style="--gc:#ff2d55">RHIE</th></tr>
+  return `<div class="table-wrap"><table class="dvm-t"><thead><tr class="g"><th></th><th colspan="6" style="--gc:#ff9500">Per minute vs his match</th><th style="--gc:#34c759">Speed</th><th colspan="2" style="--gc:#5856d6">WCS · vs his match worst case</th><th style="--gc:#ff2d55">RHIE</th></tr>
     <tr><th class="l">Drill</th>${SV_DVM.map(([, l]) => `<th>${l}</th>`).join('')}<th>Vmax % max</th><th>TD</th><th>&gt;20</th><th>Bouts / min</th></tr></thead><tbody>${body}</tbody></table></div>
-    <div class="rt-leg"><span>% of his match:</span><span class="dvm-k dvm-c0">&lt; 50</span><span class="dvm-k dvm-c1">50–80</span><span class="dvm-k dvm-c2">80–100</span><span class="dvm-k dvm-c3">100–120</span><span class="dvm-k dvm-c4">&gt; 120</span><span>per minute and RHIE = vs his average match minute · WCS = vs his worst 1 / 3 / 5 min of a match, the drill's window · — = too little of it in the drill</span></div></div>`;
+    <div class="rt-leg"><span>% of his match:</span><span class="dvm-k dvm-c0">&lt; 50</span><span class="dvm-k dvm-c1">50–80</span><span class="dvm-k dvm-c2">80–100</span><span class="dvm-k dvm-c3">100–120</span><span class="dvm-k dvm-c4">&gt; 120</span><span>per minute and RHIE = vs his average match minute · WCS = vs his worst 1 / 3 / 5 min of a match, the drill's window · — = too little of it in the drill</span></div>`;
 }
 
 // ------------------------------------------------------------------ individual panel (full session / drills)
