@@ -14,6 +14,8 @@ const VIEW_REDRAW = {
   team: () => drawTeam(), squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: (o) => { calSetMode(o); drawCalendar(); }, reports: () => rpFit(), roster: (o) => { roSetMode(o); drawRoster(); }, plan: () => splDraw(), matchfiles: () => drawMatchFiles(), tactical: () => drawTactical(),
 };
 let CURRENT_VIEW = null;
+/** Pages taken out of the menu (2026-10-26, his call — already shown elsewhere): old links open where it now lives. */
+const VIEW_GONE = { longitudinal: 'wellness', objectives: 'sessions', readiness: 'squad' };
 
 /** `opts` lets one page open another on a given item, e.g. switchView('player', {player: 'ounas'}). */
 function switchView(view, opts) {
@@ -105,6 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const parts = decodeURIComponent(location.hash.slice(1)).split('/'); // e.g. #sessions/2026-09-04[/dame], #player/ounas
   if (parts[0] === 'downloads') parts[0] = 'reports'; // the Reports tab is now called Downloads
   if (parts[0] === 'week') parts[0] = 'squad'; // Training › Week load is gone: its charts are in Workload › Squad
+  if (VIEW_GONE[parts[0]]) parts[0] = VIEW_GONE[parts[0]];
   const [start, arg, arg2] = parts;
   const opts = arg ? { sessions: { date: arg, player: arg2 }, player: { player: arg }, testing: { athlete: arg, tab: 'profile' }, objectives: { cycle: arg }, reports: { date: arg, version: arg2 }, calendar: { mode: arg }, roster: { mode: arg } }[start] : undefined;
   initAuth(async () => {
@@ -113,6 +116,6 @@ document.addEventListener('DOMContentLoaded', () => {
     switchView(VIEW_RENDER[start] ? start : 'home', opts); // the home page (the club logo) is the landing page
     mfShowLink(); // the admin's Match files link
     setTimeout(() => { if (typeof splPrefetch === 'function') splPrefetch(); }, 1500); // Session Plan's saved plans (slow Google script), ready before the click
-    window.addEventListener('hashchange', () => { const h = location.hash.slice(1), v = h === 'downloads' ? 'reports' : h; if (VIEW_RENDER[v] && v !== CURRENT_VIEW) switchView(v); });
+    window.addEventListener('hashchange', () => { const h = location.hash.slice(1), v = h === 'downloads' ? 'reports' : VIEW_GONE[h] || h; if (VIEW_RENDER[v] && v !== CURRENT_VIEW) switchView(v); });
   });
 });

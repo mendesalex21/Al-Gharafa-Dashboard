@@ -414,7 +414,6 @@ function svMount(s) {
   document.getElementById('sv-attention').innerHTML = svAttentionHtml(s);
   document.querySelectorAll('#sv-attention [data-id]').forEach((r) => r.addEventListener('click', () => { // no GPS today: his player page
     if (svFlat(s).some((x) => x.id === r.dataset.id)) svOpen(s, r.dataset.id);
-    else if (r.dataset.gk) { LG.player = r.dataset.id; switchView('longitudinal'); } // a goalkeeper: his wellness trends
     else switchView('player', { player: r.dataset.id });
   }));
   document.querySelectorAll('#sv-attention [data-more]').forEach((b) => b.addEventListener('click', () => { b.closest('.sv-acol').classList.add('all'); b.remove(); }));

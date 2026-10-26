@@ -216,7 +216,7 @@ function hoBind(D) {
     if (el.dataset.go === 'sessions') switchView('sessions', { date: el.dataset.date }); else switchView(el.dataset.go);
   }));
   root.querySelectorAll('[data-player]').forEach((b) => b.addEventListener('click', () => switchView('player', { player: b.dataset.player })));
-  root.querySelectorAll('[data-well]').forEach((b) => b.addEventListener('click', () => { LG.player = b.dataset.well; switchView('longitudinal'); }));
+  root.querySelectorAll('[data-well]').forEach((b) => b.addEventListener('click', () => switchView('player', { player: b.dataset.well }))); // his wellness each morning
   hoBindAttn(D);
 }
 function hoBindAttn(D) {
@@ -224,7 +224,7 @@ function hoBindAttn(D) {
   if (!att || !s) return;
   att.querySelectorAll('.ho-tile').forEach((b) => b.addEventListener('click', () => { HO.open = HO.open === b.dataset.k ? null : b.dataset.k; att.outerHTML = hoAttn(D); hoBindAttn(D); }));
   att.querySelectorAll('.ho-row').forEach((b) => b.addEventListener('click', () => {
-    if (b.dataset.gk) { LG.player = b.dataset.id; switchView('longitudinal'); } // a goalkeeper: his wellness trends
+    if (b.dataset.gk) switchView('player', { player: b.dataset.id }); // a goalkeeper: his player page (wellness each morning)
     else if (svFlat(s).some((x) => x.id === b.dataset.id)) { TR.openPlayer = b.dataset.id; switchView('sessions', { date: s.date, player: b.dataset.id }); } // his sheet of that session
     else switchView('player', { player: b.dataset.id });
   }));
