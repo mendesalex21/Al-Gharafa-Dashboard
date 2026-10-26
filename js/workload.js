@@ -3,7 +3,7 @@
  * Data: sync/build.py → "workload" payload (ACWR rolling 7:28 + EWMA, weekly load z-scores, monotony,
  * high-speed exposure, availability). Wellness and tests payloads are joined in for the 360° view.
  */
-const WL = { data: null, wellness: null, tests: null, history: null, model: 'acwr', metric: 'td', rank: 'hit', player: null, int: null, week: null, weekMode: 'train' };
+const WL = { data: null, wellness: null, tests: null, history: null, model: 'z', metric: 'td', rank: 'hit', player: null, int: null, week: null, weekMode: 'train' };
 const WEEK_TARGET_METRICS = [['td', 'Total distance'], ['hit', 'Distance > 20 km/h'], ['spr_n', 'Sprints (count)'], ['acc_dec', 'HIT Acc + Dec']];
 const RISK_ORDER = { red: 0, orange: 1, green: 2, na: 3 };
 const STATUS_LABEL = { available: 'Available', injured: 'Injured', rehab: 'Rehab', sick: 'Sick', 'national team': 'National team', absent: 'Absent' };

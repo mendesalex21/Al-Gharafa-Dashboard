@@ -7,11 +7,11 @@ const VIEW_RENDER = {
   home: () => renderHome(), wellness: () => renderWellness(), longitudinal: () => renderLongitudinal(),
   sessions: (o) => renderSessions(o), objectives: (o) => renderObjectives(o), intensity: () => renderIntensity(), team: () => renderTeam(), squad: () => renderSquad(),
   player: (o) => renderPlayerLoad(o), readiness: () => renderReadiness(), testing: (o) => renderTesting(o), calendar: (o) => renderCalendar(o),
-  reports: (o) => renderReports(o), roster: () => renderRoster(), plan: () => renderPlan(), matchfiles: () => renderMatchFiles(), tactical: () => renderTactical(),
+  reports: (o) => renderReports(o), roster: (o) => renderRoster(o), plan: () => renderPlan(), matchfiles: () => renderMatchFiles(), tactical: () => renderTactical(),
 };
 const VIEW_REDRAW = {
   home: () => { hoLoadPlans(); drawHome(); }, longitudinal: () => drawLongitudinal(), sessions: (o) => drawSessions(o), objectives: () => drawObjectives(), intensity: () => drawIntensity(),
-  team: () => drawTeam(), squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: () => drawCalendar(), reports: () => rpFit(), roster: () => drawRoster(), plan: () => splDraw(), matchfiles: () => drawMatchFiles(), tactical: () => drawTactical(),
+  team: () => drawTeam(), squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: (o) => { calSetMode(o); drawCalendar(); }, reports: () => rpFit(), roster: (o) => { roSetMode(o); drawRoster(); }, plan: () => splDraw(), matchfiles: () => drawMatchFiles(), tactical: () => drawTactical(),
 };
 let CURRENT_VIEW = null;
 
@@ -21,13 +21,19 @@ function switchView(view, opts) {
   document.querySelectorAll('.nav-item[data-section]').forEach((btn) => {
     if (btn.dataset.section === section) btn.setAttribute('aria-current', 'page'); else btn.removeAttribute('aria-current');
   });
-  document.querySelectorAll('.flyout-link').forEach((a) => a.classList.toggle('active', a.dataset.view === view));
   Object.keys(VIEW_RENDER).forEach((v) => { document.getElementById('view-' + v).hidden = v !== view; });
   window.scrollTo(0, 0);
   CURRENT_VIEW = view;
   if (location.hash.slice(1).split('/')[0] !== view) history.pushState(null, '', '#' + view); // bookmarkable address + browser back
   if (!VIEWS[view]) { VIEWS[view] = true; VIEW_RENDER[view](opts); }
   else if (VIEW_REDRAW[view]) VIEW_REDRAW[view](opts); // widths may have changed while hidden
+  flyoutActive();
+}
+/** The menu line of the page on screen; pages with two layouts (Squad, Calendar) have one line each (data-mode). */
+const VIEW_MODE = { roster: () => RO.view, calendar: () => CAL.mode };
+function flyoutActive() {
+  const mode = VIEW_MODE[CURRENT_VIEW] ? VIEW_MODE[CURRENT_VIEW]() : null;
+  document.querySelectorAll('.flyout-link').forEach((a) => a.classList.toggle('active', a.dataset.view === CURRENT_VIEW && (!a.dataset.mode || a.dataset.mode === mode)));
 }
 
 /** Apple-style flyouts under nav items: open on mouse hover, on tap (iPad) or keyboard. */
@@ -72,7 +78,7 @@ function initFlyouts() {
       open(key);
       if (lastPointer === 'keyboard') panel.querySelector('.flyout-link').focus();
     });
-    panel.querySelectorAll('.flyout-link').forEach((link) => link.addEventListener('click', () => { close(); switchView(link.dataset.view); }));
+    panel.querySelectorAll('.flyout-link').forEach((link) => link.addEventListener('click', () => { close(); switchView(link.dataset.view, link.dataset.mode ? { mode: link.dataset.mode } : undefined); }));
   });
   backdrop.addEventListener('click', close);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
@@ -100,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (parts[0] === 'downloads') parts[0] = 'reports'; // the Reports tab is now called Downloads
   if (parts[0] === 'week') parts[0] = 'squad'; // Training › Week load is gone: its charts are in Workload › Squad
   const [start, arg, arg2] = parts;
-  const opts = arg ? { sessions: { date: arg, player: arg2 }, player: { player: arg }, testing: { athlete: arg, tab: 'profile' }, objectives: { cycle: arg }, reports: { date: arg, version: arg2 }, calendar: { mode: arg } }[start] : undefined;
+  const opts = arg ? { sessions: { date: arg, player: arg2 }, player: { player: arg }, testing: { athlete: arg, tab: 'profile' }, objectives: { cycle: arg }, reports: { date: arg, version: arg2 }, calendar: { mode: arg }, roster: { mode: arg } }[start] : undefined;
   initAuth(async () => {
     // photos: once per device, then from the browser's storage (a few ms) — wait that long so pages draw with them
     await Promise.race([loadPlayerPhotos(), new Promise((ok) => setTimeout(ok, 400))]);

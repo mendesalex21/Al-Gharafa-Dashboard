@@ -81,17 +81,19 @@ const roOut = (p) => p.avail !== 'available';
 function roPhoto(id, size) { const ph = typeof PHOTO_DATA !== 'undefined' && PHOTO_DATA[id]; return `<span class="ro-ph" style="width:${size}px;height:${size}px;${ph ? `background-image:url('${ph}')` : ''}"></span>`; }
 
 // ------------------------------------------------------------------ page
-function renderRoster() {
+function roSetMode(o) { if (o && (o.mode === 'pos' || o.mode === 'list')) { RO.view = o.mode; RO.showLeft = false; } } // the Squad menu: By position · List
+function renderRoster(o) {
+  roSetMode(o);
   const root = document.getElementById('view-roster');
   root.innerHTML = `
-    ${pageHead('Season 2026/27', 'Squad', 'ro-sub', `<div class="seg" id="ro-view"><button type="button" data-v="pos" class="active">By position</button><button type="button" data-v="list">List</button></div>
+    ${pageHead('Season 2026/27', 'Squad', 'ro-sub', `<div class="seg" id="ro-view"><button type="button" data-v="pos">By position</button><button type="button" data-v="list">List</button></div>
       <button type="button" class="btn-light" id="ro-xlsx" title="The list as an Excel file">⬇ Download Excel</button><button type="button" class="btn-primary" id="ro-add">+ Add player</button>`)}
     <div class="ro-summary" id="ro-summary"></div>
     <div id="ro-body"><div class="panel"><div class="empty">Loading…</div></div></div>
     <p class="ro-foot"><button type="button" class="linkbtn" id="ro-left"></button></p>
     <div class="sheet-backdrop" id="ro-bg" hidden></div>
     <aside class="sheet ro-sheet" id="ro-sheet" hidden aria-modal="true" role="dialog"></aside>`;
-  root.querySelectorAll('#ro-view button').forEach((b) => { b.onclick = () => { RO.view = b.dataset.v; RO.showLeft = false; drawRoster(); }; });
+  root.querySelectorAll('#ro-view button').forEach((b) => { b.onclick = () => { RO.view = b.dataset.v; RO.showLeft = false; drawRoster(); flyoutActive(); }; });
   document.getElementById('ro-add').onclick = () => roOpen(null);
   document.getElementById('ro-xlsx').onclick = roDownload;
   document.getElementById('ro-left').onclick = () => { RO.showLeft = !RO.showLeft; RO.view = 'list'; drawRoster(); };

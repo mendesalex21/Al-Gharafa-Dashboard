@@ -87,9 +87,12 @@ function computedTag(d, prev, next, rule) { // rule = true: the rule alone, with
 function cycleType(len) { return len == null ? null : len <= 4 ? 'short' : len <= 7 ? 'normal' : len <= 12 ? 'long' : null; }
 
 // ------------------------------------------------------------------ page
-function renderCalendar(opts) {
-  // #calendar/games · #calendar/2026-09 (that month)
+function calSetMode(opts) { // #calendar/games · #calendar/2026-09 (that month) · the Calendar menu: Monthly · Games
   if (opts && opts.mode) { CAL.mode = opts.mode === 'games' ? 'games' : 'month'; if (/^\d{4}-\d{2}$/.test(opts.mode)) CAL.month = opts.mode; }
+  document.querySelectorAll('#ca-mode button').forEach((b) => b.classList.toggle('active', b.dataset.v === CAL.mode));
+}
+function renderCalendar(opts) {
+  calSetMode(opts);
   const root = document.getElementById('view-calendar');
   root.innerHTML = `
     ${pageHead('Season 2026/27', 'Calendar', 'ca-sub', `${segHtml('ca-mode', [['month', 'Calendar'], ['games', 'Games']], CAL.mode)}
@@ -106,7 +109,7 @@ function renderCalendar(opts) {
       <div class="ca-side"><div id="ca-unav"></div><div class="news ca-cyc"><h4>Microcycles<small>days between matches</small></h4><div class="ca-cyc-l" id="ca-cycles"></div></div></div></div>
     <div class="sheet-backdrop" id="ca-sheet-bg" hidden></div>
     <aside class="sheet" id="ca-sheet" hidden aria-modal="true" role="dialog"></aside>`;
-  bindSeg('ca-mode', (v) => { CAL.mode = v; history.replaceState(null, '', '#calendar' + (v === 'games' ? '/games' : '')); drawCalendar(); });
+  bindSeg('ca-mode', (v) => { CAL.mode = v; history.replaceState(null, '', '#calendar' + (v === 'games' ? '/games' : '')); drawCalendar(); flyoutActive(); });
   document.getElementById('ca-prev').onclick = () => { CAL.month = shiftMonth(CAL.month, -1); drawCalendar(); };
   document.getElementById('ca-next-m').onclick = () => { CAL.month = shiftMonth(CAL.month, 1); drawCalendar(); };
   document.getElementById('ca-today').onclick = () => { CAL.month = todayIso().slice(0, 7); drawCalendar(); };
