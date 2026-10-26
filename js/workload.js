@@ -265,7 +265,7 @@ function drawRanking() {
  * number; his wellness; option: the team's value as a grey tick), week by week, match references (+ max speed, WCS, RHIE)
  * and tests. d15 and the number of sprints are not in the workload series: they come from the sessions payload, their
  * A:C is computed here the same way (uncoupled 7:28). */
-const PL = { view: 'week', color: 'z', team: false, hit: 'hit', spr: 'spr' };
+const PL = { view: 'week', color: 'z', team: false, hit: 'hit', spr: 'spr', from: null, to: null }; // from / to: the Day view's dates (null = the last 5 weeks)
 const PL_LAB = { td: ['Total distance', 'm'], hit: ['Distance > 20 km/h', 'm'], d15: ['Distance > 15 km/h', 'm'], spr: ['Sprint distance', 'm'], spr_n: ['Number of sprints', ''], acc_dec: ['High Acc + Dec', ''], srpe: ['sRPE', 'AU'] };
 const PL_ALL = ['td', 'hit', 'd15', 'spr', 'spr_n', 'acc_dec', 'srpe'];
 const plKeys = () => ['td', PL.hit, PL.spr, 'acc_dec', 'srpe'];
@@ -379,7 +379,7 @@ function plCharts(B) {
     return out;
   }
   if (PL.view === 'day') {
-    const ds = days.filter((x) => x >= addDays(d.as_of, -34)), few = ds.length <= (TM.fit || 99);
+    const [f0, t0] = plDayRange(s, d), ds = days.filter((x) => x >= f0 && x <= t0), few = ds.length <= (TM.fit || 99);
     const dtick = (x) => (few ? fmtDay(x, { weekday: 'short', day: 'numeric' }) : dateOf(x).getUTCDay() === 0 ? fmtDay(x, { day: 'numeric', month: 'short' }) : '');
     out = plKeys().map((k) => { const [l, u] = PL_LAB[k];
       return card(head(k, l, `per day${u ? ' · ' + u : ''} · colour = ${z ? 'z vs his usual for that MD' : 'A:C 7:28'}${teamNote}`) + tmChart({ title: l, dots: ds.length <= (TM.fit || 99),
@@ -562,7 +562,7 @@ function drawPlayerLoad(opts) {
     : [0.4, 0.6, 1, 1.4, 1.6].map((r) => `<span><i style="background:${tmZone(r)[0]}"></i>${tmZone(r)[1]}</span>`).join('');
   body.innerHTML = `<div class="tm-tiles pl-tiles">${plTiles(B)}</div>
     <div class="grid2">${box('Weekly load z-score', 'Sunday–Saturday weeks vs his previous 6 weeks', '<div class="table-wrap" id="pl-z"></div>')}${box(`Availability · last ${s.cat.length} days`, '', '<div id="pl-timeline"></div>')}</div>
-    <div class="tm-bar"><div class="tm-dates muted">${PL.view === 'day' ? 'The last 5 weeks' : PL.view === 'week' ? 'The last weeks' : PL.view === 'games' ? 'His last matches' : 'The season'}</div>
+    <div class="tm-bar"><div class="tm-dates${PL.view === 'day' ? '' : ' muted'}">${PL.view === 'day' ? `<label>From <input type="date" id="pl-from" min="${s.start}" max="${d.as_of}" value="${plDayRange(s, d)[0]}"></label><label>to <input type="date" id="pl-to" min="${s.start}" max="${d.as_of}" value="${plDayRange(s, d)[1]}"></label>${PL.from ? '<button type="button" class="linkbtn" id="pl-reset">Reset</button>' : ''}` : PL.view === 'week' ? 'The last weeks' : PL.view === 'games' ? 'His last matches' : 'The season'}</div>
       <div class="tm-ctl">${PL.view === 'games' ? segHtml('pl-g90', [['raw', 'Raw'], ['p90', 'Per 90']], PL.g90 || 'raw') : `<span class="tm-lab">Team</span>${segHtml('pl-team', [['off', 'Off'], ['on', 'Show']], PL.team ? 'on' : 'off')}`}<span class="tm-lab">Colour</span>${segHtml('pl-color', [['z', 'z-score'], ['ac', 'A:C']], PL.color)}${segHtml('pl-view', [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['games', 'Games']], PL.view)}</div></div>
     <div class="tm-legend">${legend}<span>G = match</span>${PL.view === 'week' ? '<span>click a week: its detail day by day</span>' : ''}${PL.team ? '<span><i style="background:#6b6b70"></i>the team</span>' : ''}</div>
     <div class="tm-grid${PL.team && PL.view !== 'games' ? ' pl-team' : ''}">${plCharts(B)}</div>
@@ -572,6 +572,8 @@ function drawPlayerLoad(opts) {
   if (document.getElementById('pl-g90')) bindSeg('pl-g90', (v) => { PL.g90 = v; drawPlayerLoad(); }); // Games: raw or per 90
   bindSeg('pl-color', (v) => { PL.color = v; drawPlayerLoad(); });
   bindSeg('pl-view', (v) => { PL.view = v; drawPlayerLoad(); });
+  ['from', 'to'].forEach((f) => { const el = document.getElementById('pl-' + f); if (el) el.onchange = () => { if (!el.value) return; const [a, b] = plDayRange(s, d); PL.from = a; PL.to = b; PL[f] = el.value; if (PL.from > PL.to) PL[f === 'from' ? 'to' : 'from'] = el.value; drawPlayerLoad(); }; });
+  if (document.getElementById('pl-reset')) document.getElementById('pl-reset').onclick = () => { PL.from = PL.to = null; drawPlayerLoad(); };
   bindSeg('pl-hit', (v) => { PL.hit = v; drawPlayerLoad(); });
   bindSeg('pl-spr', (v) => { PL.spr = v; drawPlayerLoad(); });
   document.getElementById('pl-tests-link').onclick = () => switchView('testing', { athlete: p.id, tab: 'profile' });
@@ -579,6 +581,12 @@ function drawPlayerLoad(opts) {
   drawZTable(s);
   drawTimeline(s);
   drawPlayerTests(p);
+}
+
+/** The Day view's dates: his choice (From / to), else the last 5 weeks — within his series. */
+function plDayRange(s, d) {
+  const lo = s.start, hi = d.as_of, clamp = (x) => (x < lo ? lo : x > hi ? hi : x);
+  return PL.from ? [clamp(PL.from), clamp(PL.to || hi)] : [clamp(addDays(hi, -34)), hi];
 }
 
 function drawZTable(s) {
