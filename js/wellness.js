@@ -60,6 +60,7 @@ function wellnessSkeleton() {
       <div class="w-theme-rings" id="w-themeRings"></div>
     </section>
 
+    <div class="w-flow">
     <section class="w-group" id="w-grp-alert">
       <h2>Players in alert <span class="w-count" id="w-cnt-alert"></span></h2>
       <div class="w-grid" id="w-grid-alert"></div>
@@ -72,6 +73,7 @@ function wellnessSkeleton() {
       <h2>Squad <span class="w-count" id="w-cnt-squad"></span></h2>
       <div class="w-grid" id="w-grid-squad"></div>
     </section>
+    </div>
     <section class="w-group" id="w-grp-detail">
       <h2>Detailed view</h2>
       <div class="w-table-scroll"><table class="w-detail" id="w-detailTable"></table></div>

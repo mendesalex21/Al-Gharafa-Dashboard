@@ -3,7 +3,7 @@
  * Data: sync/build.py → "workload" payload (ACWR rolling 7:28 + EWMA, weekly load z-scores, monotony,
  * high-speed exposure, availability). Wellness and tests payloads are joined in for the 360° view.
  */
-const WL = { data: null, wellness: null, tests: null, history: null, model: 'z', metric: 'td', rank: 'hit', player: null, int: null, week: null, weekMode: 'train' };
+const WL = { data: null, wellness: null, tests: null, history: null, model: 'z', metric: 'td', rank: 'hit', player: null, int: null, week: null, weekMode: 'train', bw: 0 };
 const WEEK_TARGET_METRICS = [['td', 'Total distance'], ['hit', 'Distance > 20 km/h'], ['spr_n', 'Sprints (count)'], ['acc_dec', 'HIT Acc + Dec']];
 const RISK_ORDER = { red: 0, orange: 1, green: 2, na: 3 };
 const STATUS_LABEL = { available: 'Available', injured: 'Injured', rehab: 'Rehab', sick: 'Sick', 'national team': 'National team', absent: 'Absent' };
@@ -46,6 +46,7 @@ function renderSquad() {
     <div class="tiles" id="sq-tiles"></div>
     <section class="panel sv-bleed">
       <div class="panel-head"><h2 class="panel-title">Risk board</h2>
+        <span class="stepper sq-bstep"><button type="button" id="sq-bprev" aria-label="Previous week">‹</button><span class="month-label" id="sq-bweek"></span><button type="button" id="sq-bnext" aria-label="Next week">›</button></span>
         <span class="panel-note" id="sq-board-note"></span></div>
       <div class="table-wrap" id="sq-board"><div class="empty">Loading…</div></div>
     </section>
@@ -79,6 +80,9 @@ function renderSquad() {
   withData('sessions', (d) => { TR.sessions = d; drawSquadWeek(); }, () => {}); // the players' weeks (% of his top-3 match)
   withData('workload', (d) => { WL.data = d; drawSquad(); }, (err) => { root.innerHTML = loadError(err); });
   withData('wellness', (d) => { WL.wellness = d; drawSquad(); }, () => {});
+  withData('wellness_history', (d) => { WL.history = d; drawBoard(); }, () => {}); // each week's wellness
+  document.getElementById('sq-bprev').onclick = () => { WL.bw++; drawBoard(); };
+  document.getElementById('sq-bnext').onclick = () => { WL.bw = Math.max(0, WL.bw - 1); drawBoard(); };
 }
 
 /** Each player's week (Sunday → Saturday) as a % of his top-3 match — from the old Training › Week load page. The green
@@ -113,8 +117,6 @@ function drawSquad() {
   if (!d || document.getElementById('view-squad').hidden) return;
   drawSquadWeek();
   document.getElementById('sq-sub').textContent = `Data up to ${fmtDay(d.as_of, { weekday: 'long', day: 'numeric', month: 'long' })} · ${fmtUpdated(d.generated_at)}`;
-  const zm = WL.model === 'z', ratio = (p) => (WL.model === 'ewma' ? p.ewma : zm ? p.z7 || {} : p.acwr);  // z: this week's load vs his previous 6 weeks
-  document.getElementById('sq-board-note').textContent = `${zm ? 'z-score per metric: this week’s load vs the player’s previous 6 weeks' : WL.model === 'ewma' ? 'EWMA ratio per metric' : 'ACWR 7:28 per metric'} · spike = the highest weekly z · click a player`;
   const ps = d.players;
   const red = ps.filter((p) => p.risk === 'red').length, orange = ps.filter((p) => p.risk === 'orange').length;
   const unavailable = ps.filter((p) => p.status !== 'available');
@@ -133,31 +135,7 @@ function drawSquad() {
     <div class="tile"><div class="tile-label">This week · TD</div><div class="tile-value">${fmtN(wNow.td)}<small> m</small></div>
       <div class="tile-sub">${wNow.days < 7 ? `${wNow.days} of 7 days · ` : ''}last week ${fmtN(wPrev ? wPrev.td : null)} m</div></div>`;
 
-  const rows = ps.map((p) => {
-    const r = ratio(p), sp = maxSpike(p);
-    const hist = p.history_days < 28 ? `<small class="muted">${p.history_days} d of data</small>` : '';
-    const hurt = p.status === 'injured' || p.status === 'rehab';
-    const chip = (v) => (hurt ? '<span class="muted">—</span>' : zm ? (v == null ? '<span class="muted">—</span>' : `<span class="mz ${tmZ(v)}">${tmS(v)}</span>`)
-      : p.status !== 'available' ? `<span class="chip-v na">${v == null ? '—' : v.toFixed(2)}</span>` : acwrChip(v));
-    return {
-      id: p.id,
-      cells: [`<i class="riskdot" style="background:${STATUS_COL[p.risk]}" title="${p.risk}"></i>`, playerCell(p.id, p.name, p.pos), statusBadge(p.status),
-        ...METRIC_KEYS.map((k) => (r[k] == null && hist ? hist : chip(r[k]))),
-        spikeHtml(sp), p.monotony == null ? '<span class="muted">—</span>' : `<span class="${p.monotony >= 2 ? 'chip-v orange' : 'num'}">${p.monotony.toFixed(1)}</span>`,
-        p.days_hsv == null ? '—' : `<span class="${p.days_hsv >= 10 && p.status === 'available' ? 'chip-v orange' : 'num'}">${p.days_hsv} d</span>`,
-        wellnessCell(p.id), flagsCompact(p.flags)],
-      keys: [RISK_ORDER[p.risk] * 100 - p.flags.length, p.name, p.status, ...METRIC_KEYS.map((k) => r[k]), sp ? sp.z : null, p.monotony, p.days_hsv,
-        WL.wellness && WL.wellness.byId[p.id] ? WL.wellness.byId[p.id].score : null, p.flags.length],
-    };
-  });
-  const board = document.getElementById('sq-board');
-  sortableTable(board, [
-    { label: 'Risk', cls: 'c' }, { label: 'Player' }, { label: 'Status' }, ...METRIC_KEYS.map((k) => ({ label: METRIC_SHORT[k], cls: 'c', desc: true })),
-    { label: 'Spike z', cls: 'c', desc: true }, { label: 'Monotony', cls: 'c', desc: true }, { label: '≥90% Vmax', cls: 'c', desc: true },
-    { label: 'Wellness', cls: 'c' }, { label: 'Flags', desc: true },
-  ], rows, { col: 0, dir: 1 }, (r) => `data-id="${r.id}" class="clickable"`);
-  board.onclick = (e) => { const tr = e.target.closest('tr[data-id]'); if (tr) switchView('player', { player: tr.dataset.id }); };
-
+  drawBoard();
   drawRanking();
   const k = WL.metric;
   const pts = ps.filter((p) => p.status === 'available' && p.chronic[k] > 0).map((p) => {
@@ -171,6 +149,95 @@ function drawSquad() {
     tip: (p) => `<b>${escapeHtml(p.label)}</b><span>ACWR ${p.r.toFixed(2)} · acute ${fmtN(p.y)} · chronic ${fmtN(p.x)}</span>`,
     onClick: (p) => switchView('player', { player: p.id }),
   });
+}
+
+/* ------------------------------------------------------------------ the risk board (his mockup A, 2026-10-26): any week
+ * (Sunday → Saturday; this week = the last 7 days, as the A:C), columns by category — volume, intensity, internal, A:C —
+ * each load as his z for the week (vs his previous 6 weeks, the value in the tooltip), or its A:C / EWMA ratio; Vmax of the
+ * week (% of his reference) and the days since ≥ 90 % at the end of the week; the alert in words at the end (this week:
+ * the alerts of the dashboard and the e-mail; an earlier week: the same rules from that week's numbers). */
+const BD_GROUPS = [
+  ['Volume', '#5856d6', [['minutes', 'Min'], ['td', 'TD']]],
+  ['Intensity', '#ff9500', [['d15', '>15'], ['hit', 'HIT >20'], ['spr', 'Sprint m'], ['spr_n', 'Sprints'], ['acc_dec', 'Acc+Dec'], ['vmax', 'Vmax'], ['hsv', 'Days ≥90%']]],
+  ['Internal', '#ff2d55', [['srpe', 'sRPE'], ['rpe', 'RPE'], ['well', 'Wellness']]],
+  ['A:C 7:28', '#8e8e93', [['ac_td', 'TD'], ['ac_hit', 'HIT'], ['ac_spr_n', 'Sprints'], ['ac_acc_dec', 'Acc+Dec'], ['mono', 'Monot.']]],
+];
+const BD_Z = ['minutes', 'td', 'd15', 'hit', 'spr', 'spr_n', 'acc_dec', 'srpe'];
+const BD_LABEL = { minutes: 'Minutes', td: 'TD', d15: '>15', hit: 'HIT', spr: 'Sprint', spr_n: 'Sprints', acc_dec: 'Acc+Dec', srpe: 'sRPE' };
+
+/** One player's week: values (7-day sums), z, ratios, Vmax, days since ≥ 90 %, RPE, wellness, monotony; null without data. */
+function bdWeek(p, s, end, th) {
+  const i = daysBetween(s.start, end);
+  if (i < 6 || i >= s.cat.length) return null;
+  const ser = (k) => (s.load[k] || (s.xload || {})[k]), sum = (a) => { if (!a) return null; let t = 0; for (let j = i - 6; j <= i; j++) t += a[j] || 0; return t; };
+  const v = Object.fromEntries(BD_Z.map((k) => [k, sum(ser(k))]));
+  const z = Object.fromEntries(BD_Z.map((k) => [k, ((s.z7[k] || (s.xz7 || {})[k]) || [])[i] ?? null]));
+  const ratio = Object.fromEntries(BD_Z.map((k) => [k, WL.model === 'ewma' ? (s.ewma[k] || [])[i] ?? null : ((s.a7 || {})[k] || s.acwr[k] || [])[i] ?? null]));
+  const sp = s.vmax ? s.vmax.slice(i - 6, i + 1).filter((x) => x != null) : [], vmax = sp.length ? Math.max(...sp) : null;
+  const hs = (s.hsv || []).filter((x) => x <= end).pop(), hsv = hs ? daysBetween(hs, end) : null;
+  const sr = (s.load.srpe || []).slice(i - 6, i + 1), mu = sr.reduce((a, b) => a + b, 0) / 7, sd = Math.sqrt(sr.reduce((a, b) => a + (b - mu) ** 2, 0) / 6);
+  const hist = WL.history && WL.history.days ? WL.history.days.filter((x) => x.date > addDays(end, -7) && x.date <= end && !x.pre && x.byId[p.id] != null).map((x) => x.byId[p.id]) : [];
+  const cats = s.cat.slice(i - 6, i + 1), out = cats.split('').filter((c) => 'xrsna'.includes(c)).length;
+  const w = { v, z, ratio, vmax, pct: vmax && p.vmax_ref ? Math.round(100 * vmax / p.vmax_ref) : null, hsv, rpe: v.minutes ? v.srpe / v.minutes : null,
+    well: hist.length ? Math.round(hist.reduce((a, b) => a + b, 0) / hist.length) : null, mono: sd > 0 ? mu / sd : null,
+    ac: Object.fromEntries(['td', 'hit', 'spr_n', 'acc_dec'].map((k) => [k, ((s.a7 || {})[k] || [])[i] ?? null])), last: cats.slice(-1), out };
+  // that week's alert, the dashboard's rules (Load spike, ACWR above the zone, monotony, no ≥ 90 % Vmax)
+  const f = [];
+  if (out < 7) {
+    ['td', 'hit', 'spr', 'acc_dec', 'srpe'].forEach((k) => { const a = (s.acwr[k] || [])[i]; if (a > th.acwr_hi_red) f.push({ level: 'red', text: `ACWR ${BD_LABEL[k]} ${a.toFixed(2)}` }); else if (a > th.acwr_hi_orange) f.push({ level: 'orange', text: `ACWR ${BD_LABEL[k]} ${a.toFixed(2)}` }); });
+    ['td', 'hit', 'spr', 'acc_dec', 'srpe'].forEach((k) => { const x = z[k]; if (x >= th.z_red) f.push({ level: 'red', text: `Load spike ${BD_LABEL[k]} z ${fmtSigned(x)}` }); else if (x >= th.z_orange) f.push({ level: 'orange', text: `Load spike ${BD_LABEL[k]} z ${fmtSigned(x)}` }); });
+    if (w.mono >= th.monotony) f.push({ level: 'orange', text: `Monotony ${w.mono.toFixed(1)}` });
+    if (hsv != null && hsv >= th.hsv_days) f.push({ level: 'orange', text: `No ≥90% Vmax for ${hsv} days` });
+  }
+  f.sort((a, b) => (a.level === b.level ? 0 : a.level === 'red' ? -1 : 1));
+  w.flags = f;
+  return w;
+}
+
+function drawBoard() {
+  const d = WL.data, board = document.getElementById('sq-board');
+  if (!d || !board || document.getElementById('view-squad').hidden) return;
+  const th = d.thresholds || { acwr_hi_red: 1.5, acwr_hi_orange: 1.37, z_red: 2, z_orange: 1.5, monotony: 2, hsv_days: 10 };
+  const start0 = addDays(d.as_of, -dateOf(d.as_of).getUTCDay()), firstSer = Object.values(d.series).map((s) => s.start).sort()[0] || d.as_of;
+  const maxBack = Math.max(0, Math.floor(daysBetween(addDays(firstSer, 6), start0) / 7));
+  WL.bw = Math.min(WL.bw, maxBack);
+  const now = WL.bw === 0, wStart = addDays(start0, -7 * WL.bw), end = now ? d.as_of : addDays(wStart, 6);
+  document.getElementById('sq-bweek').textContent = now ? `This week · last 7 days to ${fmtDay(d.as_of, { weekday: 'short', day: 'numeric' })}` : `${fmtDay(wStart, { day: 'numeric', month: 'short' })} – ${fmtDay(end, { day: 'numeric', month: 'short' })}`;
+  document.getElementById('sq-bprev').disabled = WL.bw >= maxBack;
+  document.getElementById('sq-bnext').disabled = now;
+  const zm = WL.model === 'z';
+  document.getElementById('sq-board-note').textContent = `${zm ? 'z = the week vs his previous 6 weeks (value on hover)' : WL.model === 'ewma' ? 'EWMA ratio per metric' : 'A:C 7:28 per metric'} · training + matches · click a player`;
+  const dash = '<span class="muted">—</span>';
+  const zchip = (x, val) => (x == null ? dash : `<span class="mz ${tmZ(x)}" title="${val == null ? '' : fmtN(Math.round(val))}">${tmS(x)}</span>`);
+  const rows = [];
+  d.players.forEach((p) => {
+    const s = d.series[p.id], w = s && bdWeek(p, s, end, th);
+    if (!w || (!now && !w.v.minutes && w.out === 0)) return;
+    const flags = now ? p.flags : w.flags, risk = now ? p.risk : w.out === 7 ? 'na' : flags.some((f) => f.level === 'red') ? 'red' : flags.length ? 'orange' : 'green';
+    const status = now ? p.status : ({ x: 'injured', r: 'rehab', s: 'sick', n: 'national team', a: 'absent' }[w.last] || 'available');
+    const hurt = status === 'injured' || status === 'rehab';
+    const cell = (k) => {
+      if (BD_Z.includes(k)) return hurt && !w.v[k] ? dash : zm ? zchip(w.z[k], w.v[k]) : w.ratio[k] != null && k !== 'minutes' && k !== 'd15' ? acwrChip(w.ratio[k]) : `<span class="num">${fmtN(Math.round(w.v[k] || 0))}</span>`;
+      if (k === 'vmax') return w.vmax == null ? dash : `<span class="num">${w.vmax.toFixed(1)}</span>${w.pct ? ` <small class="muted">${w.pct}%</small>` : ''}`;
+      if (k === 'hsv') return w.hsv == null ? dash : `<span class="${w.hsv >= th.hsv_days && !hurt ? 'chip-v orange' : 'num'}">${w.hsv} d</span>`;
+      if (k === 'rpe') return w.rpe == null ? dash : `<span class="num">${w.rpe.toFixed(1)}</span>`;
+      if (k === 'well') return w.well == null ? dash : `<span class="chip-v ${w.well >= 70 ? 'green' : w.well >= 50 ? 'orange' : 'red'}">${w.well}%</span>`;
+      if (k === 'mono') return w.mono == null ? dash : `<span class="${w.mono >= th.monotony ? 'chip-v orange' : 'num'}">${w.mono.toFixed(1)}</span>`;
+      const a = w.ac[k.slice(3)];
+      return a == null ? dash : hurt ? `<span class="chip-v na">${a.toFixed(2)}</span>` : acwrChip(a);
+    };
+    const key = (k) => (BD_Z.includes(k) ? (zm ? w.z[k] : w.ratio[k] ?? w.v[k]) : k === 'vmax' ? w.vmax : k === 'hsv' ? w.hsv : k === 'rpe' ? w.rpe : k === 'well' ? w.well : k === 'mono' ? w.mono : w.ac[k.slice(3)]);
+    const ks = BD_GROUPS.flatMap(([, , c]) => c.map(([k]) => k));
+    rows.push({ id: p.id,
+      cells: [`<i class="riskdot" style="background:${STATUS_COL[risk]}" title="${risk}"></i>`, playerCell(p.id, p.name, status === 'available' ? p.pos : `${p.pos || ''} · ${STATUS_LABEL[status] || status}`), ...ks.map(cell), flagsCompact(flags)],
+      keys: [RISK_ORDER[risk] * 100 - flags.length, p.name, ...ks.map(key), flags.length] });
+  });
+  sortableTable(board, [{ label: 'Risk', cls: 'c' }, { label: 'Player' },
+    ...BD_GROUPS.flatMap(([, , c]) => c.map(([k, l], j) => ({ label: l, cls: `c${j === 0 ? ' gsep' : ''}`, desc: k !== 'well' }))), { label: 'Alert', cls: 'gsep', desc: true }],
+  rows, { col: 0, dir: 1 }, (r) => `data-id="${r.id}" class="clickable"`, '',
+  [['', 2], ...BD_GROUPS.map(([l, c, cs]) => [l, cs.length, c]), ['', 1]]);
+  board.onclick = (e) => { const tr = e.target.closest('tr[data-id]'); if (tr) switchView('player', { player: tr.dataset.id }); };
+  if (!rows.length) board.innerHTML = '<div class="empty">No data this week.</div>';
 }
 
 const RANK_METRICS = [['td', 'TD'], ['hit', 'HIT >20'], ['spr', 'Sprint dist.'], ['spr_n', 'Sprints'], ['acc_dec', 'Acc+Dec'], ['srpe', 'sRPE']];

@@ -2180,3 +2180,40 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .sp-nogps .sp-mi { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px 6px 0; margin-right: 14px; font-size: 12.5px; }
 .sp-nogps .sp-mi small { color: var(--ink-muted); } .sp-nogps .sp-mi select { font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); max-width: 210px; }
 .sp-nogps .sp-mi.done { opacity: .6; }
+
+/* Workload › Squad risk board: category headers, week stepper */
+.dtable tr.dt-groups th { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--gc, transparent); border-bottom: 2px solid var(--gc, transparent); padding: 4px 6px; text-align: center; cursor: default; }
+.dtable th.gsep, .dtable td.gsep { border-left: 1px solid var(--hairline); }
+.sq-bstep { margin-left: 12px; }
+.sq-bstep .month-label { min-width: 200px; }
+
+/* Wellness on one screen (his ask, 2026-10-26): the same cards (photo in its ring), smaller; the alerts and the goalkeepers
+   share a row, the squad below — every player who answered fits on a laptop screen. Phones keep their layout. */
+@media (min-width: 681px) {
+  #view-wellness .w-team-card { padding: 10px 20px; margin-bottom: 12px; }
+  #view-wellness .w-ring { width: 84px; height: 84px; padding: 6px; }
+  #view-wellness .w-team-ring-label { font-size: 18px; }
+  #view-wellness .w-team-title { font-size: 15px; margin-bottom: 2px; }
+  #view-wellness .w-theme-ring { width: 46px; height: 46px; padding: 4px; }
+  #view-wellness .w-theme-ring-item { gap: 4px; }
+  #view-wellness .w-flow { display: flex; flex-wrap: wrap; column-gap: 40px; }
+  #view-wellness .w-group { margin-bottom: 10px; }
+  #view-wellness .w-group h2 { margin: 0 0 4px; font-size: 14px; }
+  #view-wellness #w-grp-squad, #view-wellness #w-grp-none { flex-basis: 100%; }
+  #view-wellness .w-grid { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+  #view-wellness .w-card { width: 122px; padding: 2px; }
+  #view-wellness .w-p-ring { width: 96px; height: 96px; margin-bottom: 11px; }
+  #view-wellness .w-p-ring-photo { width: 70px; height: 70px; padding: 2px; }
+  #view-wellness .w-p-ring-score { font-size: 12px; padding: 2px 8px; bottom: -7px; }
+  #view-wellness .w-alert-dot { width: 12px; height: 12px; }
+  #view-wellness .w-initials { font-size: 16px; }
+  #view-wellness .w-pname { font-size: 12.5px; white-space: nowrap; }
+  #view-wellness .w-pdiff, #view-wellness .w-psub { font-size: 11px; margin-top: 0; }
+  #view-wellness .w-pworst { margin-top: 2px; font-size: 10.5px; padding: 1px 7px; }
+  #view-wellness .w-empty-hint { text-align: left; }
+  #view-wellness #w-grp-none .w-card { width: 80px; }
+  #view-wellness #w-grp-none .w-p-ring { width: 56px; height: 56px; margin-bottom: 4px; }
+  #view-wellness #w-grp-none .w-p-ring-photo { width: 42px; height: 42px; }
+}
+#sq-board .dtable th, #sq-board .dtable td { padding-left: 5px; padding-right: 5px; }
+#sq-board .dtable td .flags.one { white-space: normal; }

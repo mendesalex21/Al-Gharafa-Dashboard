@@ -96,7 +96,7 @@ function emptyState(msg) { return `<div class="empty">${escapeHtml(msg)}</div>`;
 function loadError(err) { return `<div class="panel"><div class="empty">Couldn't load data — ${escapeHtml(err.message || String(err))}</div></div>`; }
 
 /** Makes a table's headers sortable. `rows` = array of {cells: html[], keys: sortValue[]} ; `head` = [{label, cls}]. */
-function sortableTable(mount, head, rows, initial = { col: 0, dir: 1 }, rowAttrs = () => '', foot = '') {
+function sortableTable(mount, head, rows, initial = { col: 0, dir: 1 }, rowAttrs = () => '', foot = '', groups = null) { // groups: [[label, columns, colour]] above the header
   let st = { ...initial };
   const draw = () => {
     const sorted = rows.slice().sort((a, b) => {
@@ -106,9 +106,9 @@ function sortableTable(mount, head, rows, initial = { col: 0, dir: 1 }, rowAttrs
       if (y == null) return -1;
       return (x > y ? 1 : x < y ? -1 : 0) * st.dir;
     });
-    mount.innerHTML = `<table class="dtable"><thead><tr>${head.map((h, i) => `<th class="${h.cls || ''} ${i === st.col ? 'sorted' : ''}" data-i="${i}">${h.label}${i === st.col ? (st.dir > 0 ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr></thead>
+    mount.innerHTML = `<table class="dtable"><thead>${groups ? `<tr class="dt-groups">${groups.map(([l, n, c]) => `<th colspan="${n}"${l ? ` style="--gc:${c}"` : ''}>${l}</th>`).join('')}</tr>` : ''}<tr>${head.map((h, i) => `<th class="${h.cls || ''} ${i === st.col ? 'sorted' : ''}" data-i="${i}">${h.label}${i === st.col ? (st.dir > 0 ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr></thead>
       <tbody>${sorted.map((r) => `<tr ${rowAttrs(r)}>${r.cells.map((c, i) => `<td class="${head[i].cls || ''}">${c}</td>`).join('')}</tr>`).join('')}</tbody>${foot ? `<tfoot>${foot}</tfoot>` : ''}</table>`;
-    mount.querySelectorAll('th').forEach((th) => th.addEventListener('click', () => {
+    mount.querySelectorAll('th[data-i]').forEach((th) => th.addEventListener('click', () => {
       const i = +th.dataset.i;
       st = { col: i, dir: st.col === i ? -st.dir : (head[i].desc ? -1 : 1) };
       draw();
