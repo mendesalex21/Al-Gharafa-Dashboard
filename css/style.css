@@ -2231,3 +2231,7 @@ table.dvm-t { width: 100%; border-collapse: separate; border-spacing: 3px; font-
 .dvm-c3 { background: #5b9be3; color: #fff; } .dvm-c4 { background: #1d5fae; color: #fff; } .dvm-na { color: #aeaeb2; }
 .rt-leg .dvm-k { padding: 1px 8px; border-radius: 6px; font-weight: 700; }
 #se-drills .table-wrap { margin-left: 0; margin-right: 0; }
+.ho-links { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.ho-links > span { display: inline-flex; align-items: center; border-radius: 999px; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); font-size: 12.5px; }
+.ho-links a { color: #0071e3; text-decoration: none; font-weight: 600; padding: 4px 4px 4px 11px; }
+.ho-links button { border: 0; background: transparent; color: var(--ink-muted); font: inherit; cursor: pointer; padding: 4px 10px 4px 4px; }

@@ -49,7 +49,7 @@ function drawHome() {
   const D = hoData();
   const next = D.matches[0], dleft = next ? hoCount(D.today, next.start) : null;
   const header = `<div class="ho-hd"><div class="ho-date">${fmtDay(D.today, { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-    <div class="ho-chips">${D.matchToday ? '<span class="ho-md">MD</span>' : D.tag ? `<span class="ho-md">${D.tag}</span>` : ''}${D.plan.type ? `<span>${D.plan.type[0].toUpperCase() + D.plan.type.slice(1)} microcycle · ${D.plan.length} days</span>` : ''}${next ? `<button type="button" class="ho-chip-m" data-go="calendar">${crestHtml(next.opponent, 16)} ${escapeHtml(next.opponent)} · ${hoDay(next.start, { weekday: 'short', day: 'numeric' })}${next.time ? ' · <b>' + next.time + '</b>' : ''}${hoVenue(next) ? ' · ' + escapeHtml(hoVenue(next)) : ''} · ${dleft === 0 ? 'today' : dleft === 1 ? 'tomorrow' : 'in ' + dleft + ' days'}</button>` : ''}</div></div>`;
+    <div class="ho-chips">${D.matchToday ? '<span class="ho-md">MD</span>' : D.tag ? `<span class="ho-md">${D.tag}</span>` : ''}${D.plan.type ? `<span>${D.plan.type[0].toUpperCase() + D.plan.type.slice(1)} microcycle · ${D.plan.length} days</span>` : ''}${next ? `<button type="button" class="ho-chip-m" data-go="calendar">${crestHtml(next.opponent, 16)} ${escapeHtml(next.opponent)} · ${hoDay(next.start, { weekday: 'short', day: 'numeric' })}${next.time ? ' · <b>' + next.time + '</b>' : ''}${hoVenue(next) ? ' · ' + escapeHtml(hoVenue(next)) : ''} · ${dleft === 0 ? 'today' : dleft === 1 ? 'tomorrow' : 'in ' + dleft + ' days'}</button>` : ''}</div><div class="ho-links">${[['/checkin', 'Wellness check-in'], ['/rpe', 'RPE']].map(([u, l]) => `<span><a href="${u}" target="_blank" rel="noopener" title="The players' page (new Cloudflare link)">${l} ↗</a><button type="button" data-copy="${u}" title="Copy the link">⧉</button></span>`).join('')}</div></div>`;
   root.innerHTML = `<div class="ho">${header}<div class="ho-g2">${hoYest(D)}${hoToday(D)}</div><div class="ho-g3">${hoAvail(D)}${hoWell(D)}${hoMatches(D)}</div>${hoAttn(D)}</div>`;
   hoBind(D);
 }
@@ -214,6 +214,10 @@ function hoBind(D) {
   const root = document.getElementById('view-home');
   root.querySelectorAll('[data-go]').forEach((el) => el.addEventListener('click', () => {
     if (el.dataset.go === 'sessions') switchView('sessions', { date: el.dataset.date }); else switchView(el.dataset.go);
+  }));
+  root.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', () => { // the players' links: copied to send them
+    const url = location.origin + b.dataset.copy;
+    (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => { b.textContent = '✓'; setTimeout(() => { b.textContent = '⧉'; }, 1500); }).catch(() => prompt('Copy the link', url));
   }));
   root.querySelectorAll('[data-player]').forEach((b) => b.addEventListener('click', () => switchView('player', { player: b.dataset.player })));
   root.querySelectorAll('[data-well]').forEach((b) => b.addEventListener('click', () => switchView('player', { player: b.dataset.well }))); // his wellness each morning
