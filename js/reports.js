@@ -175,22 +175,7 @@ function rpHalves(D) {
   return [half('1st'), half('2nd')];
 }
 const rpHalfTime = (rows) => Math.max(0, ...rows.map((r) => r.time || 0));
-/** The team in each half (his Power BI page 5): every outfield player with GPS — distances, efforts, sprints and
- * Acc + Dec added up, m/min = their average, max speed = the fastest. */
-function rpTeamHalves(h1, h2) {
-  const sum = (rows, k) => rows.reduce((a, r) => a + (r[k] || 0), 0);
-  const tot = (rows) => ({ time: rpHalfTime(rows), mpm: rows.length ? Math.round(sum(rows, 'mpm') / rows.length) : null, td: sum(rows, 'td'), d15: sum(rows, 'd15'),
-    d20: sum(rows, 'd20'), vmax: Math.max(0, ...rows.map((r) => r.vmax || 0)) || null, hitn: sum(rows, 'hitn'), sprints: sum(rows, 'sprints'), accdec: sum(rows, 'accdec') });
-  const a = tot(h1), b = tot(h2), cols = RP_HALF_COLS, mx = (k) => Math.max(a[k] || 0, b[k] || 0) || 1;
-  const tpl = '150px ' + cols.map((k) => RP_WIDTHS[k] || '44px').join(' ');
-  const cell = (t, k) => (RP_BARS.includes(k) ? `<div class="rp-c"><span class="rp-v">${rpFmt(k, t[k])}</span><div class="rp-bar"><i style="width:${rpPct(t[k], mx(k))};background:${RP_COLORS[k]}"></i></div></div>`
-    : `<div class="rp-c rp-txt"><span class="rp-v">${rpFmt(k, t[k])}</span></div>`);
-  const row = (label, t) => `<div class="rp-tr rp-row rp-team" style="grid-template-columns:${tpl}"><span class="rp-nm rp-hn">${label}</span>${cols.map((k) => cell(t, k)).join('')}</div>`;
-  return `<div class="rp-tbl"><div class="rp-tr rp-th" style="grid-template-columns:${tpl}"><span>Type</span>${cols.map((k) => `<span>${RP_LABELS[k]}</span>`).join('')}</div>
-    ${row('Game_1stHalf', a)}${row('Game_2ndHalf', b)}</div>
-    <div class="rp-legend"><span>Team = every outfield player with GPS data in that half (substitutes included): distances, efforts, sprints and Acc + Dec added up, m/min = their average, max speed = the fastest.</span></div>`;
-}
-/** Pages 4–7 of a match: every player's two halves, the team per half, the 1st half, the 2nd half. */
+/** The match pages: every player's two halves, the 1st half, the 2nd half (the team per half taken out, his ask 2026-10-27). */
 function rpMatchPages(D, title) {
   const s = D.session, [h1, h2] = rpHalves(D), cols = RP_HALF_COLS;
   const meta = (time) => [['WEEK', s.week], ['MD', s.md], ['TIME', time + "'"], ['N SESSION', s.id]];
@@ -209,7 +194,6 @@ function rpMatchPages(D, title) {
     if (!ns.length) continue;
     pages.push(rpHeader('GAME · 1ST HALF & 2ND HALF', title, meta(s.time)) + rpTable(D, both.filter((r) => ns.includes(r.name)), cols, {}, RP_TABLE_H, { byPlayer: true, all: both, nameH, rowH: Math.max(15, Math.min(22, fits(ns))) }));
   }
-  if (h1.length && h2.length) pages.push(rpHeader('TOTAL TEAM · 1ST HALF & 2ND HALF', title, meta(s.time)) + rpTeamHalves(h1, h2));
   if (h1.length) pages.push(rpHeader('GAME · 1ST HALF', title, [['WEEK', s.week], ['MD', s.md], ['EXERCICE', 'Game_1stHalf'], ['TIME', rpHalfTime(h1) + "'"], ['N SESSION', s.id]]) + rpTable(D, h1, cols));
   if (h2.length) pages.push(rpHeader('GAME · 2ND HALF', title, [['WEEK', s.week], ['MD', s.md], ['EXERCICE', 'Game_2ndHalf'], ['TIME', rpHalfTime(h2) + "'"], ['N SESSION', s.id]]) + rpTable(D, h2, cols));
   return pages;
