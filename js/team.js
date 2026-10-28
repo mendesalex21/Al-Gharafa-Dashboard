@@ -65,13 +65,13 @@ function tmBuild() {
   const d = WL.data, t = d.team, days = t.daily.td.map((_, i) => addDays(t.start, i)), idx = Object.fromEntries(days.map((x, i) => [x, i]));
   const keys = TM_KEYS.filter(([k]) => t.daily[k]);
   const sess = Object.fromEntries(((TR.sessions && TR.sessions.sessions) || []).map((x) => [x.date, x]));
-  const well = Object.fromEntries(((TM.well && TM.well.days) || []).filter((x) => x.teamScore != null).map((x) => [x.date, { v: x.teamScore, n: Object.keys(x.byId || {}).length }]));
+  const well = Object.fromEntries(((TM.well && TM.well.days) || []).filter((x) => x.teamScore != null).map((x) => [x.date, { v: x.teamScore, n: Object.keys(x.byId || {}).length, pre: !!x.pre }])); // pre: the old form's answers (before 20 Sept) — shown, not in a usual
   const week1 = t.week1 || (t.weeks.length ? t.weeks[0].start : t.start); // W01 = the season's first full week (Sunday)
   const weeks = t.weeks.map((w) => ({ ...w, end: addDays(w.start, 6), done: addDays(w.start, 6) <= d.as_of,
     label: 'W' + String(Math.round(daysBetween(week1, w.start) / 7) + 1).padStart(2, '0') }));
   const real = (k) => weeks.filter((w) => w.done && w[k] > 0);
   const acAt = (k, date) => t.acwr[k][Math.min(idx[date] ?? days.length - 1, days.length - 1)];
-  const wellOf = (from, to) => { const xs = Object.entries(well).filter(([x]) => x >= from && x <= to).map(([, o]) => o); return xs.length ? { v: xs.reduce((a, o) => a + o.v, 0) / xs.length, n: xs.reduce((a, o) => a + o.n, 0) / xs.length, days: xs.length } : null; };
+  const wellOf = (from, to, ref) => { const xs = Object.entries(well).filter(([x, o]) => x >= from && x <= to && !(ref && o.pre)).map(([, o]) => o); return xs.length ? { v: xs.reduce((a, o) => a + o.v, 0) / xs.length, n: xs.reduce((a, o) => a + o.n, 0) / xs.length, days: xs.length } : null; };
   return { d, t, days, idx, keys, sess, well, weeks, real, acAt, wellOf };
 }
 /** One chart: bars, and under them on the same x a strip — the A:C line in its zones, or small bars (check-ins). */
@@ -161,7 +161,7 @@ function drawTeam() {
         return { v, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], lo: r && v > 0 ? r.p25 : null, hi: r && v > 0 ? r.p75 : null, ac, game: !!(s && s.kind === 'match'), sep: dateOf(x).getUTCDay() === 0 && !few, tick: tick(x, i), label: few && v > 0 ? tmK(v) : '',
           tip: `${fmtDay(x)}${s && s.md ? ' · ' + s.md : ''}: ${fmtN(v)}${r ? ` · usual ${fmtN(r.p25)}–${fmtN(r.p75)}${zz == null ? '' : ' · z ' + tmS(zz)}` : ''}${ac == null ? '' : ' · A:C ' + ac.toFixed(2)}` }; }) })}</div>`).join('');
     const wd = ds.map((x) => ({ x, o: B.well[x] }));
-    const hist = (x) => tmStats(Object.entries(B.well).filter(([y]) => y < x && y >= addDays(x, -28)).map(([, o]) => o.v));
+    const hist = (x) => tmStats(Object.entries(B.well).filter(([y, o]) => y < x && y >= addDays(x, -28) && !o.pre).map(([, o]) => o.v));
     cards += `<div class="tm-card">${head('Wellness', 'team score per day · % · green band = 70 % or more')}${tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'count', dots: few,
       items: wd.map(({ x, o }, i) => { const st = o ? hist(x) : null, zz = o && st.sd ? tmZof(o.v, st) : null, s = B.sess[x];
         return { v: o ? o.v : 0, n: o ? o.n : 0, col: !o ? '#aeaeb2' : z ? TM_ZCOL[tmZ(zz)] : tmWell(o.v), game: !!(s && s.kind === 'match'), sep: dateOf(x).getUTCDay() === 0 && !few, tick: tick(x, i), label: few && o ? Math.round(o.v) : '',
@@ -190,7 +190,7 @@ function drawTeam() {
         items: ws.map((w) => { const ac = w[k] > 0 ? B.acAt(k, w.done ? w.end : asOf) : null, zz = tmZof(w[k], tmStats(B.real(k).filter((x) => x.start !== w.start).map((x) => x[k])));
           return { v: w[k], go: w.start, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, label: w[k] > 0 ? tmK(w[k]) : ws.length <= fit ? 'no GPS' : '', tick: ws.length <= fit || w === ws[ws.length - 1] ? w.label : '', now: !w.done, soft: !w.done,
             tip: `${w.label} · ${fmtDay(w.start, { day: 'numeric', month: 'short' })}: ${fmtN(w[k])}${zz == null ? '' : ' · z ' + tmS(zz)}${ac == null ? '' : ' · A:C ' + ac.toFixed(2)}` }; }) })}</div>`; }).join('');
-    const wst = tmStats(B.weeks.filter((w) => w.done).map((w) => B.wellOf(w.start, w.end)).filter(Boolean).map((o) => o.v));
+    const wst = tmStats(B.weeks.filter((w) => w.done).map((w) => B.wellOf(w.start, w.end, true)).filter(Boolean).map((o) => o.v));
     cards += `<div class="tm-card">${head('Wellness', 'average team score of the week · % · green band = 70 % or more')}${tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'count', dots: ws.length <= fit,
       items: ws.map((w) => { const o = B.wellOf(w.start, w.end), zz = o ? tmZof(o.v, wst) : null; return { v: o ? o.v : 0, n: o ? o.n : 0, go: w.start, col: !o ? '#aeaeb2' : z ? TM_ZCOL[tmZ(zz)] : tmWell(o.v), label: o ? Math.round(o.v) : '', tick: ws.length <= fit || w === ws[ws.length - 1] ? w.label : '', now: !w.done, soft: !w.done,
         tip: o ? `${w.label}: ${Math.round(o.v)} % on ${o.days} mornings · ${Math.round(o.n)} check-ins a day` : '' }; }) })}</div>`;
@@ -218,7 +218,7 @@ function drawTeam() {
         <td class="b">${e.train || '—'}</td><td>${e.games || '—'}</td><td>${e.min ? fmtN(e.min) : '—'}</td>${main(w, 'td')}${main(w, 'hit')}${main(w, 'spr')}<td>${w.spr_n > 0 ? fmtN(w.spr_n) : '—'}</td>${main(w, 'acc_dec')}${iCells(w)}${main(w, 'srpe')}
         <td class="b">${o ? `<b style="color:${tmWell(o.v)}">${Math.round(o.v)} %</b>` : '—'}</td><td>${o ? Math.round(o.n) : '—'}</td></tr>`; }).join('');
     const full = B.weeks.filter((w) => w.done && w.td > 0), rng = (xs, f) => { const st = tmStats(xs); return st.p25 == null ? '—' : `${(f || tmK)(st.p25)}–${(f || tmK)(st.p75)}`; };
-    const uM = (k) => (has(k) ? `<td class="b u3" colspan="3">${rng(full.map((w) => w[k]))}</td>` : ''), uE = (f) => rng(full.map((w) => mk(w)[f]), (v) => fmtN(v)), wf = full.map((w) => B.wellOf(w.start, w.end)).filter(Boolean);
+    const uM = (k) => (has(k) ? `<td class="b u3" colspan="3">${rng(full.map((w) => w[k]))}</td>` : ''), uE = (f) => rng(full.map((w) => mk(w)[f]), (v) => fmtN(v)), wf = full.map((w) => B.wellOf(w.start, w.end, true)).filter(Boolean);
     const usual = full.length < 3 ? '' : `<tr class="usu"><td><b>Usual week</b><small class="muted" style="display:block">middle half of the ${full.length} full weeks</small></td><td class="b">${uE('train')}</td><td>${uE('games')}</td><td>${uE('min')}</td>${uM('td')}${uM('hit')}${uM('spr')}<td>${rng(full.map((w) => w.spr_n || 0), (v) => fmtN(v))}</td>${uM('acc_dec')}${hasI ? (() => { const xs = full.map((w) => IW[w.start]).filter(Boolean);
           return xs.length < 3 ? '<td class="b" colspan="3">—</td>' : `<td class="b">${rng(xs.map((x) => x.td), (v) => Math.round(v))} %</td><td>${rng(xs.map((x) => x.hi), (v) => Math.round(v))} %</td><td class="b">${rng(xs.map((x) => x.rh), (v) => v.toFixed(1))}</td>`; })() : ''}${uM('srpe')}
         <td class="b">${wf.length ? rng(wf.map((o) => o.v), (v) => Math.round(v)) + ' %' : '—'}</td><td>${wf.length ? rng(wf.map((o) => o.n), (v) => Math.round(v)) : '—'}</td></tr>`;
@@ -239,7 +239,7 @@ function drawTeam() {
       return `<div class="tm-card">${head(l, `average week of the month${u ? ' · ' + u : ''}`)}${tmChart({ title: l, dots: true, band: st.p25 == null ? null : [st.p25, st.p75],
         items: months.map((m) => { const x = info(m, k), zz = tmZof(x.perWeek, st); return { v: x.perWeek, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(x.ac)[0], ac: x.ac, label: tmK(x.perWeek), tick: lab(m), now: m === cur, soft: m === cur,
           tip: `${lab(m)}: ${fmtN(x.tot)} in ${x.n} days${zz == null ? '' : ' · z ' + tmS(zz) + ' vs the season\'s weeks'}${x.ac == null ? '' : ' · average A:C ' + x.ac.toFixed(2)}` }; }) })}</div>`; }).join('');
-    const wm = (m) => B.wellOf(m + '-01', m + '-31'), wst = tmStats(B.weeks.filter((w) => w.done).map((w) => B.wellOf(w.start, w.end)).filter(Boolean).map((o) => o.v));
+    const wm = (m) => B.wellOf(m + '-01', m + '-31'), wst = tmStats(B.weeks.filter((w) => w.done).map((w) => B.wellOf(w.start, w.end, true)).filter(Boolean).map((o) => o.v));
     cards += `<div class="tm-card">${head('Wellness', 'average team score of the month · % · green band = 70 % or more')}${tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'count', dots: true,
       items: months.map((m) => { const o = wm(m), zz = o ? tmZof(o.v, wst) : null; return { v: o ? o.v : 0, n: o ? o.n : 0, col: !o ? '#aeaeb2' : z ? TM_ZCOL[tmZ(zz)] : tmWell(o.v), label: o ? Math.round(o.v) : '', tick: lab(m), now: m === cur, soft: m === cur, tip: o ? `${lab(m)}: ${Math.round(o.v)} % on ${o.days} mornings` : '' }; }) })}</div>`;
     const bar = (x) => (x.ok == null ? '<span class="muted">no ratio yet</span>' : `<div class="tm-share">${[['low', '#7fb0ea'], ['ok', '#34c759'], ['hi', '#ff9f0a'], ['red', '#e5484d']].map(([f, c]) => (x[f] ? `<i style="width:${x[f]}%;background:${c}" title="${x[f]} % of the days"></i>` : '')).join('')}</div><small class="muted">${x.ok} % of the days in the zone</small>`);
@@ -294,7 +294,7 @@ function tmWeekOpen(start) {
   [...new Set(far.map((x) => x.d))].slice(0, 3).forEach((d) => { const xs = far.filter((x) => x.d === d), x = B.sess[d];
     why.push(`<b>${fmtDay(d, { weekday: 'long', day: 'numeric', month: 'short' })} (${escapeHtml(x.md || '')})</b> ${xs[0].r.z > 0 ? 'above' : 'below'} its usual ${x.kind === 'match' ? 'match' : escapeHtml(x.md || 'day')}: ${xs.map((y) => `${y.k === 'td' ? 'distance' : '> 20 km/h'} ${fmtN(val(d, y.k))} vs ${fmtN(y.r.p25)}–${fmtN(y.r.p75)} (z ${tmS(y.r.z)})`).join(', ')}.`); });
   // wellness: the week = the average of its mornings, against the other full weeks' averages
-  const wSt = tmStats(others.map((x) => B.wellOf(x.start, x.end)).filter(Boolean).map((o) => o.v)), wZ = W.done && wAvg != null ? tmZof(wAvg, wSt) : null;
+  const wSt = tmStats(others.map((x) => B.wellOf(x.start, x.end, true)).filter(Boolean).map((o) => o.v)), wZ = W.done && wAvg != null ? tmZof(wAvg, wSt) : null;
   if (wZ != null && Math.abs(wZ) >= 1) why.push(`<b>Wellness ${Math.round(wAvg)} %</b> ${wZ > 0 ? 'above' : 'below'} its usual week (${Math.round(wSt.p25)}–${Math.round(wSt.p75)} %, z ${tmS(wZ)}).`);
   const comps = ds.filter((d) => kindOf(d) === 'comp');
   if (comps.length) why.push(`${comps.map((d) => fmtDay(d, { weekday: 'short', day: 'numeric' })).join(', ')}: compensatory session for the players who did not play — the team (the starters, recovering) counts 0 that day, as in your Team rule.`);

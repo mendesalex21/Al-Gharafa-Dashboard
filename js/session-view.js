@@ -185,7 +185,7 @@ const SV_WDROP = { pct: 0.10, n: 28, min: 10, gap: 4 }; // 10 % below his averag
 function svWellDrops(hist, date) {
   const out = {}, h = {};
   if (!hist || !hist.days) return out;
-  hist.days.filter((d) => d.date <= date).sort((a, b) => (a.date < b.date ? -1 : 1)).forEach((d) => {
+  hist.days.filter((d) => d.date <= date && !d.pre).sort((a, b) => (a.date < b.date ? -1 : 1)).forEach((d) => {
     Object.entries(d.byId || {}).forEach(([id, v]) => { if (v != null) (h[id] = h[id] || []).push([d.date, v]); });
   });
   Object.entries(h).forEach(([id, x]) => {
