@@ -152,13 +152,26 @@ export async function kioskCompute(env) {
   if (!ps.length) return;
   const H = await history(env, ps), today = qatarDay(), live = env.KIOSK_LIVE === '1';
   const a = build(ps, H, today, WELLNESS_SINCE);
-  await env.DATA.put(live ? 'p:wellness' : 'p:wellness_cf', JSON.stringify(a.view));
-  await env.DATA.put(live ? 'p:wellness_history' : 'p:wellness_history_cf', JSON.stringify(a.hist));
+  await putIfChanged(env, live ? 'p:wellness' : 'p:wellness_cf', a.view);
+  await putIfChanged(env, live ? 'p:wellness_history' : 'p:wellness_history_cf', a.hist);
   if (!live) { // the parallel week: the same calculation without the cut-off, to check it gives the Google script's numbers
     const b = build(ps, H, today, null);
-    await env.DATA.put('p:wellness_chk', JSON.stringify(b.view));
-    await env.DATA.put('p:wellness_history_chk', JSON.stringify(b.hist));
+    await putIfChanged(env, 'p:wellness_chk', b.view);
+    await putIfChanged(env, 'p:wellness_history_chk', b.hist);
   }
+}
+
+/** KV writes are counted (1,000 a day on the free plan — Cloudflare's 50 % e-mail, 2026-10-28): a payload is written
+ * only when its content changed (generated_at left out of the fingerprint), not at every 15-min run. */
+async function putIfChanged(env, key, obj) {
+  const { generated_at: _, ...same } = obj;
+  const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(JSON.stringify(same)));
+  const etag = [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, '0')).join('');
+  const old = await env.DATA.getWithMetadata(key, { type: 'stream' });
+  if (old.value) await old.value.cancel();
+  if (old.metadata && old.metadata.etag === etag) return false;
+  await env.DATA.put(key, JSON.stringify(obj), { metadata: { etag, at: Date.now() } });
+  return true;
 }
 
 function build(ps, H, today, since) {
