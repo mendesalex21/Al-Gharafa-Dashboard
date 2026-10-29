@@ -102,7 +102,7 @@ async function mfShowLink() {
     if (j.ok && j.user && j.user.role === 'admin') {
       document.getElementById('nav-matchfiles').hidden = false;
       if (typeof tcShowLink === 'function') tcShowLink(); // the Tactical tab: the admin only too
-      if (typeof tcShowLink === 'function') tcShowLink(); // the Tactical tab: the admin only too
+      document.documentElement.classList.add('is-admin'); // his new features first (CSS html.is-admin …), the staff see them once he releases them
       buildBanner(j.build);
       if (!MF_POLL) MF_POLL = setInterval(mfShowLink, 120000); // the banner follows the online build's retries
     }
