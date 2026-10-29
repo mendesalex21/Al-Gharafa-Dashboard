@@ -2236,15 +2236,14 @@ table.dvm-t { width: 100%; border-collapse: separate; border-spacing: 3px; font-
 .ho-links a { color: #0071e3; text-decoration: none; font-weight: 600; padding: 4px 4px 4px 11px; }
 .ho-links button { border: 0; background: transparent; color: var(--ink-muted); font: inherit; cursor: pointer; padding: 4px 10px 4px 4px; }
 
-/* Wellness, his mockup D (2026-10-29) — HIS ACCOUNT ONLY until he releases it: the page on the whole width, cards at
-   75 % of the original size (ring 120 px; before 160, compact 96), 10 a row on a laptop. */
+/* Wellness, his mockup D (2026-10-29) — HIS ACCOUNT ONLY until he releases it: centred as the other pages (full width
+   tried and dropped the same day), cards at 75 % of the original size (ring 120 px; before 160, compact 96). */
 @media (min-width: 681px) {
-  html.is-admin #view-wellness.wrap { max-width: none; padding-left: 28px; padding-right: 28px; }
-  html.is-admin #view-wellness .w-flow { column-gap: 48px; }
+  html.is-admin #view-wellness .w-flow { column-gap: 28px; }
   html.is-admin #view-wellness .w-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px 10px; }
-  html.is-admin #view-wellness #w-grp-alert .w-grid, html.is-admin #view-wellness #w-grp-gk .w-grid { display: flex; flex-wrap: wrap; gap: 8px 10px; }
+  html.is-admin #view-wellness #w-grp-alert .w-grid, html.is-admin #view-wellness #w-grp-gk .w-grid { display: flex; flex-wrap: wrap; gap: 8px 6px; }
   html.is-admin #view-wellness .w-card { width: auto; padding: 4px 2px; }
-  html.is-admin #view-wellness #w-grp-alert .w-card, html.is-admin #view-wellness #w-grp-gk .w-card { width: 132px; }
+  html.is-admin #view-wellness #w-grp-alert .w-card, html.is-admin #view-wellness #w-grp-gk .w-card { width: 129px; } /* 4 alerts + 4 keepers on one row in 1180 px */
   html.is-admin #view-wellness .w-p-ring { width: 120px; height: 120px; margin-bottom: 13px; }
   html.is-admin #view-wellness .w-p-ring-photo { width: 86px; height: 86px; padding: 3px; }
   html.is-admin #view-wellness .w-p-ring-score { font-size: 13px; padding: 3px 10px; bottom: -6px; }
