@@ -2256,3 +2256,25 @@ table.dvm-t { width: 100%; border-collapse: separate; border-spacing: 3px; font-
   #view-wellness #w-grp-none .w-p-ring { width: 72px; height: 72px; margin-bottom: 6px; }
   #view-wellness #w-grp-none .w-p-ring-photo { width: 52px; height: 52px; }
 }
+
+/* Session Plan › load projection (admin first, 2026-10-30) */
+.spp { margin-top: 16px; background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); padding: 16px 18px; }
+.spp-hd { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.spp-hd h3 { margin: 0; font-size: 15px; }
+.spp-sub { font-size: 12px; color: var(--ink-muted); }
+.spp-seg { margin-left: auto; }
+.spp-verdict { font-size: 13px; margin: 10px 0 0; padding: 9px 13px; border-radius: 12px; }
+.spp-verdict.warn { background: #fff6e5; } .spp-verdict.ok { background: #eaf7ee; }
+.spp-sug { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 12.5px; margin-top: 8px; }
+.spp-sug span { padding: 4px 10px; border-radius: 9px; } .spp-sug span.g { background: #e3f5e7; } .spp-sug span.b { background: #e8f1fd; } .spp-sug span.r { background: #ffe5e3; }
+.spp-charts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 10px; }
+.spp-ch h5 { margin: 0; font-size: 12.5px; display: flex; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.spp-ch h5 span { font-weight: 500; color: var(--ink-muted); font-size: 11.5px; }
+.spp-ch svg { width: 100%; height: auto; display: block; }
+.spp-g { fill: #34c759; } .spp-o { fill: #ff9f0a; } .spp-r { fill: #e5484d; } .spp-b { fill: #5a8fd8; } .spp-n { fill: #aeaeb2; }
+.spp-t-g { color: #1d7a35; } .spp-t-o { color: #b35f00; } .spp-t-r { color: #c4291c; } .spp-t-b { color: #1d5fae; }
+.spp-sl { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-muted); } .spp-sl input { flex: 1; accent-color: #0071e3; } .spp-sl b { color: var(--ink); min-width: 38px; text-align: right; }
+.spp-leg { font-size: 11px; color: var(--ink-muted); margin: 8px 0 0; }
+.sp-lt .band.sp-adapt { background: rgba(0, 113, 227, .25); outline: 1.5px solid #0071e3; }
+.sp-adapt-t { color: #0071e3; font-weight: 600; font-size: 11.5px; margin: 6px 0 0; }
+@media (max-width: 1000px) { .spp-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

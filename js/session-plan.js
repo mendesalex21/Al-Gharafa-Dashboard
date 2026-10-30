@@ -174,6 +174,7 @@ function splDraw() {
   splDrawWeek();
   if (SPL.view === 'correct' && !splCorrKey(SPL.date)) SPL.view = 'plan'; // nothing to correct on that day
   document.getElementById('spl-main').innerHTML = SPL.view === 'correct' ? splCorrectHtml() : SPL.view === 'import' && SPL.files.full ? splImportHtml() : splPlanHtml();
+  sppBind(); // the load projection (his account only)
 }
 function splDrawWeek() {
   const el = document.getElementById('spl-week');
@@ -425,9 +426,104 @@ function splPlanHtml() {
       ${splCardHtml()}
       ${splLoadHtml(date, p)}</div>`}
       ${splPlayersHtml(p)}</div>
+    ${inData ? '' : sppHtml(date)}
     ${inData ? '' : `<div class="sp-after">${typeof cfOn === 'function' && cfOn() ? `<button type="button" class="btn-primary sp-api" data-statsports><b>After the ${p.off ? 'day' : 'session'}</b>⇣ Get it from StatSports</button>` : ''}${p.off ? '<button type="button" class="btn-light" data-nogps>Nobody worked — publish the day off as it is</button>' : ''}<label class="sp-drop mini" id="spl-drop"><input type="file" accept=".csv,text/csv" multiple hidden data-files>${typeof cfOn === 'function' && cfOn() ? '' : '<b>After the session</b>'}<span>${typeof cfOn === 'function' && cfOn() ? 'or drop' : 'Drop'} ${p.off ? 'the day’s StatSports exports (Full and Drills) here, or click to choose' : `<code>${escapeHtml(p.sid || splSid(date))}_Full.csv</code> and <code>${escapeHtml(p.sid || splSid(date))}_Drills.csv</code> here, or click to choose — the rows are built from this plan`}</span></label></div>`}
     ${splNtHtml()}`;
 }
+/* ------------------------------------------------------------------ load projection (his mockup A, 2026-10-30) — HIS
+ * ACCOUNT ONLY until he releases it. The team's load (his Team rule, the workload payload) to the last data day, then each
+ * coming day to the 3rd coming match (16 days at most): a day with a plan = its forecast (sRPE = the usual of its MD), a
+ * day off / MD+1 = 0, another training day = the usual of its MD × the slider of its metric, a match = the usual match of
+ * its microcycle type (objectives payload, medians of the last 15). The week z-score (7-day load vs its previous 6 weeks)
+ * and the A:C 7:28 (uncoupled), read on each coming match day; a suggestion: the highest % that keeps every coming match
+ * under z +1.5 (A:C 1.37). */
+const SPP = { mode: 'z', sc: { td: 100, hit: 100, acc_dec: 100, srpe: 100 }, wl: null, obj: null, asked: false };
+const SPP_K = [['td', 'Total distance', 'm'], ['hit', '> 20 km/h', 'm'], ['acc_dec', 'Acc + Dec', ''], ['srpe', 'sRPE', 'AU']];
+function sppOn() {
+  if (!document.documentElement.classList.contains('is-admin')) return false;
+  if (!SPP.asked) { SPP.asked = true; withData('workload', (d) => { SPP.wl = d; splDraw(); }, () => {}); withData('objectives', (d) => { SPP.obj = d; splDraw(); }, () => {}); }
+  return !!(SPP.wl && SPP.wl.team && SPP.wl.team.daily && SPP.obj && SPP.obj.table);
+}
+function sppUsual(typ, tag, k) { const t = SPP.obj.table, c = ((t[typ || 'normal'] || {})[tag]) || ((t.normal || {})[tag]); return c && c[k] ? c[k].med || 0 : 0; }
+function sppBuild(date) {
+  const t = SPP.wl.team, d0 = t.start, n0 = t.daily.td.length, ms = SPL.cal ? gharafaMatchDates(SPL.cal, SPL.events || []) : [];
+  const coming = ms.filter((m) => m > date && daysBetween(date, m) <= 16).slice(0, 3);
+  if (!coming.length) return null;
+  const N = daysBetween(d0, coming[coming.length - 1]) + 1, base = {}, scal = [];
+  SPP_K.forEach(([k]) => { base[k] = new Array(N).fill(0); });
+  for (let i = 0; i < N; i++) {
+    const x = addDays(d0, i);
+    if (i < n0) { SPP_K.forEach(([k]) => { base[k][i] = (t.daily[k] || [])[i] || 0; }); scal.push(false); continue; }
+    const tag = splTag(x), typ = splCycleType(x), p = (SPL.saved.plans || {})[x], F = x === date ? splPred(splPlan(x)) : p && !p.off ? splPred(p) : null;
+    let sc = false;
+    SPP_K.forEach(([k]) => {
+      if (ms.includes(x)) { const prev = ms.filter((m) => m < x).pop(); base[k][i] = sppUsual(prev ? cycleType(daysBetween(prev, x)) : 'normal', 'MD', k); }
+      else if ((typeof DAY_OFF !== 'undefined' && DAY_OFF[x]) || (p && p.off) || tag === 'MD+1') base[k][i] = 0;
+      else if (F && F[k] != null) base[k][i] = F[k];
+      else { base[k][i] = sppUsual(typ, tag, k); sc = x > date; } // a day still to plan: scaled by its metric's slider
+    });
+    scal.push(sc);
+  }
+  return { d0, N, n0, base, scal, coming, sel: daysBetween(d0, date) };
+}
+function sppSeries(B, k) { return B.base[k].map((v, i) => (B.scal[i] ? v * SPP.sc[k] / 100 : v)); }
+function sppRatio(s) { return s.map((_, i) => { if (i < 34) return null; let a = 0, c = 0; for (let j = i - 6; j <= i; j++) a += s[j]; for (let j = i - 34; j <= i - 7; j++) c += s[j]; return c > 0 ? (a / 7) / (c / 28) : null; }); }
+function sppZ(s) {
+  const s7 = s.map((_, i) => (i >= 6 ? s.slice(i - 6, i + 1).reduce((a, b) => a + b, 0) : null));
+  return s.map((_, i) => { const h = []; for (let j = i - 48; j < i - 6; j++) if (j >= 6 && s7[j] != null) h.push(s7[j]); if (s7[i] == null || h.length < 21) return null;
+    const mu = h.reduce((a, b) => a + b, 0) / h.length, sd = Math.sqrt(h.reduce((a, b) => a + (b - mu) ** 2, 0) / h.length); return mu > 0 ? (s7[i] - mu) / Math.max(sd, 0.1 * mu) : null; });
+}
+const sppVals = (B, k) => (SPP.mode === 'ac' ? sppRatio : sppZ)(sppSeries(B, k));
+const sppCls = (v) => (v == null ? 'n' : SPP.mode === 'ac' ? (v < 0.78 ? 'b' : v <= 1.37 ? 'g' : v <= 1.5 ? 'o' : 'r') : (v <= -1 ? 'b' : v < 1 ? 'g' : v < 2 ? 'o' : 'r'));
+const sppOver = (v) => v != null && (SPP.mode === 'ac' ? v > 1.37 : v >= 1.5);
+const sppFmt = (v) => (v == null ? '—' : SPP.mode === 'ac' ? v.toFixed(2) : (v > 0 ? '+' : '') + v.toFixed(1));
+const sppShort = (d) => { const m = splMatchOn(d), o = m && m.e ? String(m.e.opponent || m.e.competition || '') : ''; return o.replace(/^Al /, '').slice(0, 3).toUpperCase() || 'MD'; };
+function sppSuggest(B) {
+  const keep = { ...SPP.sc };
+  const out = SPP_K.map(([k, l]) => { let best = null; for (let pc = 140; pc >= 40; pc -= 5) { SPP.sc[k] = pc; const v = sppVals(B, k); if (B.coming.every((m) => !sppOver(v[daysBetween(B.d0, m)]))) { best = pc; break; } } SPP.sc[k] = keep[k]; return [k, l, best]; });
+  return out;
+}
+function sppAdapted(date) { return sppOn() && SPL.date === date && SPP_K.some(([k]) => SPP.sc[k] !== 100) ? SPP.sc : null; }
+function sppChart(B, k) {
+  const v = sppVals(B, k), from = Math.max(0, B.sel - 16), W = 260, H = 124, L = 24, R = 16, T = 8, Bm = 24, lo = SPP.mode === 'ac' ? 0.4 : -2.5, hi = SPP.mode === 'ac' ? 2 : 3.5, n = B.N - from;
+  const x = (i) => L + (i - from) / Math.max(1, n - 1) * (W - L - R), y = (q) => T + (1 - (Math.max(lo, Math.min(hi, q)) - lo) / (hi - lo)) * (H - T - Bm);
+  const zones = SPP.mode === 'ac' ? [[0.78, 1.37, '#e3f5e7'], [1.37, 1.5, '#fff1dc'], [1.5, 2, '#ffe5e3']] : [[-1, 1, '#e3f5e7'], [1, 2, '#fff1dc'], [2, 3.5, '#ffe5e3']];
+  const pts = (a, b) => { const o = []; for (let i = a; i <= b; i++) if (v[i] != null) o.push(`${x(i).toFixed(1)},${y(v[i]).toFixed(1)}`); return o.join(' '); };
+  const ms = SPL.cal ? gharafaMatchDates(SPL.cal, SPL.events || []) : [];
+  let g = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${k}">${zones.map(([a, b, c]) => `<rect x="${L}" y="${y(b)}" width="${W - L - R}" height="${y(a) - y(b)}" fill="${c}"/>`).join('')}`;
+  g += (SPP.mode === 'ac' ? [0.78, 1.37, 1.5] : [-1, 1, 2]).map((q) => `<text x="${L - 3}" y="${y(q) + 3}" font-size="8" text-anchor="end" fill="#86868b">${q}</text>`).join('');
+  for (let i = from; i < B.N; i++) { const d = addDays(B.d0, i); if (ms.includes(d)) g += `<line x1="${x(i)}" x2="${x(i)}" y1="${T}" y2="${H - Bm}" stroke="#1d1d1f" opacity=".28"/><text x="${x(i)}" y="${H - Bm + 10}" font-size="8" text-anchor="middle" font-weight="700" fill="#1d1d1f">${sppShort(d)}</text><text x="${x(i)}" y="${H - Bm + 19}" font-size="7.5" text-anchor="middle" fill="#86868b">${SPL_DAY(d, { day: 'numeric', month: 'short' })}</text>`; }
+  g += `<rect x="${x(B.sel) - 5}" y="${T}" width="10" height="${H - T - Bm}" fill="#0071e3" opacity=".13" rx="3"/>`;
+  g += `<polyline points="${pts(from, Math.min(B.n0 - 1, B.N - 1))}" fill="none" stroke="#1d1d1f" stroke-width="1.8"/><polyline points="${pts(Math.max(from, B.n0 - 1), B.N - 1)}" fill="none" stroke="#0071e3" stroke-width="1.8" stroke-dasharray="4 3"/>`;
+  B.coming.forEach((m) => { const i = daysBetween(B.d0, m); if (v[i] != null) g += `<circle cx="${x(i)}" cy="${y(v[i])}" r="4" class="spp-${sppCls(v[i])}" stroke="#fff" stroke-width="1.5"/>`; });
+  return g + '</svg>';
+}
+function sppHtml(date) {
+  if (!sppOn()) return '';
+  const B = sppBuild(date);
+  if (!B) return '';
+  const mode = SPP.mode, warn = [];
+  B.coming.forEach((m) => SPP_K.forEach(([k, l]) => { const q = sppVals(B, k)[daysBetween(B.d0, m)]; if (sppOver(q)) warn.push(`${l} ${sppFmt(q)} on ${SPL_DAY(m, { weekday: 'short', day: 'numeric' })} (${sppShort(m)})`); }));
+  const verdict = warn.length ? `⚠ With this plan, ${mode === 'ac' ? 'projected A:C above 1.37' : 'the week above the team’s usual (z ≥ +1.5, the spike rule)'}: ${warn.join(' · ')}.`
+    : `✓ With this plan, ${mode === 'ac' ? 'no projected A:C above 1.37' : 'no week z-score at +1.5 or more'} on the coming match days.`;
+  const sug = sppSuggest(B);
+  return `<section class="spp" id="spp"><div class="spp-hd"><h3>Load projection · the next matches</h3><span class="spp-sub">team ${mode === 'ac' ? 'A:C 7:28' : 'week z-score (vs its previous 6 weeks)'} with this plan · the planned days at their forecast, the others at the usual of their MD, the matches as usual · <b>only you see this</b></span>
+    <span class="seg spp-seg"><button type="button" data-spp-mode="z" class="${mode === 'z' ? 'active' : ''}">z-score</button><button type="button" data-spp-mode="ac" class="${mode === 'ac' ? 'active' : ''}">A:C</button></span></div>
+    <div class="spp-verdict ${warn.length ? 'warn' : 'ok'}">${verdict}</div>
+    <div class="spp-sug"><b>Suggested for the days still to plan</b>${sug.map(([k, l, b]) => `<span class="${b == null ? 'r' : b >= 100 ? 'g' : 'b'}">${l}: ${b == null ? 'not reachable by training (the matches)' : b >= 100 ? 'as usual or more' : '≤ ' + b + ' %'}</span>`).join('')}<button type="button" class="btn-light" data-spp-use>Use these %</button>${SPP_K.some(([k]) => SPP.sc[k] !== 100) ? '<button type="button" class="linkbtn" data-spp-reset>Reset 100 %</button>' : ''}</div>
+    <div class="spp-charts">${SPP_K.map(([k, l, u]) => { const v = sppVals(B, k); return `<div class="spp-ch"><h5>${l}<span>${B.coming.map((m) => `${sppShort(m)} <b class="spp-t-${sppCls(v[daysBetween(B.d0, m)])}">${sppFmt(v[daysBetween(B.d0, m)])}</b>`).join(' · ')}</span></h5>${sppChart(B, k)}
+      <label class="spp-sl"><span>days still to plan</span><input type="range" min="40" max="140" step="5" value="${SPP.sc[k]}" data-spp-sc="${k}"><b>${SPP.sc[k]} %</b></label></div>`; }).join('')}</div>
+    <p class="spp-leg">Black = real (to ${SPL_DAY(addDays(B.d0, B.n0 - 1), { day: 'numeric', month: 'short' })}) · blue dashes = projected · blue band = the day you plan · dots = the coming match days · ${mode === 'ac' ? 'green 0.78–1.37 · orange to 1.5 · red above' : 'green ±1 (the team’s usual) · orange +1 to +2 · red above'} · team = your Team rule (the starters’ path) · an estimate: read the zone, not the decimals</p></section>`;
+}
+function sppBind() {
+  const el = document.getElementById('spp');
+  if (!el) return;
+  el.querySelectorAll('[data-spp-mode]').forEach((b) => { b.onclick = () => { SPP.mode = b.dataset.sppMode; splDraw(); }; });
+  el.querySelectorAll('[data-spp-sc]').forEach((r) => { r.oninput = () => { r.nextElementSibling.textContent = r.value + ' %'; }; r.onchange = () => { SPP.sc[r.dataset.sppSc] = +r.value; splDraw(); }; });
+  const use = el.querySelector('[data-spp-use]'); if (use) use.onclick = () => { const B = sppBuild(SPL.date); if (B) sppSuggest(B).forEach(([k, , b]) => { SPP.sc[k] = b == null ? 40 : Math.min(100, b); }); splDraw(); };
+  const rs = el.querySelector('[data-spp-reset]'); if (rs) rs.onclick = () => { SPP_K.forEach(([k]) => { SPP.sc[k] = 100; }); splDraw(); };
+}
+
 /** A team day off, in place of the drills: what the import will write (his MD+1 days off in the Excel). */
 function splOffCardHtml(date, p) {
   const md = splTag(date) || '/', label = p.label || splLabel(date);
@@ -470,21 +566,32 @@ async function splSaveNoRpe(date, id, input) {
   } catch (err) { SPL.state = 'RPE not saved — ' + (err.message || err); }
   splStateLine();
 }
-function splLoadHtml(date, p) {
+/** A plan's forecast team load (each drill's usual per-minute load × its minutes, calibrated), or null without team drills. */
+function splPred(p) {
   const c = SPL.lib.calib || {}, rate = (n, k) => { const r8 = splRateOf(n); return r8 ? r8.l[k] || 0 : 0; };
+  const team = ((p && p.drills) || []).filter((d) => !SPL_NOT_TEAM.test(splName(d.name)) && d.min);
+  if (!team.length) return null;
+  const pred = (k) => team.reduce((a, d) => a + rate(d.name, k) * d.min, 0) * ((c[k] || {}).k || 1);
+  return { td: pred('td'), acc_dec: pred('acc_dec'), hit: pred('hit') };
+}
+function splLoadHtml(date, p) {
+  const c = SPL.lib.calib || {};
   const team = p.drills.filter((d) => !SPL_NOT_TEAM.test(splName(d.name)) && d.min);
   if (!team.length) return '';
   const none = [...new Set(team.filter((d) => !splRateOf(d.name)).map((d) => splName(d.name)))]; // created drills with no data and no "forecast like"
-  const pred = (k) => team.reduce((a, d) => a + rate(d.name, k) * d.min, 0) * ((c[k] || {}).k || 1);
+  const F = splPred(p), pred = (k) => F[k];
+  const ad = sppAdapted(date); // the projection's adapted objective (admin first), else null
   const typ = splCycleType(date), ref = ((SPL.lib.usual[typ] || {})[splTag(date)]) || null;
   const bar = (k, label, unit) => {
     const v = pred(k), u = ref ? ref[k] : null, max = Math.max(v, u ? u[2] : 0, u ? u[0] : 0) * 1.25 || 1, pc = (x) => Math.min(100, (x || 0) / max * 100);
     const lv = !u ? 'na' : v < u[1] * 0.95 ? 'lo' : v > u[2] * 1.05 ? 'hi' : 'ok';
-    return `<div class="sp-lr"><span class="l">${label}</span><span class="sp-lt">${u ? `<i class="band" style="left:${pc(u[1])}%;width:${pc(u[2]) - pc(u[1])}%"></i><i class="mean" style="left:${pc(u[0])}%"></i>` : ''}<i class="dot ${lv}" style="left:${pc(v)}%"></i></span>
+    const a = ad && u && ad[k] !== 100 ? ad[k] / 100 : null;
+    return `<div class="sp-lr"><span class="l">${label}</span><span class="sp-lt">${u ? `<i class="band" style="left:${pc(u[1])}%;width:${pc(u[2]) - pc(u[1])}%"></i><i class="mean" style="left:${pc(u[0])}%"></i>` : ''}${a ? `<i class="band sp-adapt" style="left:${pc(u[1] * a)}%;width:${pc(u[2] * a) - pc(u[1] * a)}%" title="Adapted objective: ${ad[k]} % of the usual (load projection)"></i>` : ''}<i class="dot ${lv}" style="left:${pc(v)}%"></i></span>
       <b>${k === 'td' ? (v / 1000).toFixed(1) + 'k' : Math.round(v)}<small> ${unit}</small></b><em class="${lv}">${lv === 'ok' ? 'usual ✓' : lv === 'lo' ? 'lighter' : lv === 'hi' ? 'heavier' : '—'}</em><small class="sp-acc">${(c[k] || {}).err != null ? (k === 'hit' ? 'indicative' : `±${c[k].err} %`) : ''}</small></div>`;
   };
   return `<div class="sp-load"><div class="sp-h3">Planned team load <small>${(SPL.lib.categories || []).length ? 'each drill\'s category (its usual per-minute load)' : 'each drill\'s usual per-minute load'} × its planned minutes${ref ? ` · grey = usual ${splTag(date)} of a ${typ} microcycle (p25–p75, ${ref.n} sessions), line = average` : ' · no usual reference for this day'}</small></div>
     ${bar('td', 'Total distance', 'm')}${bar('acc_dec', 'Acc + Dec', '')}${bar('hit', '> 20 km/h', 'm')}
+    ${ad && ref ? `<p class="sp-adapt-t">Blue = adapted objective (load projection): ${[['td', 'Total distance', 'm'], ['acc_dec', 'Acc + Dec', ''], ['hit', '> 20 km/h', 'm']].filter(([k]) => ad[k] !== 100 && ref[k]).map(([k, l, u]) => `${l} ${k === 'td' ? (ref[k][0] * ad[k] / 100 / 1000).toFixed(1) + 'k' : Math.round(ref[k][0] * ad[k] / 100)}${u ? ' ' + u : ''} (${ad[k] - 100} %)`).join(' · ')}</p>` : ''}
     ${none.length ? `<p class="sp-note warn">Not in the forecast (no data yet): ${none.map(escapeHtml).join(', ')} — open its card (+ pitch / players) and choose “Forecast like”.</p>` : ''}</div>`;
 }
 /** The statuses to choose from: the usual ones, then the other types found in the files (matches left out). */
