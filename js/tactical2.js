@@ -62,8 +62,8 @@ async function t2Fetch(mid, kind) {
 }
 /** Every moment of a team (its matches' files), with the match and the opponent. */
 function t2Moments(team) {
-  const out = [], M = t2M();
-  (T2.data.matches || []).filter((m) => m.home === team || m.away === team).forEach((m) => {
+  const out = [], M = t2M(), sel = t2Sel(team);
+  (T2.data.matches || []).filter((m) => (m.home === team || m.away === team) && (!sel || sel.has(m.id))).forEach((m) => {
     const pk = T2.packs[m.id]; if (!pk) return;
     pk.moments.forEach((x) => { if (x.t === team) out.push({ ...x, m: m.id, opp: m.home === team ? m.away : m.home }); });
   });
@@ -95,14 +95,14 @@ function t2Strip() {
   return `<div class="strip">${ord.map((t) => `<button class="${t === T2.team ? 'on' : ''} ${t === T2_US ? 'us' : ''}" data-team="${escapeHtml(t)}">${t === nx ? `<em>next · ${escapeHtml(T2.next.when)}</em>` : t === T2_US ? '<em>us</em>' : ''}${crestHtml(t, 30)}<span>${escapeHtml(t)}</span></button>`).join('')}</div>`;
 }
 function t2Header(team, extra = '') {
-  const T = T2.data.teams[team], [w, d, l, gf, ga] = T.rec;
-  return `<div class="th">${crestHtml(team, 64)}<div><h2>${escapeHtml(team)}</h2><div class="rec">${T.n} QSL matches with a file · <b>${w}W ${d}D ${l}L</b> · goals <b>${gf}–${ga}</b>${T2.next && team === T2.next.team ? ` · <b style="color:#e5484d">our next league opponent (${escapeHtml(T2.next.when)})</b>` : ''}</div></div><div>${extra}</div></div>`;
+  const T = t2T(team), [w, d, l, gf, ga] = T.rec;
+  return `<div class="th">${crestHtml(team, 64)}<div><h2>${escapeHtml(team)}</h2><div class="rec">${T.n} QSL match${T.n > 1 ? 'es' : ''} ${t2Sel(team) ? 'picked' : 'with a file'} · <b>${w}W ${d}D ${l}L</b> · goals <b>${gf}–${ga}</b>${T2.next && team === T2.next.team ? ` · <b style="color:#e5484d">our next league opponent (${escapeHtml(T2.next.when)})</b>` : ''}</div></div><div>${extra}</div></div>`;
 }
 function t2List(team, cat, f, mid) {
   return t2Moments(team).filter((x) => x.c === cat && (mid === 'all' || x.m === mid) && Object.entries(f).every(([k, v]) => (k === 'start' && v === 'settled' ? x.start && x.start !== 'open play' : x[k] === v)));
 }
 function t2Say(team, chips = true) {
-  const s = T2.data.teams[team].say, it = (i) => `${escapeHtml(i.txt)} <i>(${escapeHtml(i.val)}${i.rank ? ' · ' + escapeHtml(i.rank) : ''})</i>`;
+  const s = t2T(team).say, it = (i) => `${escapeHtml(i.txt)} <i>(${escapeHtml(i.val)}${i.rank ? ' · ' + escapeHtml(i.rank) : ''})</i>`;
   const watch = s.watch.map((w) => `<button class="chip" data-watch='${escapeHtml(JSON.stringify(w))}'>▶ ${escapeHtml(T2_CAT[w.cat][1])}${Object.values(w.f || {}).length ? ' · ' + escapeHtml(Object.values(w.f).map((v) => (v === true ? 'pressed' : v)).join(', ')) : ''}<b>${t2List(team, w.cat, w.f || {}, 'all').length}</b></button>`).join('');
   return `<dl class="say">${s.strong.length ? `<dt class="s">Strong</dt><dd>${s.strong.map(it).join(' · ')}</dd>` : ''}${s.weak.length ? `<dt class="w">Weak</dt><dd>${s.weak.map(it).join(' · ')}</dd>` : ''}
     ${s.style.length ? `<dt class="y">Style</dt><dd>${s.style.map((i) => escapeHtml(i.txt)).join(' · ')}</dd>` : ''}${chips && s.watch.length ? `<dt class="v">Watch</dt><dd>${watch}</dd>` : ''}</dl>`;
@@ -117,11 +117,11 @@ function t2Fmt(k, v) {
   return v.toFixed(1);
 }
 function t2Tile(team, k) {
-  const V = T2.data, [label, unit, good, def] = V.defs[k], T = V.teams[team], v = T.m[k], r = T.rank[k], N = V.N;
-  const vals = Object.values(V.teams).map((t) => t.m[k]).filter((x) => x != null), lo = Math.min(...vals), hi = Math.max(...vals), X = (x) => (hi > lo ? 4 + 92 * (x - lo) / (hi - lo) : 50);
+  const V = T2.data, [label, unit, good, def] = V.defs[k], T = t2T(team), v = T.m[k], r = T.rank[k], N = V.N, TM = { ...V.teams, [team]: T };
+  const vals = Object.values(TM).map((t) => t.m[k]).filter((x) => x != null), lo = Math.min(...vals), hi = Math.max(...vals), X = (x) => (hi > lo ? 4 + 92 * (x - lo) / (hi - lo) : 50);
   const best = r == null ? null : good === 'high' ? r : good === 'low' ? N + 1 - r : null, cls = best == null ? '' : best <= 3 ? 'g' : best >= N - 2 ? 'b' : '';
   const lr = r == null ? null : N + 1 - r, rk = r == null ? '' : good === 'low' ? (lr === 1 ? 'the fewest' : r === 1 ? 'the most' : `${t2ord(lr)} fewest`) : r === 1 ? 'the most' : t2ord(r);
-  const strip = `<div class="lstrip" title="the ${N} teams · dashed = league average">${Object.entries(V.teams).map(([t, o]) => (o.m[k] == null ? '' : `<i class="${t === team ? 'me' : ''}" style="left:${X(o.m[k])}%" title="${escapeHtml(t)}"></i>`)).join('')}${V.league[k] != null ? `<u style="left:${X(V.league[k])}%"></u>` : ''}</div>`;
+  const strip = `<div class="lstrip" title="the ${N} teams · dashed = league average">${Object.entries(TM).map(([t, o]) => (o.m[k] == null ? '' : `<i class="${t === team ? 'me' : ''}" style="left:${X(o.m[k])}%" title="${escapeHtml(t)}"></i>`)).join('')}${V.league[k] != null ? `<u style="left:${X(V.league[k])}%"></u>` : ''}</div>`;
   return `<div class="tile"><span class="l">${escapeHtml(label)}<button data-def="${k}" title="How it is calculated">i</button></span><span class="v">${t2Fmt(k, v)}${unit && unit !== '%' && unit !== 'm' ? `<small>${escapeHtml(unit)}</small>` : ''}</span><span class="rk ${cls}">${rk}</span>${strip}
     <span class="lg">league ${k === 'press' ? (V.league[k] ? (1 / V.league[k]).toFixed(1) : '—') : t2Fmt(k, V.league[k]).replace(/<small>(.*?)<\/small>/g, ' $1')}</span>${T2.open === k ? `<div class="def">${escapeHtml(def)}</div>` : ''}</div>`;
 }
@@ -149,13 +149,13 @@ function t2BuBlock(team, mini = false) {
   const xs = t2Moments(team).filter((x) => x.c === 'build_up'), set = xs.filter((x) => x.start !== 'open play'), cnt = (arr, t) => arr.filter((x) => x.tag === t).length;
   const parts = (arr) => [['last third', cnt(arr, 'final third'), '#0a8a3a'], ['middle third', cnt(arr, 'middle third'), '#5cc27a'], ['lost in own third', cnt(arr, 'lost in own third'), '#e5484d'], ['other (out, foul)', cnt(arr, 'other'), '#c9c8c0']];
   const pr = set.filter((x) => x.pressed);
-  return `<div class="card blk"><h3>Build-up <small>possessions from the own third · ${xs.length} in ${T2.data.teams[team].n} matches</small><span class="sp"></span>${t2See('build_up', {}, 'all build-ups')}</h3>
+  return `<div class="card blk"><h3>Build-up <small>possessions from the own third · ${xs.length} in ${t2T(team).n} matches</small><span class="sp"></span>${t2See('build_up', {}, 'all build-ups')}</h3>
     ${t2Tiles(team, mini ? ['bu_mid_pct', 'bu_lost3_pct', 'bu_pressed_mid_pct'] : ['bu', 'bu_mid_pct', 'bu_lost3_pct', 'bu_pressed_pct', 'bu_pressed_mid_pct', 'bu_pressed_lost3_pct'], 't3c')}
     <div><b style="font-size:12.5px">Settled (goal kick, free kick, throw-in, goalkeeper) · ${set.length}</b>${t2Flow(parts(set))}</div>
     ${mini ? '' : `<div><b style="font-size:12.5px">…when pressed (an opponent within 5 m in the first 8 s) · ${pr.length}</b>${t2Flow(parts(pr))}</div><div><b style="font-size:12.5px">After a ball won back in the own third · ${xs.length - set.length}</b>${t2Flow(parts(xs.filter((x) => x.start === 'open play')))}</div>`}</div>`;
 }
 function t2PressBlock(team, mini = false) {
-  const T = T2.data.teams[team], [w5, w10, lg, fo, bt, ot] = T.m.pr_split || [0, 0, 0, 0, 0, 0], [org, cp, hi] = T.m.pr_kinds || [0, 0, 0, 0];
+  const T = t2T(team), [w5, w10, lg, fo, bt, ot] = T.m.pr_split || [0, 0, 0, 0, 0, 0], [org, cp, hi] = T.m.pr_kinds || [0, 0, 0, 0];
   return `<div class="card blk"><h3>Pressing <small>${w5 + w10 + lg + fo + bt + ot} pressings · ${org} organised, ${cp} counter-presses · ${hi} high</small><span class="sp"></span>${t2See('press', {}, 'all pressings')}</h3>
     ${t2Tiles(team, mini ? ['pr', 'pr_won5_pct', 'press'] : ['pr', 'pr_high_pct', 'pr_counter', 'pr_won5_pct', 'pr_beaten_pct', 'press'], 't3c')}
     <div><b style="font-size:12.5px">What happens when they press</b>${t2Flow([['won back ≤ 5 s', w5, '#0a8a3a'], ['won back ≤ 10 s', w10, '#5cc27a'], ['forced a long ball', lg, '#f5a524'], ['foul', fo, '#9aa5c7'], ['beaten (they reach our half)', bt, '#e5484d'], ['other', ot, '#c9c8c0']])}</div>
@@ -183,7 +183,7 @@ function t2ProgBlock(team) {
     <p>Where the team gets into the last third (${e.length} entries · white = pass, yellow = carry · lanes from the attacking team's left).</p></div>`;
 }
 function t2RecBlock(team) {
-  const T = T2.data.teams[team], r = t2Moments(team).filter((x) => x.c === 'regain_high');
+  const T = t2T(team), r = t2Moments(team).filter((x) => x.c === 'regain_high');
   return `<div class="card blk"><h3>Where they win the ball back <small>open play · kick-offs left out</small><span class="sp"></span>${t2See('regain_high', {}, 'high regains')}${t2See('counter', {}, 'counter-attacks')}</h3>
     ${t2Tiles(team, ['rec_h', 'high_reg', 'counter', 'counter_against'])}
     <div><b style="font-size:12.5px">Balls won back by third</b>${t2Flow([['own third', Math.round(T.m.reg_low_pct || 0), '#9aa5c7'], ['middle third', Math.round(T.m.reg_mid_pct || 0), '#5a6fd1'], ['last third', Math.round(T.m.reg_high_pct || 0), '#1f3a9e']]).replace(/<b>(\d+)<\/b>/g, '<b>$1 %</b>')}</div>
@@ -198,7 +198,7 @@ function t2TeamMatches(team) {
 }
 function t2TeamPage() {
   const team = T2.team, SEG = [['over', 'Overview'], ['with', 'With the ball'], ['without', 'Without the ball'], ['video', 'Video room'], ['matches', 'Matches']];
-  const head = `<div class="card">${t2Header(team, T2.seg === 'over' ? '<button class="btn" data-seg="video">▶ Video room</button>' : '')}${t2Say(team)}</div>`;
+  const head = `<div class="card">${t2Header(team, T2.seg === 'over' ? '<button class="btn" data-seg="video">▶ Video room</button>' : '')}${t2Say(team)}</div>` + t2Picker(team);
   let body;
   if (T2.seg === 'with') body = head + t2BuBlock(team) + `<div class="grid2">${t2GkBlock(team)}${t2ProgBlock(team)}</div>`;
   else if (T2.seg === 'without') body = head + `<div class="grid2">${t2PressBlock(team)}${t2RecBlock(team)}</div><div class="card blk"><h3>Defending</h3>${t2Tiles(team, ['goals_against', 'xg_against', 'shots_against', 'loss3'])}</div>`;
@@ -367,6 +367,8 @@ function t2Bind() {
   box.querySelectorAll('[data-vmatch]').forEach((b) => (b.onclick = () => { T2.match = b.dataset.vmatch; T2.seg = 'video'; T2.ev = null; box.innerHTML = t2TeamPage(); t2Bind(); }));
   box.querySelectorAll('[data-export]').forEach((b) => (b.onclick = () => t2Export(b.dataset.export)));
   box.querySelectorAll('[data-pdf]').forEach((b) => (b.onclick = () => t2ReportPdf(b.dataset.pdf, b)));
+  box.querySelectorAll('[data-pick]').forEach((b) => (b.onclick = () => { const prev = T2.pick && T2.pick.team === T2.team ? T2.pick : null; T2.pick = { team: T2.team, mode: b.dataset.pick, set: prev && prev.set ? prev.set : new Set() }; T2.ev = null; box.innerHTML = t2TeamPage(); t2Bind(); }));
+  box.querySelectorAll('[data-pm]').forEach((b) => (b.onchange = () => { const P = T2.pick; b.checked ? P.set.add(b.dataset.pm) : P.set.delete(b.dataset.pm); T2.ev = null; box.innerHTML = t2TeamPage(); t2Bind(); }));
   const vm = document.getElementById('vr-match'); if (vm) vm.onchange = () => { T2.match = vm.value; T2.ev = null; box.innerHTML = t2TeamPage(); t2Bind(); };
   const L = T2.seg === 'video' ? t2List(T2.team, T2.cat, T2.f, T2.match) : [];
   P2X.list = L;
@@ -660,4 +662,108 @@ function tbxPages(D) {
     + pEntry('entry_pass', 'ENTRY INTO FINAL THIRD BY PASSES (start of the pass)') + pEntry('entry_carry', 'ENTRY INTO FINAL THIRD WITH BALL') + pHeat(TH) + pHeat(TA)
     + (!OURS || !(D.trends || []).length ? '' : pTrend('GHARAFA PASSING', D.ft_passes, 'SUCCESSFUL PASSES INTO FINAL THIRD', [['passes', 'PASSES'], ['pass_ok', '% of passes Successful'], ['forward', 'PASSES FORWARD'], ['final_third', 'PASSES INTO FINAL THIRD'], ['crosses', 'CROSSES']])
     + pTrend('GHARAFA SHOTS', D.box_passes, 'SUCCESSFUL PASSES INTO PENALTY BOX', [['shots', 'TOTAL SHOTS'], ['on_target', 'SHOTS ON TARGET'], ['inside', 'SHOTS INSIDE BOX'], ['outside', 'SHOTS FROM OUTSIDE BOX'], ['crosses_ok', 'SUCCESSFUL CROSSES']]));
+}
+
+// ------------------------------------------------------------------ the matches analysed (all · since a new coach · picked) — 2026-10-30
+/** The team's latest coach and his matches when he is not the coach of its first match (the XML names each team's coach). */
+function t2CoachSpan(team) {
+  const ms = (T2.data.matches || []).filter((m) => (m.home === team || m.away === team) && m.coach && m.coach[team]).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  if (ms.length < 2) return null;
+  const last = ms[ms.length - 1].coach[team];
+  let i = ms.length - 1; while (i >= 0 && ms[i].coach[team] === last) i--;
+  if (i < 0) return null;
+  const now = ms.slice(i + 1), before = ms.slice(0, i + 1);
+  return { coach: last, prev: before[before.length - 1].coach[team], since: now[0].date, mids: now.map((m) => m.id), prevMids: before.map((m) => m.id) };
+}
+function t2Sel(team) {
+  const P = T2.pick;
+  if (!P || P.team !== team || P.mode === 'all') return null;
+  if (P.mode === 'coach') { const c = t2CoachSpan(team); return c ? new Set(c.mids) : null; }
+  return P.set && P.set.size ? P.set : null;
+}
+function t2TeamNumbers(list) {
+  const s = {}; list.forEach((r) => { for (const k in r) s[k] = (s[k] || 0) + r[k]; });
+  const g = (k) => s[k] || 0, n = list.length || 1, r1 = (x) => Math.round(x * 10) / 10;
+  const rate = (a, b) => (g(b) ? r1(100 * g(a) / g(b)) : null), per = (a) => r1(g(a) / n), lg = g('gk') - g('gk_short');
+  return { fwd: per('fwd'), prog_ok: per('prog_ok'), rec_h: g('regains') ? r1(g('regain_x') / g('regains')) : null, high_reg: per('reg_high'), gk_short_pct: rate('gk_short', 'gk'), gk_short_prog: rate('gk_short_prog', 'gk_short'),
+    gk_long_won: lg ? r1(100 * g('gk_long_won') / lg) : null, gk_press: g('gk_press_n') ? r1(g('gk_press') / g('gk_press_n')) : null, bu: per('bu'), bu_mid_pct: rate('bu_mid', 'bu'), bu_lost3_pct: rate('bu_lost3', 'bu'),
+    bu_pressed_pct: rate('bu_pressed', 'bu_set_2d'), bu_pressed_mid_pct: rate('bu_pressed_mid', 'bu_pressed'), bu_pressed_lost3_pct: rate('bu_pressed_lost3', 'bu_pressed'), pr: per('pr'), pr_high_pct: rate('pr_high', 'pr'),
+    pr_counter: per('pr_counter'), pr_won5_pct: rate('pr_won5', 'pr'), pr_beaten_pct: rate('pr_beaten', 'pr'), _s: s };
+}
+/** A team's numbers, ranks and sentence over some of its matches (the other teams keep their whole season). */
+function t2Agg(team, mids) {
+  const V = T2.data, per = (V.per || []).filter((p) => mids.has(p.id) && p.rows && p.rows[team]);
+  if (!per.length) return null;
+  const K1 = ['goals_for', 'goals_against', 'xg', 'xg_against', 'shots', 'shots_against', 'possession', 'passes', 'final_third', 'crosses', 'sp_goals', 'sp_against', 'press', 'fouls', 'counter', 'counter_against', 'loss3', 'corners'];
+  const m = {};
+  K1.forEach((k) => { const xs = per.map((p) => p.rows[team][k]).filter((x) => x != null); m[k] = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; });
+  const tn = t2TeamNumbers(per.map((p) => p.nums[team] || {})), s = tn._s; delete tn._s; Object.assign(m, tn);
+  const sp = { corners: 0, corner_shots: 0, fks: 0, fk_shots: 0 }; per.forEach((p) => { const q = p.sp[team] || {}; for (const k in sp) sp[k] += q[k] || 0; });
+  m.corner_shot_pct = sp.corners ? Math.round(1000 * sp.corner_shots / sp.corners) / 10 : null;
+  m.fk_shot_pct = sp.fks ? Math.round(1000 * sp.fk_shots / sp.fks) / 10 : null;
+  const rg = ['low', 'mid', 'high'].map((z) => s['reg_' + z] || 0), rt = rg.reduce((a, b) => a + b, 0) || 1;
+  [m.reg_low_pct, m.reg_mid_pct, m.reg_high_pct] = rg.map((v) => Math.round(1000 * v / rt) / 10);
+  const g = (k) => s[k] || 0;
+  m.pr_split = [g('pr_won5'), g('pr_won10') - g('pr_won5'), g('pr_long'), g('pr_foul'), g('pr_beaten'), g('pr') - g('pr_won10') - g('pr_long') - g('pr_foul') - g('pr_beaten')];
+  m.pr_kinds = [g('pr') - g('pr_counter'), g('pr_counter'), g('pr_high'), g('pr') - g('pr_high')];
+  let w = 0, d = 0, gf = 0, ga = 0;
+  per.forEach((p) => { const h = p.home === team, a = p.score[h ? 0 : 1], b = p.score[h ? 1 : 0]; gf += a; ga += b; w += a > b; d += a === b; });
+  const N = V.N, rank = {};
+  Object.keys(V.defs).forEach((k) => { const v = m[k]; if (v == null) { rank[k] = null; return; }
+    const others = Object.entries(V.teams).filter(([t]) => t !== team).map(([, o]) => o.m[k]).filter((x) => x != null); rank[k] = 1 + others.filter((x) => x > v).length; });
+  const T = { n: per.length, rec: [w, d, per.length - w - d, gf, ga], m, rank };
+  T.say = t2SayFor(T);
+  return T;
+}
+function t2SayFor(T) {
+  const V = T2.data, N = V.N, good = [], bad = [], style = [], txt = (k, v) => t2Fmt(k, v).replace(/<small>(.*?)<\/small>/g, ' $1');
+  Object.entries(V.defs).forEach(([k, [, , side]]) => { if (!side || !V.phrase[k] || T.rank[k] == null) return; const best = side === 'high' ? T.rank[k] : N + 1 - T.rank[k];
+    if (best <= 3) good.push([best, k]); else if (best >= N - 2) bad.push([N + 1 - best, k]); });
+  Object.keys(V.style).forEach((k) => { const r = T.rank[k]; if (r != null && T.m[k] != null && (r <= 2 || r >= N - 1)) style.push([Math.min(r, N + 1 - r), k, r <= 2]); });
+  const sort = (a, b) => a[0] - b[0];
+  const item = (k, phrase, rk) => { const p = V.phrase[k] || [], sw = V.style_watch[k], cat = p[2] || (sw && sw[0]) || null, f = p[2] ? p[3] : (sw && sw[1]) || null;
+    return { k, txt: phrase, val: txt(k, T.m[k]), rank: rk, cat, f }; };
+  const strong = good.sort(sort).slice(0, 3).map(([b, k]) => item(k, V.phrase[k][0], b === 1 ? 'best in the league' : `${t2ord(b)} best`));
+  const weak = bad.sort(sort).slice(0, 3).map(([b, k]) => item(k, V.phrase[k][1], b === 1 ? 'worst in the league' : `${t2ord(b)} worst`));
+  const sty = style.sort(sort).slice(0, 2).map(([, k, hi]) => { const v = T.m[k], tpl = V.style[k][hi ? 0 : 1];
+    return item(k, tpl.replace('{v}', Math.round(v)).replace('{w}', Math.round(100 - v)).replace('{f}', v.toFixed(1)), ''); });
+  const watch = [];
+  [...weak, ...sty, ...strong].forEach((it) => { if (it.cat && watch.every((w) => w.cat !== it.cat || JSON.stringify(w.f) !== JSON.stringify(it.f))) watch.push({ cat: it.cat, f: it.f || {}, why: it.txt }); });
+  return { strong, weak, style: sty, watch: watch.slice(0, 3) };
+}
+const T2_AGG = {};
+/** The team as analysed now: its whole season, or the matches picked. */
+function t2T(team) {
+  const sel = t2Sel(team);
+  if (!sel) return T2.data.teams[team];
+  const key = team + '|' + [...sel].sort().join(',');
+  if (!(key in T2_AGG)) T2_AGG[key] = t2Agg(team, sel) || T2.data.teams[team];
+  return T2_AGG[key];
+}
+
+/** The matches chooser and, when the coach changed, what changed (the biggest moves, in league spreads). */
+function t2Picker(team) {
+  const V = T2.data, P = T2.pick && T2.pick.team === team ? T2.pick : { mode: 'all' }, c = t2CoachSpan(team);
+  const ms = V.matches.filter((m) => m.home === team || m.away === team).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const btn = (mode, label) => `<button class="chip ${P.mode === mode ? 'on' : 'g'}" data-pick="${mode}">${label}</button>`;
+  let html = `<div class="card" style="padding:12px 16px"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px"><b style="font-size:12.5px;margin-right:6px">Matches analysed</b>${btn('all', `All ${ms.length}`)}${c ? btn('coach', `Since the new coach · ${escapeHtml(c.coach)} · ${c.mids.length}`) : ''}${btn('pick', 'Choose…')}</div>`;
+  if (P.mode === 'pick') {
+    html += `<div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px">${ms.map((m) => `<label style="font-size:12.5px;display:flex;gap:5px;align-items:center"><input type="checkbox" data-pm="${m.id}" ${P.set && P.set.has(m.id) ? 'checked' : ''}>${t2day(m.date)} · ${m.home === team ? 'v ' + escapeHtml(m.away) : '@ ' + escapeHtml(m.home)} ${m.score[0]}–${m.score[1]}${m.coach && m.coach[team] ? ` <small class="muted">${escapeHtml(m.coach[team])}</small>` : ''}</label>`).join('')}</div>`;
+  }
+  if (t2Sel(team)) html += '<p class="muted" style="font-size:11.5px;margin:6px 0 0">Every number, rank, sentence and the video room on these matches only (the numbers from their QSL matches) · the other teams keep their whole season.</p>';
+  html += '</div>';
+  if (!c) return html;
+  const before = t2Agg(team, new Set(c.prevMids)), after = t2Agg(team, new Set(c.mids));
+  if (!before || !after) return html;
+  const sd = (k) => { const xs = Object.values(V.teams).map((t) => t.m[k]).filter((x) => x != null), mu = xs.reduce((a, b) => a + b, 0) / xs.length; return Math.sqrt(xs.reduce((a, x) => a + (x - mu) ** 2, 0) / xs.length) || 1; };
+  const ch = Object.keys(V.defs).filter((k) => before.m[k] != null && after.m[k] != null).map((k) => [k, (after.m[k] - before.m[k]) / sd(k)])
+    .filter(([, z]) => Math.abs(z) >= 0.5).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 6);
+  const txt = (k, v) => t2Fmt(k, v).replace(/<small>(.*?)<\/small>/g, ' $1');
+  const rows = ch.map(([k, z]) => `<tr><td class="l">${escapeHtml(V.defs[k][0])}</td><td>${txt(k, before.m[k])}</td><td><b>${txt(k, after.m[k])}</b></td><td style="color:${V.defs[k][2] === 'high' ? (z > 0 ? '#0a7a32' : '#b42318') : V.defs[k][2] === 'low' ? (z < 0 ? '#0a7a32' : '#b42318') : '#6a6f80'}" title="green = better, red = worse, grey = a style number">${z > 0 ? '▲' : '▼'}</td></tr>`).join('');
+  const few = after.n < 3 ? ' · few matches: to confirm' : '';
+  const go = P.mode === 'coach' ? '' : '<button class="btn" data-pick="coach">Analyse his matches only</button>';
+  html += `<div class="card" style="border-color:#f5a524;background:color-mix(in srgb,#f5a524 7%,var(--surface))"><h3 style="color:#8a5a00">⚠ New coach since ${t2day(c.since)} · ${escapeHtml(c.coach)} <small>${after.n} QSL match${after.n > 1 ? 'es' : ''} with a file · before: ${escapeHtml(c.prev)}, ${before.n}${few}</small><span class="sp"></span>${go}</h3>`
+    + (ch.length ? `<table class="tt-tbl" style="max-width:720px"><thead><tr><th class="l">What changed most</th><th>${escapeHtml(c.prev)}</th><th>${escapeHtml(c.coach)}</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">No big change in the numbers yet.</p>')
+    + '</div>';
+  return html;
 }
