@@ -584,10 +584,10 @@ function splLoadHtml(date, p) {
   const typ = splCycleType(date), ref = ((SPL.lib.usual[typ] || {})[splTag(date)]) || null;
   const bar = (k, label, unit) => {
     const v = pred(k), u = ref ? ref[k] : null, max = Math.max(v, u ? u[2] : 0, u ? u[0] : 0) * 1.25 || 1, pc = (x) => Math.min(100, (x || 0) / max * 100);
-    const lv = !u ? 'na' : v < u[1] * 0.95 ? 'lo' : v > u[2] * 1.05 ? 'hi' : 'ok';
-    const a = ad && u && ad[k] !== 100 ? ad[k] / 100 : null;
+    const a = ad && u && ad[k] !== 100 ? ad[k] / 100 : null, f = a || 1; // an adapted objective chosen: the plan is judged against it (the usual stays grey)
+    const lv = !u ? 'na' : v < u[1] * f * 0.95 ? 'lo' : v > u[2] * f * 1.05 ? 'hi' : 'ok';
     return `<div class="sp-lr"><span class="l">${label}</span><span class="sp-lt">${u ? `<i class="band" style="left:${pc(u[1])}%;width:${pc(u[2]) - pc(u[1])}%"></i><i class="mean" style="left:${pc(u[0])}%"></i>` : ''}${a ? `<i class="band sp-adapt" style="left:${pc(u[1] * a)}%;width:${pc(u[2] * a) - pc(u[1] * a)}%" title="Adapted objective: ${ad[k]} % of the usual (load projection)"></i>` : ''}<i class="dot ${lv}" style="left:${pc(v)}%"></i></span>
-      <b>${k === 'td' ? (v / 1000).toFixed(1) + 'k' : Math.round(v)}<small> ${unit}</small></b><em class="${lv}">${lv === 'ok' ? 'usual ✓' : lv === 'lo' ? 'lighter' : lv === 'hi' ? 'heavier' : '—'}</em><small class="sp-acc">${(c[k] || {}).err != null ? (k === 'hit' ? 'indicative' : `±${c[k].err} %`) : ''}</small></div>`;
+      <b>${k === 'td' ? (v / 1000).toFixed(1) + 'k' : Math.round(v)}<small> ${unit}</small></b><em class="${lv}">${a ? (lv === 'ok' ? 'vs adapted ✓' : lv === 'lo' ? 'lighter than adapted' : 'heavier than adapted') : lv === 'ok' ? 'usual ✓' : lv === 'lo' ? 'lighter' : lv === 'hi' ? 'heavier' : '—'}</em><small class="sp-acc">${(c[k] || {}).err != null ? (k === 'hit' ? 'indicative' : `±${c[k].err} %`) : ''}</small></div>`;
   };
   return `<div class="sp-load"><div class="sp-h3">Planned team load <small>${(SPL.lib.categories || []).length ? 'each drill\'s category (its usual per-minute load)' : 'each drill\'s usual per-minute load'} × its planned minutes${ref ? ` · grey = usual ${splTag(date)} of a ${typ} microcycle (p25–p75, ${ref.n} sessions), line = average` : ' · no usual reference for this day'}</small></div>
     ${bar('td', 'Total distance', 'm')}${bar('acc_dec', 'Acc + Dec', '')}${bar('hit', '> 20 km/h', 'm')}
