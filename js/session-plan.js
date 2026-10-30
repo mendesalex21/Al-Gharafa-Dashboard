@@ -510,7 +510,9 @@ function sppHtml(date) {
   return `<section class="spp" id="spp"><div class="spp-hd"><h3>Load projection · the next matches</h3><span class="spp-sub">team ${mode === 'ac' ? 'A:C 7:28' : 'week z-score (vs its previous 6 weeks)'} with this plan · the planned days at their forecast, the others at the usual of their MD, the matches as usual · <b>only you see this</b></span>
     <span class="seg spp-seg"><button type="button" data-spp-mode="z" class="${mode === 'z' ? 'active' : ''}">z-score</button><button type="button" data-spp-mode="ac" class="${mode === 'ac' ? 'active' : ''}">A:C</button></span></div>
     <div class="spp-verdict ${warn.length ? 'warn' : 'ok'}">${verdict}</div>
-    <div class="spp-sug"><b>Suggested for the days still to plan</b>${sug.map(([k, l, b]) => `<span class="${b == null ? 'r' : b >= 100 ? 'g' : 'b'}">${l}: ${b == null ? 'not reachable by training (the matches)' : b >= 100 ? 'as usual or more' : '≤ ' + b + ' %'}</span>`).join('')}<button type="button" class="btn-light" data-spp-use>Use these %</button>${SPP_K.some(([k]) => SPP.sc[k] !== 100) ? '<button type="button" class="linkbtn" data-spp-reset>Reset 100 %</button>' : ''}</div>
+    <div class="spp-sug"><b>Suggested for the days still to plan</b>${sug.map(([k, l, b]) => { const v = b == null ? null : Math.min(100, b), on = v != null && SPP.sc[k] === v && v !== 100; // one click = that metric only
+      return b == null ? `<span class="r" title="Even at 40 % the coming matches keep it above the line: the matches make it, not the training">${l}: not reachable by training (the matches)</span>`
+        : `<button type="button" class="${b >= 100 ? 'g' : 'b'}${on ? ' on' : ''}" data-spp-apply="${k}" data-v="${v}" title="${on ? 'Applied — click to go back to 100 %' : 'Apply to the days still to plan'}">${l}: ${b >= 100 ? 'as usual or more' : '≤ ' + b + ' %'}${on ? ' ✓' : ''}</button>`; }).join('')}${SPP_K.some(([k]) => SPP.sc[k] !== 100) ? '<button type="button" class="linkbtn" data-spp-reset>Reset 100 %</button>' : ''}</div>
     <div class="spp-charts">${SPP_K.map(([k, l, u]) => { const v = sppVals(B, k); return `<div class="spp-ch"><h5>${l}<span>${B.coming.map((m) => `${sppShort(m)} <b class="spp-t-${sppCls(v[daysBetween(B.d0, m)])}">${sppFmt(v[daysBetween(B.d0, m)])}</b>`).join(' · ')}</span></h5>${sppChart(B, k)}
       <label class="spp-sl"><span>days still to plan</span><input type="range" min="40" max="140" step="5" value="${SPP.sc[k]}" data-spp-sc="${k}"><b>${SPP.sc[k]} %</b></label></div>`; }).join('')}</div>
     <p class="spp-leg">Black = real (to ${SPL_DAY(addDays(B.d0, B.n0 - 1), { day: 'numeric', month: 'short' })}) · blue dashes = projected · blue band = the day you plan · dots = the coming match days · ${mode === 'ac' ? 'green 0.78–1.37 · orange to 1.5 · red above' : 'green ±1 (the team’s usual) · orange +1 to +2 · red above'} · team = your Team rule (the starters’ path) · an estimate: read the zone, not the decimals</p></section>`;
@@ -520,7 +522,7 @@ function sppBind() {
   if (!el) return;
   el.querySelectorAll('[data-spp-mode]').forEach((b) => { b.onclick = () => { SPP.mode = b.dataset.sppMode; splDraw(); }; });
   el.querySelectorAll('[data-spp-sc]').forEach((r) => { r.oninput = () => { r.nextElementSibling.textContent = r.value + ' %'; }; r.onchange = () => { SPP.sc[r.dataset.sppSc] = +r.value; splDraw(); }; });
-  const use = el.querySelector('[data-spp-use]'); if (use) use.onclick = () => { const B = sppBuild(SPL.date); if (B) sppSuggest(B).forEach(([k, , b]) => { SPP.sc[k] = b == null ? 40 : Math.min(100, b); }); splDraw(); };
+  el.querySelectorAll('[data-spp-apply]').forEach((b) => { b.onclick = () => { const k = b.dataset.sppApply, v = +b.dataset.v; SPP.sc[k] = SPP.sc[k] === v ? 100 : v; splDraw(); }; }); // a second click puts it back to 100 %
   const rs = el.querySelector('[data-spp-reset]'); if (rs) rs.onclick = () => { SPP_K.forEach(([k]) => { SPP.sc[k] = 100; }); splDraw(); };
 }
 
