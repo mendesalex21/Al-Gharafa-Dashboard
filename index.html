@@ -10,7 +10,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#ffffff">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Open+Sans:wght@400;600;700;800&display=swap">
-<link rel="stylesheet" href="css/style.css?v=203">
+<link rel="stylesheet" href="css/style.css?v=204">
+<link rel="stylesheet" href="css/tactical2.css?v=204">
 </head>
 <body>
 
@@ -34,7 +35,7 @@
       <button class="nav-item" data-section="roster" data-flyout="roster" aria-haspopup="true" aria-expanded="false">Squad</button>
       <button class="nav-item" data-section="calendar" data-flyout="calendar" aria-haspopup="true" aria-expanded="false">Calendar</button>
       <button class="nav-item" data-section="reports" data-view="reports">Downloads</button>
-      <button class="nav-item" id="nav-tactical" data-section="tactical" data-view="tactical" hidden>Tactical</button>
+      <button class="nav-item" id="nav-tactical" data-section="tactical" data-flyout="tactical" aria-haspopup="true" aria-expanded="false" hidden>Tactical</button>
       <button class="nav-item" id="nav-matchfiles" data-section="matchfiles" data-view="matchfiles" hidden>Match files</button>
       <button class="nav-item" disabled title="Coming soon">Heart Rate</button>
     </nav>
@@ -74,6 +75,13 @@
   </div>
   <div class="build-banner" id="build-banner" role="status" hidden></div>
 </header>
+<div class="flyout" id="flyout-tactical" data-default="tactical2">
+    <div class="flyout-inner">
+      <div class="flyout-label">Tactical · only you see it</div>
+      <button class="flyout-link" data-view="tactical2">New version</button>
+      <button class="flyout-link" data-view="tactical">Old version</button>
+    </div>
+  </div>
 <div class="flyout-backdrop" id="flyout-backdrop"></div>
 
 <main class="wrap page" id="view-home" hidden></main>
@@ -91,39 +99,41 @@
 <main class="wrap page" id="view-reports" hidden></main>
 <main class="wrap page" id="view-matchfiles" hidden></main>
 <main class="wrap page" id="view-tactical" hidden></main>
+<main class="wrap page" id="view-tactical2" hidden></main>
 <main class="wrap page" id="view-roster" hidden></main>
 <main class="wrap page" id="view-plan" hidden></main>
 
-<script src="js/config.js?v=203"></script>
-<script src="js/rings.js?v=203"></script>
-<script src="js/photo-data.js?v=203"></script>
-<script src="js/wellness-ring.js?v=203"></script>
-<script src="js/charts.js?v=203"></script>
-<script src="js/ui.js?v=203"></script>
-<script src="js/longitudinal.js?v=203"></script>
-<script src="js/workload.js?v=203"></script>
-<script src="js/team.js?v=203"></script>
-<script src="js/training.js?v=203"></script>
-<script src="js/session-view.js?v=203"></script>
-<script src="js/intensity.js?v=203"></script>
-<script src="js/testing.js?v=203"></script>
-<script src="js/clubs.js?v=203"></script>
-<script src="js/calendar.js?v=203"></script>
-<script src="js/roster.js?v=203"></script>
-<script src="js/reports.js?v=203"></script>
-<script src="js/reports-staff.js?v=203"></script>
-<script src="js/reports-match.js?v=203"></script>
-<script src="js/reports-weekly.js?v=203"></script>
-<script src="js/sp-convert.js?v=203"></script>
-<script src="js/session-plan.js?v=203"></script>
-<script src="js/readiness.js?v=203"></script>
-<script src="js/matchfiles.js?v=203"></script>
-<script src="js/tactical.js?v=203"></script>
-<script src="js/home.js?v=203"></script>
-<script src="js/mock-data.js?v=203"></script>
-<script src="js/auth.js?v=203"></script>
-<script src="js/api.js?v=203"></script>
-<script src="js/wellness.js?v=203"></script>
-<script src="js/app.js?v=203"></script>
+<script src="js/config.js?v=204"></script>
+<script src="js/rings.js?v=204"></script>
+<script src="js/photo-data.js?v=204"></script>
+<script src="js/wellness-ring.js?v=204"></script>
+<script src="js/charts.js?v=204"></script>
+<script src="js/ui.js?v=204"></script>
+<script src="js/longitudinal.js?v=204"></script>
+<script src="js/workload.js?v=204"></script>
+<script src="js/team.js?v=204"></script>
+<script src="js/training.js?v=204"></script>
+<script src="js/session-view.js?v=204"></script>
+<script src="js/intensity.js?v=204"></script>
+<script src="js/testing.js?v=204"></script>
+<script src="js/clubs.js?v=204"></script>
+<script src="js/calendar.js?v=204"></script>
+<script src="js/roster.js?v=204"></script>
+<script src="js/reports.js?v=204"></script>
+<script src="js/reports-staff.js?v=204"></script>
+<script src="js/reports-match.js?v=204"></script>
+<script src="js/reports-weekly.js?v=204"></script>
+<script src="js/sp-convert.js?v=204"></script>
+<script src="js/session-plan.js?v=204"></script>
+<script src="js/readiness.js?v=204"></script>
+<script src="js/matchfiles.js?v=204"></script>
+<script src="js/tactical.js?v=204"></script>
+<script src="js/tactical2.js?v=204"></script>
+<script src="js/home.js?v=204"></script>
+<script src="js/mock-data.js?v=204"></script>
+<script src="js/auth.js?v=204"></script>
+<script src="js/api.js?v=204"></script>
+<script src="js/wellness.js?v=204"></script>
+<script src="js/app.js?v=204"></script>
 </body>
 </html>

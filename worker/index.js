@@ -206,13 +206,15 @@ async function t2dPut(req, env) {
   if (!env.UPLOAD_KEY || !same(req.headers.get('X-Upload-Key') || '', env.UPLOAD_KEY)) return json({ ok: false, error: 'forbidden' }, 403);
   const match = (new URL(req.url).searchParams.get('match') || '').replace(/\D/g, '');
   if (!env.FILES || !match) return json({ ok: false, error: 'bad_match' }, 400);
-  const obj = await env.FILES.put(`t2d/${match}.json.gz`, req.body, { httpMetadata: { contentType: 'application/gzip' } });
+  const kind = (new URL(req.url).searchParams.get('kind') || '').replace(/[^a-z]/g, ''); // '' = the clips · ev = moments + report · full = the whole match (new Tactical)
+  const obj = await env.FILES.put(`t2d/${match}${kind ? '.' + kind : ''}.json.gz`, req.body, { httpMetadata: { contentType: 'application/gzip' } });
   return json({ ok: true, match, size: obj.size });
 }
 async function t2dGet(req, user, env) {
   if (!user || user.role !== 'admin') return json({ ok: false, error: 'forbidden' }, 403);
   const match = (new URL(req.url).searchParams.get('match') || '').replace(/\D/g, '');
-  const obj = env.FILES && match ? await env.FILES.get(`t2d/${match}.json.gz`) : null;
+  const kind = (new URL(req.url).searchParams.get('kind') || '').replace(/[^a-z]/g, '');
+  const obj = env.FILES && match ? await env.FILES.get(`t2d/${match}${kind ? '.' + kind : ''}.json.gz`) : null;
   return obj ? new Response(obj.body, { headers: { 'Content-Type': 'application/gzip', 'Cache-Control': 'private, max-age=3600' } }) : json({ ok: false, error: 'not_found' }, 404);
 }
 
