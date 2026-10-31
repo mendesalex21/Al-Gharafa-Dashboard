@@ -35,7 +35,7 @@ const t2M = () => Object.fromEntries((T2.data.matches || []).map((m) => [m.id, m
 // ------------------------------------------------------------------ loading
 function renderTactical2() {
   const root = document.getElementById('view-tactical2');
-  root.innerHTML = `${pageHead('Admin · new version', 'Tactical', 't2-sub', `<span class="tc-lock">🔒 only you can see this tab</span>${segHtml('t2-seg', [['teams', 'Teams'], ['league', 'League'], ['matches', 'Matches']], T2.s)}`)}<div id="t2-body"><div class="panel"><div class="empty">Loading…</div></div></div><div class="t3-modal" id="t2-modal" hidden></div>`;
+  root.innerHTML = `${pageHead('Admin · new version', 'Tactical', 't2-sub', `<span class="tc-lock">🔒 only you can see this tab</span><button class="btn-light" onclick="switchView('tactical')">Old version</button>${segHtml('t2-seg', [['teams', 'Teams'], ['league', 'League'], ['matches', 'Matches']], T2.s)}`)}<div id="t2-body"><div class="panel"><div class="empty">Loading…</div></div></div><div class="t3-modal" id="t2-modal" hidden></div>`;
   bindSeg('t2-seg', (v) => { T2.s = v; T2.ev = null; drawTactical2(); });
   Promise.all([loadData('tactical'), loadData('calendar').catch(() => null)]).then(([d, cal]) => {
     T2.data = d.v2 || null;

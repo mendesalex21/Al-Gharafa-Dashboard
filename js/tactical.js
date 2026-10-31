@@ -17,7 +17,7 @@ const TC_SECTIONS = [['us', 'Al Gharafa'], ['league', 'League'], ['players', 'Pl
 
 function renderTactical() {
   const root = document.getElementById('view-tactical');
-  root.innerHTML = `${pageHead('Admin', 'Tactical', 'tc-sub', `<span class="tc-lock">🔒 only you can see this tab</span>${segHtml('tc-seg', TC_SECTIONS, TC.s)}`)}<div id="tc-body"><div class="panel"><div class="empty">Loading…</div></div></div>`;
+  root.innerHTML = `${pageHead('Admin', 'Tactical', 'tc-sub', `<span class="tc-lock">🔒 only you can see this tab</span><button class="btn-light" onclick="switchView('tactical2')">New version</button>${segHtml('tc-seg', TC_SECTIONS, TC.s)}`)}<div id="tc-body"><div class="panel"><div class="empty">Loading…</div></div></div>`;
   root.querySelectorAll('#tc-seg button').forEach((b) => b.addEventListener('click', () => { TC.s = b.dataset.v; root.querySelectorAll('#tc-seg button').forEach((x) => x.classList.toggle('active', x === b)); drawTactical(); }));
   loadData('tactical').then((d) => { TC.data = d; const m = (d.matches || []).find(tcOurs); TC.id = m ? m.id : ((d.matches || [])[0] || {}).id; drawTactical(); })
     .catch((err) => { document.getElementById('tc-body').innerHTML = loadError(err); });
