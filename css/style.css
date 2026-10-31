@@ -2280,3 +2280,20 @@ table.dvm-t { width: 100%; border-collapse: separate; border-spacing: 3px; font-
 .sp-lt .band.sp-adapt { background: rgba(0, 113, 227, .25); outline: 1.5px solid #0071e3; }
 .sp-adapt-t { color: #0071e3; font-weight: 600; font-size: 11.5px; margin: 6px 0 0; }
 @media (max-width: 1000px) { .spp-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Wellness, 2026-10-31 (his ask): the players' photos back to their original size (ring 160 px; it was 120 since the
+   29th), still centred; the players without a check-in yet bigger too (96 px). */
+@media (min-width: 681px) {
+  #view-wellness .w-grid { grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); gap: 10px 12px; }
+  #view-wellness #w-grp-alert .w-card, #view-wellness #w-grp-gk .w-card { width: 168px; }
+  #view-wellness .w-p-ring { width: 160px; height: 160px; margin-bottom: 15px; }
+  #view-wellness .w-p-ring-photo { width: 116px; height: 116px; padding: 3px; }
+  #view-wellness .w-p-ring-score { font-size: 14px; padding: 3px 11px; bottom: -7px; }
+  #view-wellness .w-alert-dot { width: 16px; height: 16px; }
+  #view-wellness .w-initials { font-size: 26px; }
+  #view-wellness .w-pname { font-size: 14px; }
+  #view-wellness .w-pdiff, #view-wellness .w-psub { font-size: 12.5px; }
+  #view-wellness #w-grp-none .w-card { width: 120px; }
+  #view-wellness #w-grp-none .w-p-ring { width: 96px; height: 96px; margin-bottom: 8px; }
+  #view-wellness #w-grp-none .w-p-ring-photo { width: 70px; height: 70px; }
+}
