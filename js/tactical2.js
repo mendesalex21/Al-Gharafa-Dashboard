@@ -377,7 +377,8 @@ async function t2Export(mid) {
 function t2Bind() {
   const box = document.getElementById('t2-body');
   box.querySelectorAll('[data-team]').forEach((b) => (b.onclick = () => { T2.team = b.dataset.team; T2.ev = null; T2.match = 'all'; T2.f = {}; drawTactical2(); }));
-  box.querySelectorAll('[data-seg]').forEach((b) => (b.onclick = () => { T2.seg = b.dataset.seg; drawTactical2(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
+  box.querySelectorAll('[data-seg]').forEach((b) => (b.onclick = () => { // the page stays where it is (his ask): the buttons sit just above the content
+    const y = window.scrollY; T2.seg = b.dataset.seg; t2Stop(); box.innerHTML = t2TeamPage(); t2Bind(); window.scrollTo(0, y); }));
   box.querySelectorAll('[data-def]').forEach((b) => (b.onclick = () => { T2.open = T2.open === b.dataset.def ? null : b.dataset.def; box.innerHTML = t2TeamPage(); t2Bind(); }));
   box.querySelectorAll('[data-watch]').forEach((b) => (b.onclick = () => { const w = JSON.parse(b.dataset.watch); T2.cat = w.cat; T2.f = w.f || {}; T2.match = 'all'; T2.ev = null; T2.seg = 'video'; T2.s = 'teams'; box.innerHTML = t2TeamPage(); t2Bind(); }));
   box.querySelectorAll('[data-cat]').forEach((b) => (b.onclick = () => { T2.cat = b.dataset.cat; T2.f = {}; T2.ev = null; box.innerHTML = t2TeamPage(); t2Bind(); }));
