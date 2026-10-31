@@ -269,3 +269,12 @@
 /* the league table needs the width */
 #view-tactical2.t2-wide.wrap { max-width: 2300px; }
 #view-tactical2 .t3 { padding: 0 0 60px; max-width: none; }
+
+/* 2026-10-31: the video room as the old Match 2D — the lists on the left, the 2D large on the right */
+#view-tactical2 .vr2 { display: grid; grid-template-columns: 330px 1fr; gap: 12px; align-items: start; }
+#view-tactical2 .vr2-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+#view-tactical2 .vr-cats.two { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 4px; }
+#view-tactical2 .vr-cats.two .vr-cat { font-size: 12px; padding: 6px 7px; }
+#view-tactical2 .vr2 .vr-list { max-height: 520px; }
+#view-tactical2 .tiles.two { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 1000px) { #view-tactical2 .vr2 { grid-template-columns: 1fr; } }

@@ -198,15 +198,17 @@ function t2TeamMatches(team) {
 }
 function t2TeamPage() {
   const team = T2.team, SEG = [['over', 'Overview'], ['with', 'With the ball'], ['without', 'Without the ball'], ['video', 'Video room'], ['matches', 'Matches']];
-  const head = `<div class="card">${t2Header(team, T2.seg === 'over' ? '<button class="btn" data-seg="video">▶ Video room</button>' : '')}${t2Say(team)}</div>` + t2Picker(team);
+  const head = T2.seg === 'matches' ? `<div class="card">${t2Header(team)}</div>`
+    : `<div class="card">${t2Header(team, T2.seg === 'over' ? '<button class="btn" data-seg="video">▶ Video room</button>' : '')}${t2Say(team)}</div>` + t2Picker(team);
+  const seg = `<div class="seg" style="align-self:flex-start">${SEG.map(([k, l]) => `<button class="${T2.seg === k ? 'active' : ''}" data-seg="${k}">${l}</button>`).join('')}</div>`; // just above what it changes (his ask)
   let body;
-  if (T2.seg === 'with') body = head + t2BuBlock(team) + `<div class="grid2">${t2GkBlock(team)}${t2ProgBlock(team)}</div>`;
-  else if (T2.seg === 'without') body = head + `<div class="grid2">${t2PressBlock(team)}${t2RecBlock(team)}</div><div class="card blk"><h3>Defending</h3>${t2Tiles(team, ['goals_against', 'xg_against', 'shots_against', 'loss3'])}</div>`;
-  else if (T2.seg === 'video') body = head + t2VideoRoom(team);
-  else if (T2.seg === 'matches') body = `<div class="card">${t2Header(team)}</div>` + t2TeamMatches(team);
-  else body = head + `<div class="card"><h3>Headline numbers <small>per match · rank among the ${T2.data.N} QSL teams · the dots = every team, dashed = league average · (i) = how it is calculated</small></h3>${t2Tiles(team, ['goals_for', 'goals_against', 'xg', 'xg_against', 'possession', 'press', 'rec_h', 'prog_ok'])}</div>
+  if (T2.seg === 'with') body = t2BuBlock(team) + `<div class="grid2">${t2GkBlock(team)}${t2ProgBlock(team)}</div>`;
+  else if (T2.seg === 'without') body = `<div class="grid2"><div style="display:flex;flex-direction:column;gap:14px">${t2PressBlock(team)}<div class="card blk"><h3>Defending</h3>${t2Tiles(team, ['goals_against', 'xg_against', 'shots_against', 'loss3'], 'two')}</div></div>${t2RecBlock(team)}</div>`;
+  else if (T2.seg === 'video') body = t2VideoRoom(team);
+  else if (T2.seg === 'matches') body = t2TeamMatches(team);
+  else body = `<div class="card"><h3>Headline numbers <small>per match · rank among the ${T2.data.N} QSL teams · the dots = every team, dashed = league average · (i) = how it is calculated</small></h3>${t2Tiles(team, ['goals_for', 'goals_against', 'xg', 'xg_against', 'possession', 'press', 'rec_h', 'prog_ok'])}</div>
       <div class="grid2">${t2AttackBlock(team)}${t2BuBlock(team, true)}</div><div class="grid2">${t2PressBlock(team, true)}${t2SetBlock(team)}</div>`;
-  return `<div class="t3">${t2Strip()}<div class="seg" style="align-self:flex-start">${SEG.map(([k, l]) => `<button class="${T2.seg === k ? 'active' : ''}" data-seg="${k}">${l}</button>`).join('')}</div>${body}</div>`;
+  return `<div class="t3">${t2Strip()}${head}${seg}${body}</div>`;
 }
 
 // ------------------------------------------------------------------ the video room (B layout)
@@ -219,14 +221,15 @@ function t2VideoRoom(team) {
   const chips = subs.map(([k, v, l]) => `<button class="chip g ${T2.f[k] === v ? 'on' : ''}" data-f='${escapeHtml(JSON.stringify([k, v]))}'>${escapeHtml(l)}<b>${t2List(team, T2.cat, { ...T2.f, [k]: v }, T2.match).length}</b></button>`).join('');
   const tagCls = (t) => (T2_OK.has(t) ? 'ok' : T2_KO.has(t) ? 'ko' : 'mid');
   const rows = L.map((x, i) => `<button class="vr-ev ${x === T2.ev ? 'on' : ''}" data-ev="${i}"><span class="t">${t2Min(x)}</span><span class="w">${escapeHtml(t2Name(x.p) || (x.c === 'press' ? 'press on ' + x.opp : x.c === 'loss' ? 'ball lost' : '—'))}<small>${t2day(M[x.m].date)} · ${crestHtml(x.opp, 13)} v ${escapeHtml(x.opp)}${M[x.m].tracking ? '<span class="d2">2D</span>' : ''}</small></span>${x.tag || x.kind ? `<span class="tg ${tagCls(x.tag)}">${escapeHtml(x.tag || x.kind)}</span>` : ''}</button>`).join('') || '<p class="muted" style="padding:10px">No moment.</p>';
-  return `<div class="vr b"><div class="card"><h3>Categories</h3><div class="vr-cats">${cats}</div></div>
+  return `<div class="vr2"><div class="vr2-side"><div class="card"><h3>Categories</h3><div class="vr-cats two">${cats}</div></div>
     <div class="card"><div class="vr-tools"><select class="select" id="vr-match"><option value="all">All ${ms.length} matches</option>${ms.map((m) => `<option value="${m.id}" ${T2.match === m.id ? 'selected' : ''}>${t2day(m.date)} · ${m.home === team ? 'v ' + escapeHtml(m.away) : '@ ' + escapeHtml(m.home)}</option>`).join('')}</select>
       <button class="btn" id="vr-all">▶ Play all</button><button class="btn p" data-export="${T2.match === 'all' ? (ms[0] || {}).id : T2.match}">⬇ XML</button></div>
-      ${chips ? `<div style="margin-bottom:6px">${chips}</div>` : ''}<h3>${escapeHtml(label)} <small>${L.length} moments</small></h3><div class="vr-list">${rows}</div></div>
+      ${chips ? `<div style="margin-bottom:6px">${chips}</div>` : ''}<h3>${escapeHtml(label)} <small>${L.length} moments</small></h3><div class="vr-list">${rows}</div></div></div>
     <div class="card pl2" id="pl2">${t2PlayerHead(T2.ev)}</div></div>`;
 }
 
 // ------------------------------------------------------------------ the 2D player (the whole match file)
+const T2_OPT = { trails: true, names: true, line: true, block: false }; // the old Match 2D's options
 const P2X = { x: null, file: null, team: null, t: 0, dur: 0, play: false, sp: 1, raf: null, last: null, all: false, list: null };
 function t2PlayerHead(x) {
   if (!x) return '<div class="pl2-none">Pick a moment</div>';
@@ -246,12 +249,14 @@ async function t2PlayerOpen(x, autoplay) {
   document.getElementById('pl2-stage').innerHTML = `<canvas id="pl2-cv" width="1100" height="740"></canvas>
     <div class="pl2-ctrl"><button class="btn" id="pl2-play">▶</button><button class="btn" id="pl2-back">−5 s</button><input type="range" id="pl2-seek" min="0" max="${P2X.dur}" step="20" value="0">
       <button class="btn" data-sp="0.5">×0.5</button><button class="btn" data-sp="1">×1</button><button class="btn" data-sp="2">×2</button><button class="btn" id="pl2-next">Next ▸</button></div>
-    <span class="muted" style="font-size:11.5px">${escapeHtml(x.t)} attack → · ${x.t === T2_US || x.opp === T2_US ? 'yellow = Al Gharafa · ' : ''}blue = ${escapeHtml(x.t === T2_US ? x.opp : x.t)}${x.t === T2_US ? '' : ', red = ' + escapeHtml(x.opp === T2_US ? 'Al Gharafa' : x.opp)} · white ring = player on the ball · dashed = the defending team's last line · the clip starts ${T2_PRE[x.c] / 1000} s before</span>`;
+    <div class="pl2-ctrl">${[['trails', 'Trails'], ['names', 'Names'], ['line', 'Defensive line'], ['block', 'Team block']].map(([k, l]) => `<button class="btn${T2_OPT[k] ? ' p' : ''}" data-opt2="${k}">${l}</button>`).join('')}</div>
+    <span class="muted" style="font-size:11.5px">${escapeHtml(x.t)} attack → · ${x.t === T2_US || x.opp === T2_US ? 'yellow = Al Gharafa · ' : ''}blue = ${escapeHtml(x.t === T2_US ? x.opp : x.t)}${x.t === T2_US || x.opp === T2_US ? '' : ', red = ' + escapeHtml(x.opp)} · white ring = player on the ball · dashed = the defending team's last line · the clip starts ${T2_PRE[x.c] / 1000} s before</span>`;
   document.getElementById('pl2-play').onclick = () => t2Play(!P2X.play);
   document.getElementById('pl2-back').onclick = () => { P2X.t = Math.max(0, P2X.t - 5000); t2Draw2(); };
   document.getElementById('pl2-seek').oninput = (e) => { P2X.t = +e.target.value; t2Draw2(); };
   document.querySelectorAll('#pl2 [data-sp]').forEach((b) => (b.onclick = () => { P2X.sp = +b.dataset.sp; }));
   document.getElementById('pl2-next').onclick = () => t2Next(false);
+  document.querySelectorAll('#pl2 [data-opt2]').forEach((b) => (b.onclick = () => { const k = b.dataset.opt2; T2_OPT[k] = !T2_OPT[k]; b.classList.toggle('p', T2_OPT[k]); t2Draw2(); }));
   t2Draw2();
   if (autoplay) t2Play(true);
 }
@@ -290,7 +295,19 @@ function t2Draw2() {
   const pos = F.players.map((pl, k) => [k, fx(lerp(2 + 2 * k)), fy(lerp(3 + 2 * k))]).filter((q) => q[1] != null);
   const ball = A[0] != null ? [fx(lerp(0)), fy(lerp(1))] : null;
   const opp = pos.filter(([k]) => side(F.players[k]) !== x.t && !F.players[k][3]);
-  if (opp.length > 4) { const lx = Math.max(...opp.map((q) => q[1])); cx.setLineDash([8, 6]); cx.strokeStyle = 'rgba(255,200,200,.9)'; cx.lineWidth = 2; cx.beginPath(); cx.moveTo(X(lx), Y(0)); cx.lineTo(X(lx), Y(680)); cx.stroke(); cx.setLineDash([]); }
+  if (T2_OPT.block) [true, false].forEach((foc) => { // each team's block: the box around its outfield players
+    const o = pos.filter(([k]) => (side(F.players[k]) === x.t) === foc && !F.players[k][3]); if (o.length < 5) return;
+    const xs = o.map((q) => q[1]), ys = o.map((q) => q[2]), team = foc ? x.t : (x.t === F.home ? F.away : F.home), us = team === T2_US;
+    cx.fillStyle = us ? 'rgba(245,197,24,.15)' : foc ? 'rgba(31,58,158,.15)' : 'rgba(229,72,77,.12)'; cx.strokeStyle = us ? 'rgba(245,197,24,.85)' : foc ? 'rgba(120,150,255,.8)' : 'rgba(229,72,77,.6)'; cx.lineWidth = 1.5;
+    cx.beginPath(); cx.rect(X(Math.min(...xs)), Y(Math.min(...ys)), (Math.max(...xs) - Math.min(...xs)) / 10 * S2, (Math.max(...ys) - Math.min(...ys)) / 10 * S2); cx.fill(); cx.stroke(); });
+  if (T2_OPT.trails) { // the last 3 s: each player's path and the ball's
+    const i0 = Math.max(0, i - 15);
+    F.players.forEach((pl, k) => { cx.beginPath(); let on = false; for (let q = i0; q <= i; q++) { const r = H.f[q], px = fx(r[2 + 2 * k]), py = fy(r[3 + 2 * k]); if (px == null) { on = false; continue; } if (on) cx.lineTo(X(px), Y(py)); else cx.moveTo(X(px), Y(py)); on = true; }
+      const team = side(pl); cx.strokeStyle = team === T2_US ? 'rgba(253,230,138,.6)' : team === x.t ? 'rgba(170,190,255,.55)' : 'rgba(255,170,170,.5)'; cx.lineWidth = 2.5; cx.stroke(); });
+    cx.beginPath(); let on = false; for (let q = i0; q <= i; q++) { const r = H.f[q]; if (r[0] == null) { on = false; continue; } if (on) cx.lineTo(X(fx(r[0])), Y(fy(r[1]))); else cx.moveTo(X(fx(r[0])), Y(fy(r[1]))); on = true; }
+    cx.strokeStyle = 'rgba(255,255,255,.8)'; cx.lineWidth = 2; cx.setLineDash([3, 4]); cx.stroke(); cx.setLineDash([]);
+  }
+  if (T2_OPT.line && opp.length > 4) { const lx = Math.max(...opp.map((q) => q[1])); cx.setLineDash([8, 6]); cx.strokeStyle = 'rgba(255,200,200,.9)'; cx.lineWidth = 2; cx.beginPath(); cx.moveTo(X(lx), Y(0)); cx.lineTo(X(lx), Y(680)); cx.stroke(); cx.setLineDash([]); }
   let onBall = null, best = 25; if (ball) pos.forEach(([k, px, py]) => { const d = Math.hypot(px - ball[0], py - ball[1]); if (d < best) { best = d; onBall = k; } });
   pos.forEach(([k, px, py]) => { const pl = F.players[k], team = side(pl), gk = pl[3], R = 12, us = team === T2_US, focus = team === x.t;
     const fill = us ? (gk ? '#7a5c00' : '#f5c518') : focus ? (gk ? '#0f1d5a' : '#1f3a9e') : (gk ? '#7c3aed' : '#e5484d'), ink = us && !gk ? '#16269e' : '#fff';
@@ -298,7 +315,7 @@ function t2Draw2() {
     cx.beginPath(); cx.arc(X(px), Y(py) + 2, R, 0, 7); cx.fillStyle = 'rgba(0,0,0,.25)'; cx.fill();
     cx.beginPath(); cx.arc(X(px), Y(py), R, 0, 7); cx.fillStyle = fill; cx.fill();
     cx.fillStyle = ink; cx.font = '800 11.5px system-ui'; cx.textAlign = 'center'; cx.fillText(pl[1], X(px), Y(py) + 0.5);
-    if (focus || us) { const n = pl[4] || ''; const sn = n.length > 12 ? n.slice(0, 11) + '.' : n; cx.font = '700 10.5px system-ui'; cx.fillStyle = 'rgba(0,0,0,.45)'; cx.fillText(sn, X(px) + 1, Y(py) + R + 10); cx.fillStyle = '#fff'; cx.fillText(sn, X(px), Y(py) + R + 9); } });
+    if (T2_OPT.names) { const n = pl[4] || ''; const sn = n.length > 12 ? n.slice(0, 11) + '.' : n; cx.font = '700 10.5px system-ui'; cx.fillStyle = 'rgba(0,0,0,.45)'; cx.fillText(sn, X(px) + 1, Y(py) + R + 10); cx.fillStyle = '#fff'; cx.fillText(sn, X(px), Y(py) + R + 9); } });
   if (ball) { cx.beginPath(); cx.arc(X(ball[0]), Y(ball[1]), 6.5, 0, 7); cx.fillStyle = '#fff'; cx.fill(); cx.strokeStyle = '#111'; cx.lineWidth = 1.5; cx.stroke(); }
   const mm = (x.h === 2 ? 45 : 0) + ms / 60000, clk = document.getElementById('pl2-clk');
   if (clk) clk.textContent = `${Math.floor(mm)}:${String(Math.floor((mm % 1) * 60)).padStart(2, '0')}`;
