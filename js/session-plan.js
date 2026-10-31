@@ -579,7 +579,7 @@ function splPred(p) {
 function splLoadHtml(date, p) {
   const c = SPL.lib.calib || {};
   const team = p.drills.filter((d) => !SPL_NOT_TEAM.test(splName(d.name)) && d.min);
-  if (!team.length) return '';
+  if (!team.length) return splObjectiveHtml(date);
   const none = [...new Set(team.filter((d) => !splRateOf(d.name)).map((d) => splName(d.name)))]; // created drills with no data and no "forecast like"
   const F = splPred(p), pred = (k) => F[k];
   const ad = sppAdapted(date); // the projection's adapted objective (admin first), else null
@@ -595,6 +595,17 @@ function splLoadHtml(date, p) {
     ${bar('td', 'Total distance', 'm')}${bar('acc_dec', 'Acc + Dec', '')}${bar('hit', '> 20 km/h', 'm')}
     ${ad && ref ? `<p class="sp-adapt-t">Blue = adapted objective (load projection): ${[['td', 'Total distance', 'm'], ['acc_dec', 'Acc + Dec', ''], ['hit', '> 20 km/h', 'm']].filter(([k]) => ad[k] !== 100 && ref[k]).map(([k, l, u]) => `${l} ${k === 'td' ? (ref[k][0] * ad[k] / 100 / 1000).toFixed(1) + 'k' : Math.round(ref[k][0] * ad[k] / 100)}${u ? ' ' + u : ''} (${ad[k] - 100} %)`).join(' · ')}</p>` : ''}
     ${none.length ? `<p class="sp-note warn">Not in the forecast (no data yet): ${none.map(escapeHtml).join(', ')} — open its card (+ pitch / players) and choose “Forecast like”.</p>` : ''}</div>`;
+}
+/** The day's objective before any drill is chosen (his ask, 2026-10-31): the usual of its MD and microcycle type. */
+function splObjectiveHtml(date) {
+  const typ = splCycleType(date), tag = splTag(date), ref = ((SPL.lib.usual[typ] || {})[tag]) || null, ad = sppAdapted(date);
+  if (!ref) return `<div class="sp-load"><div class="sp-h3">Objective <small>no usual reference for this day</small></div></div>`;
+  const row = (k, label, unit) => { const u = ref[k]; if (!u) return '';
+    const max = Math.max(u[2], u[0]) * 1.25 || 1, pc = (x) => Math.min(100, (x || 0) / max * 100), f = (v) => (k === 'td' ? (v / 1000).toFixed(1) + 'k' : Math.round(v)), a = ad && ad[k] !== 100 ? ad[k] / 100 : null;
+    return `<div class="sp-lr"><span class="l">${label}</span><span class="sp-lt"><i class="band" style="left:${pc(u[1])}%;width:${pc(u[2]) - pc(u[1])}%"></i><i class="mean" style="left:${pc(u[0])}%"></i>${a ? `<i class="band sp-adapt" style="left:${pc(u[1] * a)}%;width:${pc(u[2] * a) - pc(u[1] * a)}%"></i>` : ''}</span>
+      <b>${f(u[0])}<small> ${unit}</small></b><em class="na">${f(u[1])}–${f(u[2])}${a ? ` · adapted ${f(u[0] * a)}` : ''}</em><small class="sp-acc"></small></div>`; };
+  return `<div class="sp-load"><div class="sp-h3">Objective <small>usual ${escapeHtml(tag)} of a ${escapeHtml(typ)} microcycle (p25–p75, ${ref.n} sessions), line = average · add drills to see the planned load against it</small></div>
+    ${row('td', 'Total distance', 'm')}${row('acc_dec', 'Acc + Dec', '')}${row('hit', '> 20 km/h', 'm')}</div>`;
 }
 /** The statuses to choose from: the usual ones, then the other types found in the files (matches left out). */
 function splStatusList() {
@@ -1198,8 +1209,9 @@ function splMissingHtml(b, p) {
 function splImportHtml() {
   const date = SPL.date, p = splEnsure(date), b = splBuild();
   const gpsRows = b.full.filter((r) => r.Time > 0 || r.DT != null), unmapped = b.mapping.filter((m) => !m.d && !m.skip);
-  const drillOpts = (t, cur, skip) => `<select data-map="${escapeHtml(t)}"><option value="">Which drill of the plan?</option>${b.plan.map((d) => `<option value="${escapeHtml(d.name)}" ${cur && cur.name === d.name ? 'selected' : ''}>${d.no} · ${escapeHtml(d.name)}</option>`).join('')}<option value="__skip" ${skip ? 'selected' : ''}>— not used —</option></select>`;
-  const mapRows = b.mapping.map((m) => `<div class="sp-mr${m.d || m.skip ? '' : ' warn'}"><code title="${escapeHtml(m.title)}">${escapeHtml(m.title)}</code><span class="arr">→</span><span class="tg">${m.d ? `<b style="--c:${splColor(m.d.name)}">${m.d.no} · ${escapeHtml(m.d.name)}</b><small>${b.halfInfo[m.title] ? ((h) => `<input type="number" class="sp-act" min="1" max="70" value="${h.written}" data-halfmin="${escapeHtml(h.name)}" aria-label="Minutes written">' written for the whole half · GPS ${h.gps.toFixed(1)}' · ${h.n} player${h.n > 1 ? 's' : ''}${h.subs ? ` · ${h.subs} came on or off: their own minutes` : ''}`)(b.halfInfo[m.title])
+  const inPlan = new Set(b.plan.map((d) => splKey(d.name))), others = SPL.lib.library.map((x) => splName(x.name)).filter((n, i, a) => !inPlan.has(splKey(n)) && a.indexOf(n) === i).sort();
+  const drillOpts = (t, cur, skip) => `<select data-map="${escapeHtml(t)}"><option value="">Which drill of the plan?</option>${b.plan.map((d) => `<option value="${escapeHtml(d.name)}" ${cur && cur.name === d.name ? 'selected' : ''}>${d.no} · ${escapeHtml(d.name)}</option>`).join('')}<option value="__skip" ${skip ? 'selected' : ''}>— not used —</option>${others.length ? `<optgroup label="Not in the plan — added to it">${others.map((n) => `<option value="__add:${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}</optgroup>` : ''}</select>`;
+  const mapRows = b.mapping.map((m) => `<div class="sp-mr${m.d || m.skip ? '' : ' warn'}"><code title="${escapeHtml(m.title)}">${escapeHtml(m.title)}</code><span class="arr">→</span><span class="tg">${m.d ? `<b style="--c:${splColor(m.d.name)}">${drillOpts(m.title, m.d, false)}</b><small>${b.halfInfo[m.title] ? ((h) => `<input type="number" class="sp-act" min="1" max="70" value="${h.written}" data-halfmin="${escapeHtml(h.name)}" aria-label="Minutes written">' written for the whole half · GPS ${h.gps.toFixed(1)}' · ${h.n} player${h.n > 1 ? 's' : ''}${h.subs ? ` · ${h.subs} came on or off: their own minutes` : ''}`)(b.halfInfo[m.title])
     : m.d.own ? `each player's own minutes · ${m.n} player${m.n > 1 ? 's' : ''}` : `<input type="number" class="sp-act" min="1" max="120" value="${m.d.min}" data-actmin="${m.d.i}" aria-label="Minutes written">' written · planned ${m.d.planned}' · GPS ${m.med.toFixed(1)}' · ${m.n} player${m.n > 1 ? 's' : ''}`}</small>` : drillOpts(m.title, null, m.skip)}</span><span class="ok">${m.d ? '✓' : m.skip ? '–' : '!'}</span></div>`).join('');
   // green = the player's own answer on the kiosk, white = typed here, orange = no RPE yet
   // a match day: one RPE per player (it is written on his match row, or on his session row when he did not play)
@@ -1240,6 +1252,9 @@ function splImportHtml() {
         ${b.unknown.length ? `<p class="sp-note warn">Not in the squad list (kept with their GPS name): ${b.unknown.map(escapeHtml).join(', ')} — add them in Squad.</p>` : ''}
         ${splSwapHtml(p)}
         ${squadHtml}
+        <details class="sp-types"${SPL.typesOpen ? ' open' : ''}><summary>Change a player's training type <small>e.g. left in rehab but he trained with the team</small></summary>
+          <div class="sp-ngs" style="margin-top:6px">${SPL.lib.players.slice().sort((a, c) => a.name.localeCompare(c.name)).map((q) => { const st = p.status[q.id] || 'ProTraining';
+            return `<label class="sp-ng" style="display:inline-flex;gap:6px;align-items:center${st === 'ProTraining' ? '' : `;background:${col[st] || '#aeaeb2'}22`}">${escapeHtml(q.name)}<select data-status="${escapeHtml(q.id)}" style="font-size:11.5px">${status.map(([k, l]) => `<option value="${k}" ${k === st ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}</select></label>`; }).join('')}</div></details>
         <p class="sp-note">${b.match ? 'Out (from the plan):' : 'Added from the plan, without GPS:'}</p><div class="sp-ngs">${b.full.filter((r) => !r.Time && r.DT == null && !(b.match && /^(Game|NC)$/.test(r.Type))).map((r) => `<span class="sp-ng">${escapeHtml(r.Players)}<small>${escapeHtml(r.Type)}</small></span>`).join('') || '<span class="sp-note">nobody</span>'}</div>
         <label class="sp-time">Session time <input type="number" min="1" max="200" value="${b.sessionTime}" data-f="time"> min <small>for the team-session players (the GPS's usual time)</small></label></div>`}
       <div class="sp-chk"><div class="sp-h3"><i class="n">3</i>RPE <small>${nRpe} / ${rpeRows.length} · Carga RPE = RPE × time</small><button type="button" class="linkbtn sp-rpe-ref" data-rpe-refresh>↻ Kiosk</button></div><div class="sp-rpe">${rpeGrid}</div>
@@ -1409,8 +1424,13 @@ function splChange(e) {
   }
   if (t.dataset.actmin != null) { splDraw(); return; } // minutes written: refresh the checks and the preview when done
   if (t.dataset.halfmin) { const p = splEnsure(date), v = Math.round(Number(t.value)); p.half = { ...(p.half || {}), [t.dataset.halfmin]: v > 0 ? v : undefined }; splTouch(date); splDraw(); return; }
-  if (t.dataset.status) { p.status[t.dataset.status] = t.value; splTouch(date); splDraw(); return; }
+  if (t.dataset.status) { p.status[t.dataset.status] = t.value; if (SPL.view === 'import') SPL.typesOpen = true; splTouch(date); splDraw(); return; }
   if (t.dataset.map) {
+    if (t.value.startsWith('__add:')) { // a drill that was not in the plan (e.g. the game): added to it, then matched
+      const name = t.value.slice(6), r8 = splRateOf(name);
+      if (!p.drills.some((d) => splKey(d.name) === splKey(name))) p.drills.push({ name, min: r8 ? r8.l.min : 10 });
+      t.value = name;
+    }
     p.titlemap = { ...(p.titlemap || {}), [t.dataset.map]: t.value };
     if (t.value) { SPL.saved.titles[t.dataset.map] = t.value; if (!AUTH.demo) callApi('title_save', null, { title: t.dataset.map, name: t.value }).catch(() => { /* kept in the plan */ }); else splDemoStore(); }
     splTouch(date); splDraw(); return;
