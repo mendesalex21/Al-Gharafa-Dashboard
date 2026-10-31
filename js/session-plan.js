@@ -579,11 +579,12 @@ function splPred(p) {
 function splLoadHtml(date, p) {
   const c = SPL.lib.calib || {};
   const team = p.drills.filter((d) => !SPL_NOT_TEAM.test(splName(d.name)) && d.min);
-  if (!team.length) return splObjectiveHtml(date);
+  if (!team.length) return splObjectiveHtml(date, p);
   const none = [...new Set(team.filter((d) => !splRateOf(d.name)).map((d) => splName(d.name)))]; // created drills with no data and no "forecast like"
   const F = splPred(p), pred = (k) => F[k];
-  const ad = sppAdapted(date); // the projection's adapted objective (admin first), else null
-  const typ = splCycleType(date), ref = ((SPL.lib.usual[typ] || {})[splTag(date)]) || null;
+  let ad = sppAdapted(date); // the projection's adapted objective (admin first), else null
+  const typ = splCycleType(date), R = splRef(date, p), ref = R.ref;
+  if (R.comp) ad = null; // a compensatory session: its own usual, the projection's % is for the team's training days
   const bar = (k, label, unit) => {
     const v = pred(k), u = ref ? ref[k] : null, max = Math.max(v, u ? u[2] : 0, u ? u[0] : 0) * 1.25 || 1, pc = (x) => Math.min(100, (x || 0) / max * 100);
     const a = ad && u && ad[k] !== 100 ? ad[k] / 100 : null, f = a || 1; // an adapted objective chosen: the plan is judged against it (the usual stays grey)
@@ -591,20 +592,28 @@ function splLoadHtml(date, p) {
     return `<div class="sp-lr"><span class="l">${label}</span><span class="sp-lt">${u ? `<i class="band" style="left:${pc(u[1])}%;width:${pc(u[2]) - pc(u[1])}%"></i><i class="mean" style="left:${pc(u[0])}%"></i>` : ''}${a ? `<i class="band sp-adapt" style="left:${pc(u[1] * a)}%;width:${pc(u[2] * a) - pc(u[1] * a)}%" title="Adapted objective: ${ad[k]} % of the usual (load projection)"></i>` : ''}<i class="dot ${lv}" style="left:${pc(v)}%"></i></span>
       <b>${k === 'td' ? (v / 1000).toFixed(1) + 'k' : Math.round(v)}<small> ${unit}</small></b><em class="${lv}">${a ? (lv === 'ok' ? 'vs adapted ✓' : lv === 'lo' ? 'lighter than adapted' : 'heavier than adapted') : lv === 'ok' ? 'usual ✓' : lv === 'lo' ? 'lighter' : lv === 'hi' ? 'heavier' : '—'}</em><small class="sp-acc">${(c[k] || {}).err != null ? (k === 'hit' ? 'indicative' : `±${c[k].err} %`) : ''}</small></div>`;
   };
-  return `<div class="sp-load"><div class="sp-h3">Planned team load <small>${(SPL.lib.categories || []).length ? 'each drill\'s category (its usual per-minute load)' : 'each drill\'s usual per-minute load'} × its planned minutes${ref ? ` · grey = usual ${splTag(date)} of a ${typ} microcycle (p25–p75, ${ref.n} sessions), line = average` : ' · no usual reference for this day'}</small></div>
+  return `<div class="sp-load"><div class="sp-h3">Planned team load <small>${(SPL.lib.categories || []).length ? 'each drill\'s category (its usual per-minute load)' : 'each drill\'s usual per-minute load'} × its planned minutes${ref ? ` · grey = ${escapeHtml(R.label)}, line = average` : ' · no usual reference for this day'}</small></div>
     ${bar('td', 'Total distance', 'm')}${bar('acc_dec', 'Acc + Dec', '')}${bar('hit', '> 20 km/h', 'm')}
     ${ad && ref ? `<p class="sp-adapt-t">Blue = adapted objective (load projection): ${[['td', 'Total distance', 'm'], ['acc_dec', 'Acc + Dec', ''], ['hit', '> 20 km/h', 'm']].filter(([k]) => ad[k] !== 100 && ref[k]).map(([k, l, u]) => `${l} ${k === 'td' ? (ref[k][0] * ad[k] / 100 / 1000).toFixed(1) + 'k' : Math.round(ref[k][0] * ad[k] / 100)}${u ? ' ' + u : ''} (${ad[k] - 100} %)`).join(' · ')}</p>` : ''}
     ${none.length ? `<p class="sp-note warn">Not in the forecast (no data yet): ${none.map(escapeHtml).join(', ')} — open its card (+ pitch / players) and choose “Forecast like”.</p>` : ''}</div>`;
 }
+/** The reference of a planned day: a compensatory session (most of the planned players in Compensatory, or the day after
+ * a match) = the usual compensatory session (the last 15, whatever the day); else the usual of its MD and microcycle type. */
+function splRef(date, p) {
+  const st = Object.values((p && p.status) || {}), comp = st.filter((v) => v === 'Compensatory').length, team = SPL.lib.players.length - st.filter((v) => v && v !== 'ProTraining').length;
+  const typ = splCycleType(date), tag = splTag(date), md = ((SPL.lib.usual[typ] || {})[tag]) || null, cp = SPL.lib.usual.comp || null;
+  if (cp && (comp > team || (tag === 'MD+1' && !md))) return { ref: cp, comp: true, label: `usual compensatory session (p25–p75, last ${cp.n})` };
+  return { ref: md, comp: false, label: md ? `usual ${tag} of a ${typ} microcycle (p25–p75, ${md.n} sessions)` : '' };
+}
 /** The day's objective before any drill is chosen (his ask, 2026-10-31): the usual of its MD and microcycle type. */
-function splObjectiveHtml(date) {
-  const typ = splCycleType(date), tag = splTag(date), ref = ((SPL.lib.usual[typ] || {})[tag]) || null, ad = sppAdapted(date);
+function splObjectiveHtml(date, plan) {
+  const R = splRef(date, plan || splPlan(date)), ref = R.ref, ad = R.comp ? null : sppAdapted(date);
   if (!ref) return `<div class="sp-load"><div class="sp-h3">Objective <small>no usual reference for this day</small></div></div>`;
   const row = (k, label, unit) => { const u = ref[k]; if (!u) return '';
     const max = Math.max(u[2], u[0]) * 1.25 || 1, pc = (x) => Math.min(100, (x || 0) / max * 100), f = (v) => (k === 'td' ? (v / 1000).toFixed(1) + 'k' : Math.round(v)), a = ad && ad[k] !== 100 ? ad[k] / 100 : null;
     return `<div class="sp-lr"><span class="l">${label}</span><span class="sp-lt"><i class="band" style="left:${pc(u[1])}%;width:${pc(u[2]) - pc(u[1])}%"></i><i class="mean" style="left:${pc(u[0])}%"></i>${a ? `<i class="band sp-adapt" style="left:${pc(u[1] * a)}%;width:${pc(u[2] * a) - pc(u[1] * a)}%"></i>` : ''}</span>
       <b>${f(u[0])}<small> ${unit}</small></b><em class="na">${f(u[1])}–${f(u[2])}${a ? ` · adapted ${f(u[0] * a)}` : ''}</em><small class="sp-acc"></small></div>`; };
-  return `<div class="sp-load"><div class="sp-h3">Objective <small>usual ${escapeHtml(tag)} of a ${escapeHtml(typ)} microcycle (p25–p75, ${ref.n} sessions), line = average · add drills to see the planned load against it</small></div>
+  return `<div class="sp-load"><div class="sp-h3">Objective${R.comp ? ' · compensatory session' : ''} <small>${escapeHtml(R.label)}, line = average · add drills to see the planned load against it</small></div>
     ${row('td', 'Total distance', 'm')}${row('acc_dec', 'Acc + Dec', '')}${row('hit', '> 20 km/h', 'm')}</div>`;
 }
 /** The statuses to choose from: the usual ones, then the other types found in the files (matches left out). */
