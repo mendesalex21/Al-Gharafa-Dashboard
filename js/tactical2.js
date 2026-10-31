@@ -223,7 +223,7 @@ function t2VideoRoom(team) {
   const rows = L.map((x, i) => `<button class="vr-ev ${x === T2.ev ? 'on' : ''}" data-ev="${i}"><span class="t">${t2Min(x)}</span><span class="w">${escapeHtml(t2Name(x.p) || (x.c === 'press' ? 'press on ' + x.opp : x.c === 'loss' ? 'ball lost' : '—'))}<small>${t2day(M[x.m].date)} · ${crestHtml(x.opp, 13)} v ${escapeHtml(x.opp)}${M[x.m].tracking ? '<span class="d2">2D</span>' : ''}</small></span>${x.tag || x.kind ? `<span class="tg ${tagCls(x.tag)}">${escapeHtml(x.tag || x.kind)}</span>` : ''}</button>`).join('') || '<p class="muted" style="padding:10px">No moment.</p>';
   return `<div class="vr2"><div class="vr2-side"><div class="card"><h3>Categories</h3><div class="vr-cats two">${cats}</div></div>
     <div class="card"><div class="vr-tools"><select class="select" id="vr-match"><option value="all">All ${ms.length} matches</option>${ms.map((m) => `<option value="${m.id}" ${T2.match === m.id ? 'selected' : ''}>${t2day(m.date)} · ${m.home === team ? 'v ' + escapeHtml(m.away) : '@ ' + escapeHtml(m.home)}</option>`).join('')}</select>
-      <button class="btn" id="vr-all">▶ Play all</button><button class="btn p" data-export="${T2.match === 'all' ? (ms[0] || {}).id : T2.match}">⬇ XML</button></div>
+      <button class="btn" id="vr-all">▶ Play all</button><button class="btn" id="vr-dl" title="Every moment of the list in one video (real time)">⬇ Videos</button><button class="btn p" data-export="${T2.match === 'all' ? (ms[0] || {}).id : T2.match}">⬇ XML</button></div>
       ${chips ? `<div style="margin-bottom:6px">${chips}</div>` : ''}<h3>${escapeHtml(label)} <small>${L.length} moments</small></h3><div class="vr-list">${rows}</div></div></div>
     <div class="card pl2" id="pl2">${t2PlayerHead(T2.ev)}</div></div>`;
 }
@@ -248,7 +248,7 @@ async function t2PlayerOpen(x, autoplay) {
   P2X.team = x.t; P2X.dur = Math.max(2000, Math.min(x.b, x.a + 20000) - x.a);
   document.getElementById('pl2-stage').innerHTML = `<canvas id="pl2-cv" width="1100" height="740"></canvas>
     <div class="pl2-ctrl"><button class="btn" id="pl2-play">▶</button><button class="btn" id="pl2-back">−5 s</button><input type="range" id="pl2-seek" min="0" max="${P2X.dur}" step="20" value="0">
-      <button class="btn" data-sp="0.5">×0.5</button><button class="btn" data-sp="1">×1</button><button class="btn" data-sp="2">×2</button><button class="btn" id="pl2-next">Next ▸</button></div>
+      <button class="btn" data-sp="0.5">×0.5</button><button class="btn" data-sp="1">×1</button><button class="btn" data-sp="2">×2</button><button class="btn" id="pl2-next">Next ▸</button><button class="btn" id="pl2-dl" title="Records the 2D while it plays (real time), then downloads it">⬇ Video</button></div>
     <div class="pl2-ctrl">${[['trails', 'Trails'], ['names', 'Names'], ['line', 'Defensive line'], ['block', 'Team block']].map(([k, l]) => `<button class="btn${T2_OPT[k] ? ' p' : ''}" data-opt2="${k}">${l}</button>`).join('')}</div>
     <span class="muted" style="font-size:11.5px">${escapeHtml(x.t)} attack → · ${x.t === T2_US || x.opp === T2_US ? 'yellow = Al Gharafa · ' : ''}blue = ${escapeHtml(x.t === T2_US ? x.opp : x.t)}${x.t === T2_US || x.opp === T2_US ? '' : ', red = ' + escapeHtml(x.opp)} · white ring = player on the ball · dashed = the defending team's last line · the clip starts ${T2_PRE[x.c] / 1000} s before</span>`;
   document.getElementById('pl2-play').onclick = () => t2Play(!P2X.play);
@@ -256,6 +256,7 @@ async function t2PlayerOpen(x, autoplay) {
   document.getElementById('pl2-seek').oninput = (e) => { P2X.t = +e.target.value; t2Draw2(); };
   document.querySelectorAll('#pl2 [data-sp]').forEach((b) => (b.onclick = () => { P2X.sp = +b.dataset.sp; }));
   document.getElementById('pl2-next').onclick = () => t2Next(false);
+  document.getElementById('pl2-dl').onclick = (e) => t2Record([x], e.target);
   document.querySelectorAll('#pl2 [data-opt2]').forEach((b) => (b.onclick = () => { const k = b.dataset.opt2; T2_OPT[k] = !T2_OPT[k]; b.classList.toggle('p', T2_OPT[k]); t2Draw2(); }));
   t2Draw2();
   if (autoplay) t2Play(true);
@@ -277,8 +278,8 @@ function t2Next(auto) {
   if (!auto) P2X.all = false;
   t2PlayerOpen(nx, true);
 }
-function t2Draw2() {
-  const cv = document.getElementById('pl2-cv'), F = P2X.file, x = P2X.x;
+function t2Draw2(cvOut) {
+  const cv = cvOut || document.getElementById('pl2-cv'), F = P2X.file, x = P2X.x;
   if (!cv || !F || !x) return;
   const H = F.halves[String(x.h)]; if (!H) return;
   const flip = (F.dir[`${x.h}|${x.t}`] || 1) === -1, ms = x.a + P2X.t, fi = (ms - H.t0) / H.dt, i = Math.max(0, Math.min(H.f.length - 1, Math.floor(fi))), j = Math.min(H.f.length - 1, i + 1), u = Math.max(0, Math.min(1, fi - i));
@@ -390,6 +391,7 @@ function t2Bind() {
   const L = T2.seg === 'video' ? t2List(T2.team, T2.cat, T2.f, T2.match) : [];
   P2X.list = L;
   box.querySelectorAll('[data-ev]').forEach((b) => (b.onclick = () => { T2.ev = L[+b.dataset.ev]; box.querySelectorAll('.vr-ev').forEach((z) => z.classList.toggle('on', z === b)); P2X.all = false; t2PlayerOpen(T2.ev, true); }));
+  const dl = document.getElementById('vr-dl'); if (dl) dl.onclick = () => t2Record(L.filter((x) => t2M()[x.m].tracking), dl);
   const all = document.getElementById('vr-all'); if (all) all.onclick = () => { const M = t2M(), first = L.find((x) => M[x.m].tracking); if (!first) return; T2.ev = first; P2X.all = true; t2PlayerOpen(first, true); };
   if (T2.seg === 'video' && T2.ev) t2PlayerOpen(T2.ev, false);
 }
@@ -783,4 +785,72 @@ function t2Picker(team) {
     + (ch.length ? `<table class="tt-tbl" style="max-width:720px"><thead><tr><th class="l">What changed most</th><th>${escapeHtml(c.prev)}</th><th>${escapeHtml(c.coach)}</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">No big change in the numbers yet.</p>')
     + '</div>';
   return html;
+}
+
+// ------------------------------------------------------------------ the 2D as a video file (2026-10-31)
+/** Plays each moment on a canvas of its own and records it (MediaRecorder: MP4 where the browser can, else WebM): a title
+ * card, then the clip in real time with its caption; every moment in one file. */
+async function t2Record(list, btn) {
+  list = (list || []).filter(Boolean);
+  if (!list.length || !window.MediaRecorder) { alert(window.MediaRecorder ? 'No moment with a 2D in this list' : 'This browser cannot record a video'); return; }
+  const MAX = 40;
+  if (list.length > MAX) list = list.slice(0, MAX);
+  const label = btn.textContent;
+  btn.disabled = true;
+  t2Stop();
+  const keep = { x: P2X.x, file: P2X.file, team: P2X.team, dur: P2X.dur, t: P2X.t };
+  // on screen while it records (a canvas out of sight is not drawn, the video would be empty)
+  const box = document.createElement('div'), cv = document.createElement('canvas'), info = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px';
+  cv.width = 1280; cv.height = 862; cv.style.cssText = 'width:min(1100px,92vw);height:auto;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.4)';
+  info.style.cssText = 'color:#fff;font:600 15px system-ui';
+  box.append(info, cv); document.body.appendChild(box);
+  const type = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find((t) => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+  const rec = new MediaRecorder(cv.captureStream(30), { mimeType: type, videoBitsPerSecond: 6000000 }), parts = [];
+  rec.ondataavailable = (e) => { if (e.data.size) parts.push(e.data); };
+  const done = new Promise((ok) => { rec.onstop = ok; });
+  const cx = cv.getContext('2d'), M = t2M(), wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const caption = (x) => { const m = M[x.m]; return `${t2Min(x)} · ${T2_CAT[x.c][1]}${x.tag ? ' · ' + x.tag : ''}  —  ${m.home} ${m.score[0]}–${m.score[1]} ${m.away} · ${t2day(m.date)}`; };
+  try {
+    rec.start(1000);
+    for (let n = 0; n < list.length; n++) {
+      const x = list[n];
+      btn.textContent = `Recording ${n + 1}/${list.length}…`;
+      info.textContent = `Recording the 2D video · moment ${n + 1} of ${list.length} · real time, keep this window open`;
+      const file = await t2Fetch(x.m, 'full');
+      Object.assign(P2X, { x, file, team: x.t, dur: Math.max(2000, Math.min(x.b, x.a + 20000) - x.a), t: 0 });
+      const t0 = performance.now() + 1200; // a 1.2 s title card
+      while (performance.now() < t0) { // the title card
+        cx.fillStyle = '#0f1d5a'; cx.fillRect(0, 0, cv.width, cv.height); cx.fillStyle = '#fff'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+        cx.font = '800 38px system-ui'; cx.fillText(`${t2Min(x)} · ${T2_CAT[x.c][1]}${x.tag ? ' · ' + x.tag : ''}`, cv.width / 2, cv.height / 2 - 24);
+        cx.font = '500 24px system-ui'; cx.fillText(`${M[x.m].home} ${M[x.m].score[0]}–${M[x.m].score[1]} ${M[x.m].away} · ${t2day(M[x.m].date)}`, cv.width / 2, cv.height / 2 + 26);
+        await wait(33);
+      }
+      const start = performance.now();
+      for (;;) {
+        P2X.t = Math.min(P2X.dur, performance.now() - start);
+        t2Draw2(cv);
+        cx.fillStyle = 'rgba(17,24,39,.78)'; cx.fillRect(0, cv.height - 40, cv.width, 40);
+        cx.fillStyle = '#fff'; cx.font = '700 17px system-ui'; cx.textAlign = 'left'; cx.textBaseline = 'middle'; cx.fillText(caption(x), 16, cv.height - 20);
+        if (P2X.t >= P2X.dur) break;
+        await wait(33);
+      }
+    }
+    rec.stop();
+    await done;
+    const ext = type.includes('mp4') ? 'mp4' : 'webm', first = list[0], m = M[first.m];
+    const name = list.length === 1 ? `2D_${m.home}-${m.away}_${m.date}_${t2Min(first).replace("'", 'min')}_${T2_CAT[first.c][1]}` : `2D_${T2.team || ''}_${T2_CAT[first.c][1]}_${list.length}_moments`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(parts, { type: type.split(';')[0] }));
+    a.download = `${name.replace(/[^\w-]+/g, '_')}.${ext}`;
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch (err) {
+    alert('Could not record the video: ' + (err.message || err));
+    try { rec.stop(); } catch (e) { /* already stopped */ }
+  } finally {
+    box.remove();
+    Object.assign(P2X, keep);
+    btn.disabled = false; btn.textContent = label;
+    t2Draw2();
+  }
 }
