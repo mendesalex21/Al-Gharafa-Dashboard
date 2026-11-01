@@ -428,8 +428,8 @@ function plTable(B) {
   const { d } = B, pc = (v) => (v == null ? '—' : `<span class="tm-acchip" style="background:${v >= 100 ? '#1f7a3d' : v >= 90 ? '#34a853' : v >= 80 ? '#8ccf9f' : v >= 60 ? '#e8a33d' : '#d9534f'}">${Math.round(v)} %</span>`);
   const main = (w, k) => { const zz = B.zw(w, k), ac = w[k] > 0 ? B.acAt(k, w.done ? w.end : d.as_of) : null;
     return `<td class="b">${w[k] > 0 ? tmK(w[k]) : '—'}</td><td>${zz == null ? '' : `<span class="mz ${tmZ(zz)}">${tmS(zz)}</span>`}</td><td class="g">${ac == null ? '' : `<span class="tm-acchip" style="background:${tmZone(ac)[0]}">${ac.toFixed(2)}</span>`}</td>`; };
-  // RHIE: the week's bouts vs his other full weeks (z, as the other columns — his ask, 2026-11-01; his account first)
-  const rzOn = document.documentElement.classList.contains('is-admin');
+  // RHIE: the week's bouts vs his other full weeks (z, as the other columns — his ask, 2026-11-01, released the same day)
+  const rzOn = true;
   const rz = (w) => { const x = B.IW[w.start]; if (!rzOn || !x || x.rh == null) return null;
     return tmZof(x.rh, tmStats(B.weeks.filter((y) => y.done && y.start !== w.start && B.IW[y.start] && B.IW[y.start].rh > 0).map((y) => B.IW[y.start].rh))); };
   const rows = B.weeks.slice().reverse().map((w) => { const x = B.IW[w.start], o = B.wellOf(w.start, w.end), zr = rz(w);
