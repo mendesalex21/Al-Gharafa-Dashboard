@@ -137,6 +137,7 @@ function t2Pitch(w, inner, half = false) {
   let s = `<svg class="pitch" viewBox="-3 -3 ${w + 6} ${h + 6}"><rect width="${w}" height="${h}" rx="8" fill="#2f8a4c"/><rect width="${w}" height="${h}" rx="8" ${L}/>`;
   if (!half) s += `<line x1="${X(52.5)}" y1="0" x2="${X(52.5)}" y2="${h}" ${L}/><circle cx="${X(52.5)}" cy="${Y(34)}" r="${9.15 * sc}" ${L}/><rect x="0" y="${Y(13.84)}" width="${16.5 * sc}" height="${40.32 * sc}" ${L}/><rect x="0" y="${Y(24.84)}" width="${5.5 * sc}" height="${18.32 * sc}" ${L}/>`;
   s += `<rect x="${X(88.5)}" y="${Y(13.84)}" width="${16.5 * sc}" height="${40.32 * sc}" ${L}/><rect x="${X(99.5)}" y="${Y(24.84)}" width="${5.5 * sc}" height="${18.32 * sc}" ${L}/>`;
+  s += `<rect x="${X(103.8)}" y="${Y(30.34)}" width="${1.2 * sc}" height="${7.32 * sc}" fill="rgba(255,255,255,.9)"/>${half ? '' : `<rect x="0" y="${Y(30.34)}" width="${1.2 * sc}" height="${7.32 * sc}" fill="rgba(255,255,255,.9)"/>`}`; // the goals
   s += `<line x1="${X(35)}" y1="0" x2="${X(35)}" y2="${h}" stroke="rgba(255,255,255,.3)" stroke-dasharray="4 4"/><line x1="${X(70)}" y1="0" x2="${X(70)}" y2="${h}" stroke="rgba(255,255,255,.3)" stroke-dasharray="4 4"/>`;
   return s + inner(X, Y, sc) + `<text x="${w - 6}" y="${h - 6}" font-size="11" fill="rgba(255,255,255,.8)" text-anchor="end">attack →</text></svg>`;
 }
@@ -290,7 +291,9 @@ function t2Draw2(cvOut) {
   for (let s = 0; s < 14; s++) if (s % 2) { cx.fillStyle = 'rgba(255,255,255,.035)'; cx.fillRect(X(s * 75), 0, 7.5 * S2, Hh); }
   cx.strokeStyle = 'rgba(255,255,255,.85)'; cx.lineWidth = 2; cx.strokeRect(X(0), Y(0), 105 * S2, 68 * S2);
   cx.beginPath(); cx.moveTo(X(525), Y(0)); cx.lineTo(X(525), Y(680)); cx.stroke(); cx.beginPath(); cx.arc(X(525), Y(340), 9.15 * S2, 0, 7); cx.stroke();
-  [[0, 1], [1050, -1]].forEach(([x0, d]) => { cx.strokeRect(Math.min(X(x0), X(x0 + d * 165)), Y(138.4), 16.5 * S2, 40.32 * S2); cx.strokeRect(Math.min(X(x0), X(x0 + d * 55)), Y(248.4), 5.5 * S2, 18.32 * S2); });
+  [[0, 1], [1050, -1]].forEach(([x0, d]) => { cx.strokeRect(Math.min(X(x0), X(x0 + d * 165)), Y(138.4), 16.5 * S2, 40.32 * S2); cx.strokeRect(Math.min(X(x0), X(x0 + d * 55)), Y(248.4), 5.5 * S2, 18.32 * S2);
+    cx.beginPath(); cx.arc(X(x0 + d * 110), Y(340), 9.15 * S2, d > 0 ? -0.93 : Math.PI - 0.93, d > 0 ? 0.93 : Math.PI + 0.93); cx.stroke(); // the arc of the box
+    cx.fillStyle = 'rgba(255,255,255,.9)'; cx.fillRect(Math.min(X(x0), X(x0 + d * 12)), Y(303.4), 1.2 * S2, 7.32 * S2); }); // the goal (as the old version, his ask 2026-11-01)
   cx.fillStyle = 'rgba(255,255,255,.78)'; cx.font = '700 13px system-ui'; cx.textAlign = 'left'; cx.textBaseline = 'middle'; cx.fillText(`${x.t} attack  →`, X(10), PAD / 2);
   const side = (pl) => { const team = pl[2] === 0 ? F.home : F.away; return team; };
   const pos = F.players.map((pl, k) => [k, fx(lerp(2 + 2 * k)), fy(lerp(3 + 2 * k))]).filter((q) => q[1] != null);
