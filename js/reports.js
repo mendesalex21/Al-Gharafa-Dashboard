@@ -11,8 +11,8 @@ const RP_W = 1290;
 const RP_LOGO = 'img/logo.png';
 
 const RP_COLORS = { hitn: '#e3c85e', td: '#6fb0ee', d15: '#e3c85e', d20: '#ea8a63', d25: '#e98b96', vmax: '#c4c7cf', sprints: '#e98b96', accdec: '#6cd13c' };
-const RP_LABELS = { hitn: 'count > 20km/h', time: 'Time', min: 'Min', rpe: 'RPE', mpm: 'm/min', td: 'TOTAL DISTANCE', d15: 'DIST > 15km/h', d20: 'DIST > 20km/h', d25: 'DIST > 25km/h', vmax: 'MAX SPEED', pmax: '% Max Speed', days: 'Days', sprints: 'Sprints', accdec: 'High Acc+Dec' };
-const RP_WIDTHS = { hitn: 'minmax(0,1fr)', td: 'minmax(0,2.3fr)', d15: 'minmax(0,1.7fr)', d20: 'minmax(0,1.15fr)', d25: 'minmax(0,1fr)', vmax: 'minmax(0,1.3fr)', accdec: 'minmax(0,1fr)', pmax: '54px', mpm: '48px', sprints: '52px', time: '36px', min: '40px', days: '44px', rpe: '36px' };
+const RP_LABELS = { rhie: 'RHIE', wcs: 'WCS 1′', hitn: 'count > 20km/h', time: 'Time', min: 'Min', rpe: 'RPE', mpm: 'm/min', td: 'TOTAL DISTANCE', d15: 'DIST > 15km/h', d20: 'DIST > 20km/h', d25: 'DIST > 25km/h', vmax: 'MAX SPEED', pmax: '% Max Speed', days: 'Days', sprints: 'Sprints', accdec: 'High Acc+Dec' };
+const RP_WIDTHS = { rhie: '64px', wcs: '50px', hitn: 'minmax(0,1fr)', td: 'minmax(0,2.3fr)', d15: 'minmax(0,1.7fr)', d20: 'minmax(0,1.15fr)', d25: 'minmax(0,1fr)', vmax: 'minmax(0,1.3fr)', accdec: 'minmax(0,1fr)', pmax: '54px', mpm: '48px', sprints: '52px', time: '36px', min: '40px', days: '44px', rpe: '36px' };
 const RP_BARS = ['td', 'd15', 'd20', 'd25', 'vmax', 'accdec', 'hitn'];
 const RP_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -23,6 +23,7 @@ const RP_PHOTO_CACHE = 'rp-photos-v1'; // a replaced photo in Drive: bump the ve
 const RP_JS = ['https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'];
 const rpLerp = (a, b, t) => a.map((x, i) => Math.round(x + (b[i] - x) * t));
 // Days since the last exposure ≥ 90 % of max speed (thresholds from the handoff — to confirm with the staff)
+const RP_DVM = [['#f2f5fa', '#6b7a90'], ['#dde9f8', '#2d5a92'], ['#b4d0f2', '#173f73'], ['#5b9be3', '#fff'], ['#1d5fae', '#fff']]; // % of his match (RHIE, WCS)
 const RP_GREEN = ['#d5f2d5', '#1c6b1c']; // % max speed ≥ 90 % (the "Days" green)
 const rpRec = (r) => (r.rec ? '<i class="rp-rec" title="His fastest of the last 12 months">★</i>' : ''); // a new max-speed record
 const rpDaysColor = (d) => d == null ? ['#f0f1f5', '#6a6f80'] : d <= 5 ? ['#d5f2d5', '#1c6b1c'] : d <= 10 ? ['#fbd9c6', '#8a3b12'] : ['#f6c4c4', '#9b1c1c'];
@@ -135,6 +136,11 @@ function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H, opts = {}) {
       : `<div class="rp-c rp-chip"><span class="rp-v" style="background:rgb(${rpLerp([235, 244, 253], [110, 175, 240], t01(k, v))})">${rpFmt(k, v)}</span></div>`;
     if (k === 'sprints') { const [bg, fg] = rpSprintColor(t01(k, v)); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${rpFmt(k, v)}</span></div>`; }
     if (k === 'days') { const [bg, fg] = rpDaysColor(v); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${rpFmt(k, v)}</span></div>`; }
+    if (k === 'rhie' || k === 'wcs') { // the staff report (2026-11-01, as the site): % of his match, the drills table's colours
+      if (v == null) return '<div class="rp-c rp-txt"><span class="rp-v">–</span></div>';
+      const [bg, fg] = RP_DVM[v < 50 ? 0 : v < 80 ? 1 : v < 100 ? 2 : v < 120 ? 3 : 4];
+      return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${k === 'rhie' ? `${r.rhieN} · ${v}%` : `${v}%`}</span></div>`;
+    }
     if (k === 'pmax' && v != null && v >= 0.9 - 1e-9) return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${RP_GREEN[0]};color:${RP_GREEN[1]}">${rpFmt(k, v)}${rpRec(r)}</span></div>`;
     if (k === 'pmax') return `<div class="rp-c rp-txt"><span class="rp-v">${rpFmt(k, v)}${rpRec(r)}</span></div>`;
     return `<div class="rp-c rp-txt"><span class="rp-v">${rpFmt(k, v)}</span></div>`;

@@ -191,20 +191,24 @@ function rsMicro(C) {
  * own day, a black tick at his usual for those days, and the z of his total. */
 const RS_MDZ = [['td', 'TD'], ['d15', '>15'], ['hit', '>20'], ['spr', '>25'], ['spr_n', 'Sprints'], ['acc_dec', 'Acc+Dec'], ['srpe', 'sRPE']];
 const RS_MC = [['td', 'TOTAL DISTANCE'], ['hit', 'DISTANCE > 20 km/h'], ['acc_dec', 'ACC + DEC'], ['spr_n', 'SPRINTS']];
-function rsMcBar(parts, z, k) {
-  const live = (parts || []).filter((d) => d), done = live.reduce((a, d) => a + (d[0] || 0), 0), exp = live.reduce((a, d) => a + (d[1] || 0), 0);
-  if (!live.length) return '<div class="mcb"><b>–</b><div class="mcb-bar"></div><span class="mz na">—</span></div>';
-  const scale = Math.max(done, exp, 1) * 1.15, shown = live.filter((d) => d[0] > 0);
+function rsMcBar(parts, z, k, lu = []) {
+  // as the site (2026-11-01): a day with no usual (rehab, B team) is neutral — grey, in the bar and the tick alike; the days
+  // still to come are dashed (his usual of each MD) and the tick is the objective until the match
+  const live = (parts || []).filter((d) => d), done = live.reduce((a, d) => a + (d[0] || 0), 0), exp = live.reduce((a, d) => a + (d[1] == null ? d[0] || 0 : d[1]), 0);
+  const left = lu.filter((u) => u > 0), todo = left.reduce((a, u) => a + u, 0), obj = exp + todo;
+  if (!live.length && !todo) return '<div class="mcb"><b>–</b><div class="mcb-bar"></div><span class="mz na">—</span></div>';
+  const scale = Math.max(done + todo, obj, 1) * 1.15, shown = live.filter((d) => d[0] > 0), pc = (v) => (v / scale * 100).toFixed(2) + '%';
   let x = 0;
-  const segs = shown.map((d) => { const left = x; x += d[0];
-    return `<i class="${d === shown[shown.length - 1] ? 'last' : ''}" style="left:${(left / scale * 100).toFixed(2)}%;width:${(d[0] / scale * 100).toFixed(2)}%;background:${ST_DOT[stMz(d[2])] || '#aeaeb2'}"></i>`; }).join('');
-  return `<div class="mcb"><b>${k === 'td' ? stK(done) : Math.round(done).toLocaleString('en-US')}</b><div class="mcb-bar">${segs}${exp > 0 ? `<em style="left:${(exp / scale * 100).toFixed(2)}%"></em>` : ''}</div>${stChip(z)}</div>`;
+  const segs = shown.map((d) => { const l = x; x += d[0];
+    return `<i class="${d === shown[shown.length - 1] ? 'last' : ''}" style="left:${pc(l)};width:${pc(d[0])};background:${d[1] == null ? '#aeaeb2' : ST_DOT[stMz(d[2])] || '#aeaeb2'}"></i>`; }).join('');
+  const ghost = left.map((u) => { const l = x; x += u; return `<s style="left:${pc(l)};width:${pc(u)}"></s>`; }).join('');
+  return `<div class="mcb"><b>${k === 'td' ? stK(done) : Math.round(done).toLocaleString('en-US')}</b><div class="mcb-bar">${segs}${ghost}${obj > 0 ? `<em style="left:${pc(obj)}"></em>` : ''}</div>${stChip(z)}</div>`;
 }
 function rsToday(D, C, s, S) {
-  const mk = S.md_keys || [], tpl = '150px repeat(7, 46px) 50px 6px repeat(4, minmax(0, 1fr))', md = (C.X.micro && C.X.micro.md) || [];
+  const mk = S.md_keys || [], tpl = '150px repeat(7, 46px) 50px 6px repeat(4, minmax(0, 1fr))', md = (C.X.micro && C.X.micro.md) || [], come = (C.X.left || []).map((x) => x[1]);
   const rowH = rpRowH(D, D.fullSession, RP_TABLE_H - 41, 25), ki = (k) => S.keys.indexOf(k);
   let html = `<div class="rs-tbl rs-day${rowH < 21 ? ' rp-tight' : ''}"><div class="rs-tr rs-gh" style="grid-template-columns:${tpl}"><span></span><span style="grid-column:span 8">TODAY · VS HIS USUAL ${rpEsc(s.md || '')}</span><span></span>
-      <span style="grid-column:span 4">MICROCYCLE SO FAR · ${md.map(rpEsc).join(' · ')}</span></div>
+      <span style="grid-column:span 4">MICROCYCLE SO FAR · ${md.map(rpEsc).join(' · ')}${come.length ? ` → TO COME ${come.map(rpEsc).join(' · ')}` : ''}</span></div>
     <div class="rs-tr rs-th" style="grid-template-columns:${tpl}"><span>Players</span>${RS_MDZ.map(([, l]) => `<span>${l}</span>`).join('')}<span>Reference</span><span></span>${RS_MC.map(([, l]) => `<span class="l">${l}</span>`).join('')}</div>`;
   for (const p of D.positions.order) {
     const g = D.fullSession.filter((r) => D.players[r.name] === p).sort((a, b) => a.name.localeCompare(b.name));
@@ -213,11 +217,11 @@ function rsToday(D, C, s, S) {
     html += g.map((r) => {
       const x = C.px(r.name) || {}, z = x.mdz || [], src = x.src;
       return `<div class="rs-tr rs-row" style="grid-template-columns:${tpl};height:${rowH}px"><span class="rp-nm">${rpFace(D, r.name)}${rpEsc(r.name)}</span>${RS_MDZ.map(([k]) => `<span>${stChip(z[mk.indexOf(k)])}</span>`).join('')}
-        <span class="rs-src">${!src || !src[0] ? '–' : src[0] === 'own' ? `his ${src[1]}` : 'squad'}${x.comp ? ' comp.' : ''}</span><span></span>${RS_MC.map(([k]) => `<span>${rsMcBar((x.parts || [])[ki(k)], (x.mc || [])[ki(k)], k)}</span>`).join('')}</div>`;
+        <span class="rs-src">${!src || !src[0] ? '–' : src[0] === 'own' ? `his ${src[1]}` : 'squad'}${x.comp ? ' comp.' : ''}</span><span></span>${RS_MC.map(([k]) => `<span>${rsMcBar((x.parts || [])[ki(k)], (x.mc || [])[ki(k)], k, (x.lu || []).map((u) => u[ki(k)]))}</span>`).join('')}</div>`;
     }).join('');
   }
   return html + `</div><div class="rp-legend">${ST_LEG5}<span>Today: z vs his own sessions of that MD (the squad's when he has fewer than 5)</span>
-    <span><span class="mcb-key"><i></i><i></i></span>microcycle: one piece of the bar per day since the last match, in the colour of that day · <em class="mcb-tick"></em>his usual for those days · the number = the z of his total</span></div>`;
+    <span><span class="mcb-key"><i></i><i></i></span>microcycle: one piece of the bar per day since the last match, in the colour of that day · grey = a day with no usual (rehab, B team) · ${come.length ? '<s class="mcb-ghost"></s>the days still to come (his usual of each MD) · <em class="mcb-tick"></em>the objective until the match (dashed ending after it = ahead, before = behind)' : '<em class="mcb-tick"></em>his usual for those days'} · the number = the z of what he has done</span></div>`;
 }
 
 /** The staff report pages (same 1290 × 790 pages and PDF as the players' report). */
@@ -226,13 +230,19 @@ function rpStaffPages(D, S) {
   if (!C) return '';
   const s = D.session, X = C.X;
   D.fullSession.forEach((r) => { const p = C.px(r.name); r.rpe = p ? p.rpe : null; });
+  // his WCS 1′ (best minute, % of his 1-min match worst case) and RHIE (bouts, their rate as a % of his match's) — as the site's table (2026-11-01)
+  const W = X.wcs || {}, WR = W.rhie || {};
+  D.fullSession.forEach((r) => { const w = (W.players || {})[r.name], h = (WR.players || {})[r.name], m = ((WR.mref || {})[r.name] || {}).p90;
+    r.wcs = w && w.max1 && w.max1.td != null ? w.max1.td : null; r.rhieN = h ? h.n : null; r.rhie = h && h.min && m ? Math.round(100 * (h.n / h.min) / (m / 90)) : null; });
+  const withInt = D.fullSession.some((r) => r.wcs != null || r.rhie != null);
   const title = `${s.id} · ${s.dateLabel}`, short = (iso) => stDay(iso, { day: 'numeric', month: 'short' });
   const meta = [['WEEK', s.week], ['MD', s.md], ['TIME', s.time + "'"], ['N EXERCICE', s.exercise], ['AM/PM', s.ampm]];
   const comp = X.group === 'compensatory', anyComp = Object.values(X.players).some((p) => p.comp);
   const kicker = s.extra ? 'EXTRA SESSION · MATCH DAY · STAFF' : (comp ? 'COMPENSATORY SESSION' : 'FULL SESSION') + ' · STAFF' + (s.part ? ' · ' + s.part.toUpperCase() : '');
   const cycle = (X.cycle || '—').toUpperCase(), pages = [];
   const strip = rsTeamStrip(C, s.md);
-  pages.push(rpHeader(kicker, title, meta) + strip + rpTable(D, D.fullSession, ['time', 'rpe', 'mpm', 'td', 'd15', 'd20', 'vmax', 'pmax', 'days', 'sprints', 'accdec'], {}, RP_TABLE_H - (strip ? 73 : 0)));
+  pages.push(rpHeader(kicker, title, meta) + strip + rpTable(D, D.fullSession, ['time', 'rpe', 'mpm', 'td', 'd15', 'd20', 'vmax', 'pmax', 'days', 'sprints', 'accdec', ...(withInt ? ['rhie', 'wcs'] : [])], {}, RP_TABLE_H - (strip ? 73 : 0) - (withInt ? 18 : 0))
+    + (withInt ? `<div class="rp-legend"><span>RHIE = his bouts · their rate as a % of his match · WCS 1′ = his best minute as a % of his worst match minute (distance) · % of his match:</span>${RP_DVM.map(([bg, fg], i) => `<span style="background:${bg};color:${fg};padding:0 6px;border-radius:4px;font-weight:700">${['< 50', '50–80', '80–100', '100–120', '> 120'][i]}</span>`).join('')}</div>` : ''));
   const note = comp ? `<div class="rp-legend"><span>Compensatory session (the players who did not play the match) · colour = the player's z vs his usual compensatory session, not vs a usual ${rpEsc(s.md)} · z printed when not usual · grey = individual or rehab session, not compared</span></div>`
     : `<div class="rp-legend"><span>Colour = the player's z vs his usual ${rpEsc(s.md)} (same microcycle type)${anyComp ? ' — compensatory players: vs their usual compensatory session' : ''} · z printed when not usual · grey = individual or rehab session, not compared with his ${rpEsc(s.md)}</span></div>`;
   pages.push(rpHeader(kicker, title, meta) + rsChart(D, C, 'td', 'TOTAL DISTANCE', true) + rsChart(D, C, 'd20', 'DISTANCE >20kmh') + note);
