@@ -265,12 +265,15 @@ function mcMicro(s) {
       const q = x.players.find((r) => r.id === p.id);
       if (!q) continue;
       const comp = q.mdref && q.mdref.kind === 'comp', type = (x.cycle || {}).type, game = x.kind === 'match', sc = game && q.mdref ? svScale(q) : 1;
-      const u = game ? (q.mdref ? Object.fromEntries(MC_KEYS.map(([k]) => [k, [(q.mdref.mean || {})[k], (q.mdref.sd || {})[k]]])) : null)  // his usual game, at today's minutes
+      // a day with no reference (rehab, B team…: no usual, as the build's micro_z) is neutral: its load counts in the bar
+      // and in the tick alike, so the bar, the tick and the z tell the same story
+      const noRef = !game && !comp && !['t', 'p', 'i'].includes(q.cat);
+      const u = noRef ? null : game ? (q.mdref ? Object.fromEntries(MC_KEYS.map(([k]) => [k, [(q.mdref.mean || {})[k], (q.mdref.sd || {})[k]]])) : null)  // his usual game, at today's minutes
         : comp ? (((usual.comp || {}).players || {})[p.id] || (usual.comp || {}).squad)
           : ((((usual.players || {})[p.id] || {})[type] || {})[x.md] || ((usual.squad || {})[type] || {})[x.md]);
-      MC_KEYS.forEach(([k]) => { const v = q[k] || 0, e = u && u[k] && u[k][0] != null ? u[k][0] * sc : 0, sd = u && u[k] ? (u[k][1] || 0) * sc : 0;
-        done[k] += v; exp[k] += e; if (u && u[k] && u[k][0] != null) { vr[k] += Math.max(sd, 0.15 * e, 1) ** 2; zd[k] += v; }
-        parts[k].push({ md: game ? 'MD' : x.md, v, u: e, z: q.mdref && q.mdref.z ? q.mdref.z[k] : null }); });
+      MC_KEYS.forEach(([k]) => { const v = q[k] || 0, has = !!(u && u[k] && u[k][0] != null), e = has ? u[k][0] * sc : v, sd = has ? (u[k][1] || 0) * sc : 0;
+        done[k] += v; exp[k] += e; if (has) { vr[k] += Math.max(sd, 0.15 * e, 1) ** 2; zd[k] += v; }
+        parts[k].push({ md: game ? 'MD' : x.md, v, u: has ? e : null, z: has && q.mdref && q.mdref.z ? q.mdref.z[k] : null, what: has ? '' : q.cat === 'r' ? 'rehab' : 'no reference' }); });
     }
     const z = isM ? MC_KEYS.map(([k]) => (vr[k] ? Math.round((zd[k] - exp[k]) / Math.sqrt(vr[k]) * 10) / 10 : null)) : ((X.players || {})[p.id] || {}).mc || [];
     out[p.id] = { done, exp, parts, z, game: (se.top3 || {})[p.id] || null };
@@ -284,7 +287,7 @@ function mcBar(k, j, c, mode) {
   let x = 0;
   const live = c.parts[k].filter((d) => d.v > 0);
   const segs = c.parts[k].map((d) => { if (!(d.v > 0)) return ''; const left = x; x += d.v;
-    return `<i class="${d === live[live.length - 1] ? 'last' : ''}" style="left:${left / scale * 100}%;width:${d.v / scale * 100}%;background:${MC_COL[mzClass(d.z)]}" title="${escapeHtml(d.md || '')}: ${fmtN(d.v)} · his usual ${fmtN(d.u)}${d.z == null ? '' : ' · z ' + fmtSigned(d.z)}"></i>`; }).join('');
+    return `<i class="${d === live[live.length - 1] ? 'last' : ''}" style="left:${left / scale * 100}%;width:${d.v / scale * 100}%;background:${MC_COL[mzClass(d.z)]}" title="${escapeHtml(d.md || '')}: ${fmtN(d.v)}${d.u == null ? ` · ${d.what}: no usual, counted as done = usual (outside the z)` : ` · his usual ${fmtN(d.u)}`}${d.z == null ? '' : ' · z ' + fmtSigned(d.z)}"></i>`; }).join('');
   const tick = exp > 0 ? `<em style="left:${exp / scale * 100}%" title="his usual for these days: ${fmtN(exp)}"></em>` : '';
   if (mode === 'match') {
     if (!g) return `<div class="mcb"><b>${val}</b><div class="mcb-bar">${segs}${tick}</div><small>no match</small></div>`;
@@ -329,7 +332,7 @@ function drawMdz(s) {
       <span class="seg">${MC_MODES.map(([m, l]) => `<button type="button" data-mc="${m}" class="${mode === m ? 'active' : ''}">${l}</button>`).join('')}</span></div></th></tr>` : '';
   mount.innerHTML = `<div class="table-wrap"><table class="dtable compact mz-tab"><thead>${grp}<tr><th data-mz="name" class="${k0 === 'name' ? 'sorted' : ''}">Player</th>${MDZ_METRICS.map(([k, l]) => `<th class="c ${k0 === k ? 'sorted' : ''}" data-mz="${k}">${l}${k0 === k ? ' ↓' : ''}</th>`).join('')}<th class="c">Reference</th>${mc ? MC_KEYS.map(([, l], j) => `<th class="${j ? '' : 'mcb-sep'}">${l}</th>`).join('') : ''}</tr></thead><tbody>
     ${rows.map((p) => `<tr data-id="${p.id}" class="clickable"><td><span class="mz-p">${avatarHtml(p.id, playerName(p.id), 22)}<b>${escapeHtml(playerName(p.id))}</b>${p.cat === 't' || p.cat === 'm' ? '' : `<small>${escapeHtml(String(p.type).toLowerCase())}</small>`}</span></td>${MDZ_METRICS.map(([k]) => cell(p, k)).join('')}<td class="c"><small class="muted">${p.mdref.src === 'own' ? `his ${p.mdref.n}` : 'squad'}${p.mdref.kind === 'comp' ? ' comp.' : ''}</small></td>${mc ? MC_KEYS.map(([k], j) => `<td class="mcb-td${j ? '' : ' mcb-sep'}">${mc.out[p.id] ? mcBar(k, j, mc.out[p.id], mode) : ''}</td>`).join('') : ''}</tr>`).join('')}
-    </tbody></table></div>${mc ? `<p class="note mcb-note"><span class="mcb-key"><i></i><i></i></span>one piece of the bar per day since the last match (${mc.md.map(escapeHtml).join(' · ')}) · <em class="mcb-tick"></em>his usual for those same days · colour of a piece = that day vs his usual for that MD · the number = his total${mode === 'match' ? ' · <u class="mcb-dot"></u>one match of his = the average of his 3 best games' : ''} · hover a piece for the day.</p>` : ''}`;
+    </tbody></table></div>${mc ? `<p class="note mcb-note"><span class="mcb-key"><i></i><i></i></span>one piece of the bar per day since the last match (${mc.md.map(escapeHtml).join(' · ')}) · <em class="mcb-tick"></em>his usual for those same days · colour of a piece = that day vs his usual for that MD · grey = a day with no usual (rehab, B team…): in the bar and in the tick alike, outside the z · the number = his total${mode === 'match' ? ' · <u class="mcb-dot"></u>one match of his = the average of his 3 best games' : ''} · hover a piece for the day.</p>` : ''}`;
   mount.querySelectorAll('th[data-mz]').forEach((th) => th.addEventListener('click', (e) => { e.stopPropagation(); TR.mdzSort = th.dataset.mz; drawMdz(s); }));
   mount.querySelectorAll('[data-mc]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); TR.mcMode = b.dataset.mc; try { localStorage.setItem('mc_mode', TR.mcMode); } catch (err) { /* private mode */ } drawMdz(s); }));
 }
