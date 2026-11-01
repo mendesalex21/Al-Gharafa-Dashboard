@@ -229,20 +229,20 @@ function rpStaffPages(D, S) {
   const C = rpStaffCtx(D, S);
   if (!C) return '';
   const s = D.session, X = C.X;
-  D.fullSession.forEach((r) => { const p = C.px(r.name); r.rpe = p ? p.rpe : null; });
+  D.fullSession.forEach((r) => { const p = C.px(r.name); r.rpe = p ? p.rpe : null; r.rpez = p ? p.rpez ?? null : null; }); // his RPE score and its z vs his usual of that MD
   // his WCS 1′ (best minute, % of his 1-min match worst case) and RHIE (bouts, their rate as a % of his match's) — as the site's table (2026-11-01)
   const W = X.wcs || {}, WR = W.rhie || {};
   D.fullSession.forEach((r) => { const w = (W.players || {})[r.name], h = (WR.players || {})[r.name], m = ((WR.mref || {})[r.name] || {}).p90;
     r.wcs = w && w.max1 && w.max1.td != null ? w.max1.td : null; r.rhieN = h ? h.n : null; r.rhie = h && h.min && m ? Math.round(100 * (h.n / h.min) / (m / 90)) : null; });
-  const withInt = D.fullSession.some((r) => r.wcs != null || r.rhie != null);
+  const withInt = D.fullSession.some((r) => r.wcs != null || r.rhie != null), legOn = withInt || D.fullSession.some((r) => r.rpez != null);
   const title = `${s.id} · ${s.dateLabel}`, short = (iso) => stDay(iso, { day: 'numeric', month: 'short' });
   const meta = [['WEEK', s.week], ['MD', s.md], ['TIME', s.time + "'"], ['N EXERCICE', s.exercise], ['AM/PM', s.ampm]];
   const comp = X.group === 'compensatory', anyComp = Object.values(X.players).some((p) => p.comp);
   const kicker = s.extra ? 'EXTRA SESSION · MATCH DAY · STAFF' : (comp ? 'COMPENSATORY SESSION' : 'FULL SESSION') + ' · STAFF' + (s.part ? ' · ' + s.part.toUpperCase() : '');
   const cycle = (X.cycle || '—').toUpperCase(), pages = [];
   const strip = rsTeamStrip(C, s.md);
-  pages.push(rpHeader(kicker, title, meta) + strip + rpTable(D, D.fullSession, ['time', 'rpe', 'mpm', 'td', 'd15', 'd20', 'vmax', 'pmax', 'days', 'sprints', 'accdec', ...(withInt ? ['rhie', 'wcs'] : [])], {}, RP_TABLE_H - (strip ? 73 : 0) - (withInt ? 18 : 0))
-    + (withInt ? `<div class="rp-legend"><span>RHIE = his bouts · their rate as a % of his match · WCS 1′ = his best minute as a % of his worst match minute (distance) · % of his match:</span>${RP_DVM.map(([bg, fg], i) => `<span style="background:${bg};color:${fg};padding:0 6px;border-radius:4px;font-weight:700">${['< 50', '50–80', '80–100', '100–120', '> 120'][i]}</span>`).join('')}</div>` : ''));
+  pages.push(rpHeader(kicker, title, meta) + strip + rpTable(D, D.fullSession, ['time', 'rpe', 'mpm', 'td', 'd15', 'd20', 'vmax', 'pmax', 'days', 'sprints', 'accdec', ...(withInt ? ['rhie', 'wcs'] : [])], {}, RP_TABLE_H - (strip ? 73 : 0) - (legOn ? 18 : 0))
+    + (legOn ? `<div class="rp-legend"><span>RPE colour = his score vs his usual score of that MD (blue below · green usual · orange / red above)</span>${withInt ? `<span>RHIE = his bouts · their rate as a % of his match · WCS 1′ = his best minute as a % of his worst match minute (distance) · % of his match:</span>${RP_DVM.map(([bg, fg], i) => `<span style="background:${bg};color:${fg};padding:0 6px;border-radius:4px;font-weight:700">${['< 50', '50–80', '80–100', '100–120', '> 120'][i]}</span>`).join('')}` : ''}</div>` : ''));
   const note = comp ? `<div class="rp-legend"><span>Compensatory session (the players who did not play the match) · colour = the player's z vs his usual compensatory session, not vs a usual ${rpEsc(s.md)} · z printed when not usual · grey = individual or rehab session, not compared</span></div>`
     : `<div class="rp-legend"><span>Colour = the player's z vs his usual ${rpEsc(s.md)} (same microcycle type)${anyComp ? ' — compensatory players: vs their usual compensatory session' : ''} · z printed when not usual · grey = individual or rehab session, not compared with his ${rpEsc(s.md)}</span></div>`;
   pages.push(rpHeader(kicker, title, meta) + rsChart(D, C, 'td', 'TOTAL DISTANCE', true) + rsChart(D, C, 'd20', 'DISTANCE >20kmh') + note);

@@ -338,6 +338,10 @@ function svTable(rows, cols, o = {}) {
       const t = k === 'rhie' ? `${r.rhieN} bout${r.rhieN === 1 ? '' : 's'} · ${v}% of his match rate` : `best minute ${v}% of his 1-min match worst case (distance) · > 20 km/h actions ${r.wcsHi == null ? '—' : r.wcsHi + '%'}`;
       return `<div class="rp-c rp-chip" title="${t}"><span class="rp-v dvm-${svDvm(v)}">${k === 'rhie' ? `${r.rhieN} · ${v}%` : `${v}%`}</span></div>`;
     }
+    if (o.zd && k === 'rpe' && !isTeam && r.rpez != null) { // the RPE score vs his usual score of that MD (2026-11-01), the Sprints colours
+      const [bg, fg] = SV_ZCHIP[mzClass(r.rpez)];
+      return `<div class="rp-c rp-chip" title="RPE ${fmt(k, v)} · his usual ${r.rpeu != null ? r.rpeu.toFixed(1) : '—'} · z ${fmtSigned(r.rpez)}"><span class="rp-v" style="background:${bg};color:${fg}">${fmt(k, v)}</span></div>`;
+    }
     if (o.zd && k === 'sprints') {
       const q = (r.zu || {})[k], [bg, fg] = SV_ZCHIP[q ? mzClass(q[2]) : 'na'], val = isTeam ? fmtN(v, 1) : fmt(k, v);
       return `<div class="rp-c rp-chip" title="${val} · ${isTeam ? 'the team\'s' : 'his'} usual ${q && q[0] != null ? fmtN(q[0], 1) : '—'}${q && q[2] != null ? ` · z ${fmtSigned(q[2])}` : ''}"><span class="rp-v" style="background:${bg};color:${fg}">${val}</span></div>`;
@@ -379,6 +383,7 @@ function svTableHtml(s) {
   const rows = s.players.filter((p) => p.min > 0).map((p) => ({ id: p.id, type: p.type, pro: svPro(s, p.cat), ret: s.kind === 'match' ? null : p.ret, time: p.min, rpe: p.rpe, mpm: p.mpm, td: p.td, d15: p.d15, d20: p.hit, d25: p.spr,
     vmax: p.vmax, pmax: p.vmax_pct != null ? p.vmax_pct / 100 : null, rec: !!p.rec, days: p.days_hsv, sprints: p.spr_n, hacc: p.acc, hdec: p.dec, accdec: p.acc_dec,
     zu: p.mdref ? Object.fromEntries(Object.entries(SV_ZKEY).map(([c, k]) => [c, [svUsual(p, k), svSd(p, k), svZ(p, k)]])) : null,
+    rpez: p.mdref && p.mdref.z ? p.mdref.z.rpe ?? null : null, rpeu: p.mdref && p.mdref.mean ? p.mdref.mean.rpe ?? null : null,
     rhie: p.rhie ? p.rhie[1] : null, rhieN: p.rhie ? p.rhie[0] : null, wcs: p.wcs ? p.wcs[0] : null, wcsHi: p.wcs ? p.wcs[1] : null }));
   const core = new Set(rtCore(s).map((p) => p.id)), R = s.team_ref || {};
   const team = svAvgRow(rows, SV_COLS, (r) => core.has(r.id));
@@ -387,7 +392,7 @@ function svTableHtml(s) {
   return svTable(rows, SV_COLS, { sort: SV.sort, team, full, zd: true })
     + `<div class="rt-leg"><span>vs his usual ${s.kind === 'match' ? 'match (at his minutes)' : escapeHtml(s.md || 'for this day')} (z):</span>${[['vlow', 'well below ≤ −2'], ['low', 'below'], ['ok', 'usual'], ['up', 'slightly above'], ['vup', 'well above ≥ 2'], ['na', 'no usual']].map(([c, l]) => `<span><i class="sv-lg-b" style="background:${MC_COL[c]}"></i>${l}</span>`).join('')}<span><i class="sv-lg-band"></i>his usual ± 1 SD · <em class="mcb-tick"></em>his usual</span>`
     + `<span>RHIE = his bouts · their rate as a % of his match · WCS 1′ = his best minute as a % of his worst match minute (distance) · % of his match:</span><span class="dvm-k dvm-c0">&lt; 50</span><span class="dvm-k dvm-c1">50–80</span><span class="dvm-k dvm-c2">80–100</span><span class="dvm-k dvm-c3">100–120</span><span class="dvm-k dvm-c4">&gt; 120</span>`
-    + `<span><b class="rt-or">Orange time</b> = partial session</span><span>% Max Speed green = ≥ 90 % of his max speed · <i class="rp-rec">★</i> his fastest of the last 12 months</span><span>Days = since his last run ≥ 90 % of his max speed</span><span>Sprints: the Days colours by z (green usual · orange above · red well above · blue below)</span><span>Team avg = ${svGroupTxt(s)} only · against the team's usual for the day</span></div>`;
+    + `<span><b class="rt-or">Orange time</b> = partial session</span><span>% Max Speed green = ≥ 90 % of his max speed · <i class="rp-rec">★</i> his fastest of the last 12 months</span><span>Days = since his last run ≥ 90 % of his max speed</span><span>RPE and Sprints: the Days colours by z vs his usual for the day (green usual · orange above · red well above · blue below)</span><span>Team avg = ${svGroupTxt(s)} only · against the team's usual for the day</span></div>`;
 }
 const svDrillName = (d) => String(d.name || 'Drill').replace(/^Game_/, '').replace(/(\d)(st|nd|rd|th)Half/i, '$1$2 half');
 function svDrillsHtml(s) {

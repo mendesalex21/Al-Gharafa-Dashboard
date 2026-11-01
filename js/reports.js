@@ -24,6 +24,7 @@ const RP_JS = ['https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2ca
 const rpLerp = (a, b, t) => a.map((x, i) => Math.round(x + (b[i] - x) * t));
 // Days since the last exposure ≥ 90 % of max speed (thresholds from the handoff — to confirm with the staff)
 const RP_DVM = [['#f2f5fa', '#6b7a90'], ['#dde9f8', '#2d5a92'], ['#b4d0f2', '#173f73'], ['#5b9be3', '#fff'], ['#1d5fae', '#fff']]; // % of his match (RHIE, WCS)
+const RP_ZCHIP = [['#c9dcf5', '#123f7a'], ['#e3eefb', '#2d5a92'], ['#d5f2d5', '#1c6b1c'], ['#fbd9c6', '#8a3b12'], ['#f6c4c4', '#9b1c1c']]; // z: well below → well above (the Days colours)
 const RP_GREEN = ['#d5f2d5', '#1c6b1c']; // % max speed ≥ 90 % (the "Days" green)
 const rpRec = (r) => (r.rec ? '<i class="rp-rec" title="His fastest of the last 12 months">★</i>' : ''); // a new max-speed record
 const rpDaysColor = (d) => d == null ? ['#f0f1f5', '#6a6f80'] : d <= 5 ? ['#d5f2d5', '#1c6b1c'] : d <= 10 ? ['#fbd9c6', '#8a3b12'] : ['#f6c4c4', '#9b1c1c'];
@@ -136,6 +137,10 @@ function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H, opts = {}) {
       : `<div class="rp-c rp-chip"><span class="rp-v" style="background:rgb(${rpLerp([235, 244, 253], [110, 175, 240], t01(k, v))})">${rpFmt(k, v)}</span></div>`;
     if (k === 'sprints') { const [bg, fg] = rpSprintColor(t01(k, v)); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${rpFmt(k, v)}</span></div>`; }
     if (k === 'days') { const [bg, fg] = rpDaysColor(v); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${rpFmt(k, v)}</span></div>`; }
+    if (k === 'rpe' && r.rpez != null) { // the staff report: the RPE score vs his usual score of that MD (2026-11-01), the site's colours
+      const z = r.rpez, [bg, fg] = RP_ZCHIP[z <= -2 ? 0 : z <= -1 ? 1 : z < 1 ? 2 : z < 2 ? 3 : 4];
+      return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${rpFmt(k, v)}</span></div>`;
+    }
     if (k === 'rhie' || k === 'wcs') { // the staff report (2026-11-01, as the site): % of his match, the drills table's colours
       if (v == null) return '<div class="rp-c rp-txt"><span class="rp-v">–</span></div>';
       const [bg, fg] = RP_DVM[v < 50 ? 0 : v < 80 ? 1 : v < 100 ? 2 : v < 120 ? 3 : 4];
