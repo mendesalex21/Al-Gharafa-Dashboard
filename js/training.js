@@ -223,7 +223,7 @@ function drawSessions(opts) {
       <p class="note" id="se-mdz-note"></p>
       <div id="se-mdz"></div>
     </section>
-    ${s.drills.length ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">${s.kind === 'match' ? 'Drills' : 'Drills vs the match'}</h2><span class="panel-note">${s.kind === 'match' ? 'team average per drill · "vs match" = per-minute intensity as % of the players’ match intensity · tap a drill for players' : 'median of the players · each one vs his own match · the players of a drill: Individual training › Drills above'}</span></div><div class="drills-wrap" id="se-drills"></div></section>` : ''}`;
+    ${s.drills.length ? `<section class="panel"><div class="panel-head"><h2 class="panel-title small">${s.kind === 'match' ? 'Halves vs the match' : 'Drills vs the match'}</h2><span class="panel-note">median of the players · each one vs his own match · the players of a ${s.kind === 'match' ? 'half: Individual match › Halves' : 'drill: Individual training › Drills'} above</span></div><div class="drills-wrap" id="se-drills"></div></section>` : ''}`;
 
   drawMdz(s);
   const corr = body.querySelector('[data-correct]');
@@ -285,9 +285,9 @@ function mcMicro(s) {
   return { md: days.map((x) => (x.kind === 'match' ? 'MD' : x.md)), left: left.map((d) => d.md), out };
 }
 /** The days left until the next match (the staff report's plan of that day: MD-k tags, the staff's MD of a day first),
- * without the team days off (Session Plan or Calendar). His account only for now (his mockup B, 2026-11-01). */
+ * without the team days off (Session Plan or Calendar). His mockup B, 2026-11-01; released to the staff the same day. */
 function mcLeft(s, X) {
-  if (!document.documentElement.classList.contains('is-admin') || s.kind === 'match' || !X.plan) return [];
+  if (s.kind === 'match' || !X.plan) return [];
   const S = (typeof SPL !== 'undefined' && SPL.saved) || cacheGet('plans'), P = (S && S.plans) || {};
   const off = (d) => (P[d] && P[d].off) || (typeof DAY_OFF !== 'undefined' && DAY_OFF[d]);
   return X.plan.filter((d) => d.date > s.date && !off(d.date)).map((d) => ({ date: d.date, md: (typeof DAY_MD !== 'undefined' && DAY_MD[d.date]) || d.md }));
@@ -358,20 +358,8 @@ function playerName(id) {
   return r ? r.name : id;
 }
 
-function drawDrills(s) {
-  if (s.kind !== 'match') { document.getElementById('se-drills').innerHTML = svDrillsVsMatch(s.drills, new Set(s.drills.map((x) => x.ampm)).size > 1); return; } // training: all drills vs the match (his mockup A)
-  const totalTd = s.drills.reduce((a, dr) => a + (dr.team.td || 0), 0) || 1;
-  const vs = (v) => (v == null ? '<span class="muted">—</span>' : `<span class="${v > 110 ? 'chip-v orange' : 'num'}">${v}%</span>`);
-  document.getElementById('se-drills').innerHTML = `
-    <div class="drill-row drill-head"><span>Drill</span><span>Min</span><span>n</span><span>TD</span><span>m/min</span><span>>15</span><span>>20</span><span>>25</span><span>Acc+Dec</span><span>m/min vs match</span><span>>20 vs match</span><span>Acc+Dec vs match</span><span>Share of TD</span></div>
-    ${s.drills.map((dr) => `<details class="drill"><summary class="drill-row">
-      <span class="dname">${escapeHtml(dr.name)}${dr.ampm && dr.ampm !== 'PM' && dr.ampm !== 'nan' && dr.ampm !== '0' ? ` <small class="muted">${escapeHtml(dr.ampm)}</small>` : ''}</span>
-      <span>${fmtN(dr.min)}</span><span>${dr.n}</span><span>${fmtN(dr.team.td)}</span><span>${fmtN(dr.team.mpm)}</span><span>${fmtN(dr.team.d15)}</span><span>${fmtN(dr.team.hit)}</span><span>${fmtN(dr.team.spr)}</span><span>${fmtN(dr.team.acc_dec)}</span>
-      <span>${vs(dr.vs_match && dr.vs_match.td)}</span><span>${vs(dr.vs_match && dr.vs_match.hit)}</span><span>${vs(dr.vs_match && dr.vs_match.acc_dec)}</span>
-      <span class="share"><i style="width:${Math.round((dr.team.td || 0) / totalTd * 100)}%"></i><small>${Math.round((dr.team.td || 0) / totalTd * 100)}%</small></span></summary>
-      <table class="dtable compact"><thead><tr><th>Player</th><th class="c">Min</th><th class="c">TD</th><th class="c">m/min</th><th class="c">>15</th><th class="c">>20</th><th class="c">>25</th><th class="c">Sprints</th><th class="c">Acc+Dec</th><th class="c">Vmax</th></tr></thead><tbody>
-      ${Object.entries(dr.players).sort((a, b) => (b[1][1] || 0) - (a[1][1] || 0)).map(([id, v]) => `<tr><td>${escapeHtml(playerName(id))}</td><td class="c">${fmtN(v[0])}</td><td class="c">${fmtN(v[1])}</td><td class="c">${v[0] ? fmtN(v[1] / v[0]) : '—'}</td><td class="c">${fmtN(v[6])}</td><td class="c">${fmtN(v[2])}</td><td class="c">${fmtN(v[3])}</td><td class="c">${fmtN(v[7])}</td><td class="c">${fmtN(v[4])}</td><td class="c">${fmtN(v[5], 1)}</td></tr>`).join('')}
-      </tbody></table></details>`).join('')}`;
+function drawDrills(s) {  // training and match days alike: each drill (a match: each half) vs the match (his mockup A; match days his ask, 2026-11-01)
+  document.getElementById('se-drills').innerHTML = svDrillsVsMatch(s.drills, new Set(s.drills.map((x) => x.ampm)).size > 1);
 }
 
 // ------------------------------------------------------------------ Objectives
