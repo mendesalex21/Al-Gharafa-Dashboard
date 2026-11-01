@@ -567,6 +567,8 @@ main.page { padding-top: 40px; }
 .mcb-bar i:first-child { border-radius: 4px 0 0 4px; } .mcb-bar i.last { border-radius: 0 4px 4px 0; box-shadow: none; } .mcb-bar i:first-child.last { border-radius: 4px; }
 .mcb-bar em { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
 .mcb-bar u { position: absolute; top: -4px; bottom: -4px; width: 0; border-left: 1.5px dotted var(--rp-navy, #16269e); }
+.mcb-bar s { position: absolute; top: 0; bottom: 0; border: 1.5px dashed var(--ink-2); border-left: 0; opacity: .5; } /* the days still to come (his mockup B, 2026-11-01) */
+.mcb-ghost { display: inline-block; width: 18px; height: 10px; border: 1.5px dashed var(--ink-2); opacity: .5; vertical-align: middle; margin: 0 5px 0 2px; } .mcb-come { font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--ink-2); }
 .mcb-td { min-width: 168px; } .mcb-sep { border-left: 2px solid var(--hairline) !important; }
 .mcb-grp th { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #16269e; border-bottom: 0 !important; padding-bottom: 2px !important; cursor: default; }
 .mcb-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; } .mcb-top .seg { text-transform: none; letter-spacing: 0; } .mcb-top .seg button { font-size: 12px; padding: 4px 11px; }
