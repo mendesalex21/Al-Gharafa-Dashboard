@@ -293,8 +293,14 @@ function svAttentionHtml(s) {
 const SV_COLS = ['time', 'rpe', 'mpm', 'td', 'd15', 'd20', 'd25', 'vmax', 'pmax', 'days', 'sprints', 'hacc', 'hdec', 'accdec'];
 const SV_DCOLS = ['time', 'mpm', 'td', 'd15', 'd20', 'd25', 'vmax', 'sprints', 'hacc', 'hdec', 'accdec'];
 const SV_W = { td: 'minmax(0,1.55fr)', d15: 'minmax(0,1.35fr)', d20: 'minmax(0,0.95fr)', d25: 'minmax(0,0.8fr)', vmax: 'minmax(0,0.9fr)', accdec: 'minmax(0,1fr)',
-  hacc: '50px', hdec: '50px', time: '40px', rpe: '38px', mpm: '50px', pmax: '56px', days: '46px', sprints: '54px' }; // site only: the PDF keeps RP_WIDTHS
-const svLabel = (k) => ({ hacc: 'HIT Acc', hdec: 'HIT Dec' })[k] || RP_LABELS[k]; // reports.js loads after this file
+  hacc: '50px', hdec: '50px', time: '40px', rpe: '38px', mpm: '50px', pmax: '56px', days: '46px', sprints: '54px', rhie: '74px', wcs: '58px' }; // site only: the PDF keeps RP_WIDTHS
+const svLabel = (k) => ({ hacc: 'HIT Acc', hdec: 'HIT Dec', rhie: 'RHIE', wcs: 'WCS 1′' })[k] || RP_LABELS[k]; // reports.js loads after this file
+/** His mockup D (2026-11-01, his account first): each bar in the colour of its z vs his usual for the day, a grey band
+ * = his usual ± 1 SD, a tick = his usual; Acc + Dec only (no HIT Acc / Dec), then his RHIE and WCS. */
+const SV_COLS_D = ['time', 'rpe', 'mpm', 'td', 'd15', 'd20', 'd25', 'vmax', 'pmax', 'days', 'sprints', 'accdec', 'rhie', 'wcs'];
+const SV_ZKEY = { td: 'td', d15: 'd15', d20: 'hit', d25: 'spr', sprints: 'spr_n', accdec: 'acc_dec' }; // table column → mdref metric
+const svZD = () => document.documentElement.classList.contains('is-admin');
+const svDvm = (v) => (v == null ? 'na' : v < 50 ? 'c0' : v < 80 ? 'c1' : v < 100 ? 'c2' : v < 120 ? 'c3' : 'c4'); // the drills table's scale
 /** Players the team average is made of — same rule as the build: the players of the whole game (matches), the
  * compensatory players (a compensatory session: the others recovered without GPS), else the full session. */
 function rtCore(s) {
@@ -312,12 +318,30 @@ function svTable(rows, cols, o = {}) {
   const span = (k) => (k === 'mpm' ? ref : rows); // m/min colours: the players of the team session only (individual / rehab grey)
   const lo = (k) => Math.min(...span(k).map((r) => r[k] ?? 0)), hi = (k) => Math.max(...span(k).map((r) => r[k] ?? 0));
   const t01 = (k, v) => (hi(k) > lo(k) ? Math.max(0, Math.min(1, ((v ?? 0) - lo(k)) / (hi(k) - lo(k)))) : 0);
+  const zMax = (k) => Math.max(scaleMax(k), ...rows.map((r) => ((r.zu || {})[k] || [])[0] || 0)) * 1.08; // D: the usual ticks inside the bar
   const tpl = '170px ' + cols.map((k) => SV_W[k] || '44px').join(' ');
   const fmt = (k, v) => (k === 'rpe' && v != null && !Number.isInteger(v) ? v.toFixed(1) : rpFmt(k, v));
   const chip = (bg, v, fg = '') => `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg}${fg ? `;color:${fg}` : ''}">${v}</span></div>`;
   const cell = (r, k, isTeam) => {
     const v = r[k];
     if (v == null) return '<div class="rp-c rp-txt"><span class="rp-v sv-na">–</span></div>';
+    if (o.zd && k !== 'vmax' && SV_ZKEY[k] && RP_BARS.includes(k)) { // D: colour = z, band = usual ± 1 SD, tick = usual
+      const q = isTeam ? null : (r.zu || {})[k], m = zMax(k), pc = (x) => Math.max(0, Math.min(100, x / m * 100)).toFixed(1) + '%';
+      const col = isTeam || !q ? '#c4c7cf' : MC_COL[mzClass(q[2])];
+      const band = q && q[0] != null && q[1] ? `<b class="sv-band" style="left:${pc(Math.max(0, q[0] - q[1]))};width:${(Math.max(0, Math.min(100, (q[0] + q[1]) / m * 100)) - Math.max(0, (q[0] - q[1]) / m * 100)).toFixed(1)}%"></b>` : '';
+      const tick = q && q[0] != null ? `<em class="sv-tick" style="left:${pc(q[0])}"></em>` : '';
+      const tt = isTeam ? '' : ` title="${fmt(k, v)} · his usual ${q && q[0] != null ? fmt(k, Math.round(q[0])) : '— (no usual)'}${q && q[1] ? ` ± ${fmt(k, Math.round(q[1]))}` : ''}${q && q[2] != null ? ` · z ${fmtSigned(q[2])}` : ''}"`;
+      return `<div class="rp-c"${tt}><span class="rp-v">${fmt(k, isTeam ? Math.round(v) : v)}</span><div class="rp-bar sv-zb">${band}<i style="width:${pc(v)};background:${col}"></i>${tick}</div></div>`;
+    }
+    if (o.zd && (k === 'rhie' || k === 'wcs')) {
+      if (isTeam) return `<div class="rp-c rp-txt"><span class="rp-v">${Math.round(v)}%</span></div>`;
+      const t = k === 'rhie' ? `${r.rhieN} bout${r.rhieN === 1 ? '' : 's'} · ${v}% of his match rate` : `best minute ${v}% of his 1-min match worst case (distance) · > 20 km/h actions ${r.wcsHi == null ? '—' : r.wcsHi + '%'}`;
+      return `<div class="rp-c rp-chip" title="${t}"><span class="rp-v dvm-${svDvm(v)}">${k === 'rhie' ? `${r.rhieN} · ${v}%` : `${v}%`}</span></div>`;
+    }
+    if (o.zd && k === 'sprints' && !isTeam) {
+      const q = (r.zu || {})[k], c = q ? mzClass(q[2]) : 'na';
+      return `<div class="rp-c rp-chip" title="${fmt(k, v)} · his usual ${q && q[0] != null ? fmtN(q[0], 1) : '—'}${q && q[2] != null ? ` · z ${fmtSigned(q[2])}` : ''}">${`<span class="rp-v" style="background:${MC_COL[c]}${c === 'vlow' || c === 'vup' ? ';color:#fff' : ''}">${fmt(k, v)}</span>`}</div>`;
+    }
     if (RP_BARS.includes(k)) {
       const m = scaleMax(k), trk = rpPct(teamMax(k), m), col = isTeam ? '#b8bcc8' : RP_COLORS[k];
       if (k === 'vmax') return `<div class="rp-c"><div class="rp-bar rp-mid"><i class="rp-trk" style="width:${trk}"></i><i style="width:${rpPct(v, m)};background:${col}"></i><em>${fmt(k, v)}</em></div></div>`;
@@ -353,10 +377,18 @@ function svAvgRow(rows, cols, core) {
 function svTableHtml(s) {
   const full = s.minutes || Math.max(0, ...s.players.map((p) => p.min || 0));
   const rows = s.players.filter((p) => p.min > 0).map((p) => ({ id: p.id, type: p.type, pro: svPro(s, p.cat), ret: s.kind === 'match' ? null : p.ret, time: p.min, rpe: p.rpe, mpm: p.mpm, td: p.td, d15: p.d15, d20: p.hit, d25: p.spr,
-    vmax: p.vmax, pmax: p.vmax_pct != null ? p.vmax_pct / 100 : null, rec: !!p.rec, days: p.days_hsv, sprints: p.spr_n, hacc: p.acc, hdec: p.dec, accdec: p.acc_dec }));
-  const core = new Set(rtCore(s).map((p) => p.id));
-  const team = svAvgRow(rows, SV_COLS, (r) => core.has(r.id));
+    vmax: p.vmax, pmax: p.vmax_pct != null ? p.vmax_pct / 100 : null, rec: !!p.rec, days: p.days_hsv, sprints: p.spr_n, hacc: p.acc, hdec: p.dec, accdec: p.acc_dec,
+    zu: p.mdref ? Object.fromEntries(Object.entries(SV_ZKEY).map(([c, k]) => [c, [svUsual(p, k), svSd(p, k), svZ(p, k)]])) : null,
+    rhie: p.rhie ? p.rhie[1] : null, rhieN: p.rhie ? p.rhie[0] : null, wcs: p.wcs ? p.wcs[0] : null, wcsHi: p.wcs ? p.wcs[1] : null }));
+  const core = new Set(rtCore(s).map((p) => p.id)), zd = svZD(), cols = zd ? SV_COLS_D : SV_COLS;
+  const team = svAvgRow(rows, cols, (r) => core.has(r.id));
   team.time = s.minutes;
+  if (zd) {
+    return svTable(rows, cols, { sort: SV.sort, team, full, zd })
+      + `<div class="rt-leg"><span>vs his usual ${s.kind === 'match' ? 'match (at his minutes)' : escapeHtml(s.md || 'for this day')} (z):</span>${[['vlow', 'well below ≤ −2'], ['low', 'below'], ['ok', 'usual'], ['up', 'slightly above'], ['vup', 'well above ≥ 2'], ['na', 'no usual']].map(([c, l]) => `<span><i class="sv-lg-b" style="background:${MC_COL[c]}"></i>${l}</span>`).join('')}<span><i class="sv-lg-band"></i>his usual ± 1 SD · <em class="mcb-tick"></em>his usual</span>`
+      + `<span>RHIE = his bouts · their rate as a % of his match · WCS 1′ = his best minute as a % of his worst match minute (distance) · % of his match:</span><span class="dvm-k dvm-c0">&lt; 50</span><span class="dvm-k dvm-c1">50–80</span><span class="dvm-k dvm-c2">80–100</span><span class="dvm-k dvm-c3">100–120</span><span class="dvm-k dvm-c4">&gt; 120</span>`
+      + `<span><b class="rt-or">Orange time</b> = partial session</span><span>% Max Speed green = ≥ 90 % of his max speed · <i class="rp-rec">★</i> his fastest of the last 12 months</span><span>Days = since his last run ≥ 90 % of his max speed</span><span>Team avg = ${svGroupTxt(s)} only</span></div>`;
+  }
   return svTable(rows, SV_COLS, { sort: SV.sort, team, full })
     + `<div class="rt-leg"><span><i class="sv-lg-b" style="background:#6fb0ee"></i>player value</span><span><i class="sv-lg-b sv-lg-t"></i>team max (players of the ${s.group === 'compensatory' ? 'compensatory session' : 'team session'})</span><span><b class="rt-or">Orange time</b> = partial session</span><span>HIT Acc / Dec: lighter → darker = fewer → more</span><span>% Max Speed green = ≥ 90 % of his max speed · <i class="rp-rec">★</i> his fastest of the last 12 months</span><span>Days = since his last run ≥ 90 % of his max speed</span><span>Team avg = ${svGroupTxt(s)} only${s.kind === 'match' ? '' : ' · <i class="sv-ind sv-ret">return k/7</i> back from injury: not in it for 7 days'}</span></div>`;
 }
