@@ -129,7 +129,7 @@ function svWellPlan(p, mc) {
   return { rows };
 }
 const SV_MCG = [['td', 'Total distance'], ['spd', 'Distance', [['d15', '> 15'], ['hit', '> 20'], ['spr', '> 25']]], ['acc_dec', 'Acc + Dec'], ['spr_n', 'Sprints'], ['int', 'Internal load', [['rpe', 'RPE'], ['srpe', 'sRPE']]], ['well', 'Wellness · morning']];
-/** The five charts of the player sheet: distance, high-speed (> 15 / 20 / 25), Acc + Dec, sprints, RPE / sRPE. */
+/** The six charts of the player sheet (2026-11-02): distance, high-speed (> 15 / 20 / 25), Acc + Dec, sprints, RPE / sRPE, wellness. */
 function svMcGrid(plan, p, mc, ins, leg) {
   if (!SV.mcs) SV.mcs = { spd: 'hit', int: 'rpe' };
   const rpe = svRpePlan(p, mc), well = svWellPlan(p, mc);
@@ -309,8 +309,8 @@ function svAttentionHtml(s) {
     .map((a) => (a.well ? { p: a.p, v: `${a.w} %`, t: a.well, c: 'red' } : { p: a.p, v: `${a.dr.prev} → ${a.dr.now} %`, t: a.wdrop, c: 'orange' }));
   const big = at.filter((a) => a.big || a.week).map((a) => { const x = a.bigs.length ? a.bigs[0] : a.wk[0]; return { p: a.p, v: `${a.bigs.length ? 'today' : 'week'} ${SV_BIGS[x.k] || x.k} z ${fmtSigned(x.z)}`, t: [a.big, a.week].filter(Boolean).join(' '), c: 'orange' }; });
   // felt harder than the load: his RPE z ≥ +1 while distance and > 20 km/h are at or below his usual (a classic early
-  // sign of fatigue, illness or poor recovery — his ask, 2026-11-02, his account first)
-  const rpeHi = !document.documentElement.classList.contains('is-admin') ? [] : svFlat(s).filter((p) => {
+  // sign of fatigue, illness or poor recovery — his ask, 2026-11-02, released the same day)
+  const rpeHi = svFlat(s).filter((p) => {
     const zr = svZ(p, 'rpe'), zt = svZ(p, 'td'), zh = svZ(p, 'hit');
     return zr != null && zr >= 1 && zt != null && zt <= 0 && zh != null && zh <= 0 && !((s.kind === 'match' || p.cat === 'b') && (p.min || 0) < 75);
   }).sort((a, b) => svZ(b, 'rpe') - svZ(a, 'rpe')).map((p) => ({ p, v: `RPE ${fmtN(p.rpe, 1)} · usual ${fmtN(p.mdref.mean.rpe, 1)}`,
@@ -629,13 +629,10 @@ function svSheetHtml(s, p, nav) {
       <thead><tr class="grp"><th></th><th colspan="3">Today vs his usual ${game ? 'match' : comp ? 'compensatory session' : s.md || ''} <small>${refTxt}</small></th><th colspan="3" class="sep">${cycTxt}</th><th colspan="2" class="sep">Today vs</th></tr>
         <tr><th>Metric</th><th>blue · green usual · orange · red &nbsp;● today &nbsp;| usual</th><th class="r">today / usual</th><th class="c">z</th><th class="sep">${prep ? 'done · | his usual' : 'done · to do · target'}</th><th class="r">${prep ? 'done / usual' : 'done / target'}</th><th class="c">status</th><th class="r sep">team</th><th class="r">match</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-    ${plan && document.documentElement.classList.contains('is-admin') ? svMcGrid(plan, p, mc, `<div class="sv-ins">${ins.map((x) => `<div class="sv-in ${x.lv}"><i>${x.i}</i><span>${x.t}</span></div>`).join('')}</div>`,
+    ${plan ? svMcGrid(plan, p, mc, `<div class="sv-ins">${ins.map((x) => `<div class="sv-in ${x.lv}"><i>${x.i}</i><span>${x.t}</span></div>`).join('')}</div>`,
       prep ? '<div class="sv-leg"><span><i class="lg-done"></i>done, MD-k → MD-1</span><span><i class="lg-tgt"></i>his usual for these days, added up</span></div>'
         : '<div class="sv-leg"><span><i class="lg-done"></i>done</span><span><i class="lg-todo"></i>his objective for the days left</span><span><i class="lg-exp"></i>his usual by today</span><span><i class="lg-tgt"></i>microcycle target</span></div>')
-    : plan ? `<div class="sv-bottom"><div class="sv-ins">${ins.map((x) => `<div class="sv-in ${x.lv}"><i>${x.i}</i><span>${x.t}</span></div>`).join('')}
-        ${prep ? '<div class="sv-leg"><span><i class="lg-done"></i>done, MD-k → MD-1</span><span><i class="lg-tgt"></i>his usual for these days, added up</span></div></div>'
-          : '<div class="sv-leg"><span><i class="lg-done"></i>done</span><span><i class="lg-todo"></i>his objective for the days left</span><span><i class="lg-exp"></i>his usual by today</span><span><i class="lg-tgt"></i>microcycle target</span><span>target = his own usual for each day, added up · re-planned after every session</span></div></div>'}
-      <div class="sv-chart"><div class="sv-chart-h"><b>${SV_LBL[SV.mc]}</b> day by day <small>· click a line above to change · dark line = his usual for that day${prep ? '' : ' · dashed = his objective'}</small></div>${svMcChart(plan[SV.mc], SV.mc)}</div></div>` : ''}`;
+    : ''}`;
 }
 function svOpen(s, id) {
   const list = svFlat(s), i = list.findIndex((x) => x.id === id);
