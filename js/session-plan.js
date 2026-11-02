@@ -655,13 +655,14 @@ function splPName(id, k) { return (SPL.lib.players.find((q) => q.id === id) || {
 /** Each player row: the Excel's values (before any correction), the values shown (the correction, else the Excel's). */
 function splCorrRows(date) {
   const r = SPL.lib.recent[date], orig = r.orig || {}, ch = splCorrDraft(date);
-  return r.rows.map(([k, id, pos, type, time, rpe, td, hit, nd, drpe, rehab, indiv, vmax]) => {
-    const xl = { type, time, rpe, vmax: vmax ?? null, ...(orig[k] || {}) }, c = ch[k] || {}, val = (f) => (f in c ? c[f] : xl[f]);
-    return { k, id, pos, td, hit, nd, drpe, rehab, indiv, xl, now: { type: val('type'), time: val('time'), rpe: val('rpe'), vmax: val('vmax') }, chg: (f) => f in c && c[f] !== xl[f] };
+  return r.rows.map(([k, id, pos, type, time, rpe, td, hit, nd, drpe, rehab, indiv, vmax, d15, spr, spr_n, acc, dec, hit_n]) => {
+    const xl = { type, time, rpe, vmax: vmax ?? null, td, hit, d15: d15 ?? null, spr: spr ?? null, spr_n: spr_n ?? null, acc: acc ?? null, dec: dec ?? null, hit_n: hit_n ?? null, inv: false, ...(orig[k] || {}) };
+    const c = ch[k] || {}, val = (f) => (f in c ? c[f] : xl[f]);
+    return { k, id, pos, td, hit, nd, drpe, rehab, indiv, xl, now: Object.fromEntries(SPL_CF_ALL.map((f) => [f, val(f)])), chg: (f) => f in c && c[f] !== xl[f] };
   });
 }
 const splF0 = (v) => (v == null || !Number.isFinite(v) ? '—' : Math.round(v).toLocaleString('en-GB'));
-const splMpm = (x, t) => (x.td != null && t ? x.td / t : null), splCarga = (rp, t) => (rp != null && t != null ? rp * t : null);
+const splMpm = (x, t, cur) => { const td = cur && x.now && x.now.td != null ? x.now.td : x.xl ? x.xl.td : x.td; return td != null && t ? td / t : null; }, splCarga = (rp, t) => (rp != null && t != null ? rp * t : null);
 function splCorrDrills(x) {
   const s = (n) => `${n} drill row${n > 1 ? 's' : ''}`;
   if (!x.nd) return '<span class="dim">—</span>';
@@ -681,13 +682,20 @@ function splCorrSummary(rows) {
     if (x.chg('rpe')) p.push(`RPE ${x.xl.rpe ?? '—'} → ${x.now.rpe ?? '—'}`);
     if (x.chg('time') || x.chg('rpe')) p.push(`Carga RPE ${splF0(splCarga(x.xl.rpe, x.xl.time))} → ${splF0(splCarga(x.now.rpe, x.now.time))}`);
     if (x.chg('vmax')) p.push(`max speed ${x.xl.vmax ?? '—'} → ${x.now.vmax ?? '—'} km/h (his drills capped at it)`);
+    SPL_GPS.filter(([f]) => f !== 'vmax' && x.chg(f)).forEach(([f, l]) => p.push(`${l} ${splF0(x.xl[f])} → ${splF0(x.now[f])}`));
+    if (x.chg('inv')) p.push(`<b>GPS invalid</b>: his GPS values = the average of his position (${escapeHtml(x.pos || '—')}) in this session, × his minutes · out of the references, team averages, z and WCS / RHIE · his drill rows emptied`);
     if (x.rehab && x.xl.type === 'Rehab' && x.now.type !== 'Rehab') p.push('his drill “Rehab” becomes “INDIVIDUAL”');
     if (x.indiv && x.xl.type !== 'Rehab' && x.now.type === 'Rehab') p.push('his drill “INDIVIDUAL” becomes “Rehab”');
     if (x.chg('rpe') && x.drpe) p.push(`RPE ${x.now.rpe ?? '—'} on his ${x.drpe} drill row${x.drpe > 1 ? 's' : ''} too`);
     return `<li><b>${escapeHtml(splPName(x.id, x.k))}</b> · ${p.join(' · ')}</li>`;
   }).join('')}</ul>`;
 }
-const SPL_CF = ['type', 'time', 'rpe', 'vmax'], SPL_CMAX = { time: 300, rpe: 10, vmax: 45 }; // the cells a correction can change
+// the cells a correction can change: status, time, RPE, max speed — and on his account first (2026-11-02) every GPS column and "GPS invalid"
+const SPL_GPS = [['td', 'DT'], ['d15', '> 15'], ['hit', '> 20'], ['spr', '> 25'], ['spr_n', 'Sprints'], ['acc', 'HIT Acc'], ['dec', 'HIT Dec'], ['vmax', 'Max speed']];
+const SPL_CF_ALL = ['type', 'time', 'rpe', 'vmax', 'td', 'd15', 'hit', 'spr', 'spr_n', 'acc', 'dec', 'hit_n', 'inv'];
+const SPL_CMAX = { time: 300, rpe: 10, vmax: 45, td: 20000, d15: 8000, hit: 4000, hit_n: 400, spr: 2000, spr_n: 150, acc: 400, dec: 400 };
+const splAllCols = () => document.documentElement.classList.contains('is-admin');
+const SPL_CF = SPL_CF_ALL; // the draft keeps every field; the table shows the GPS ones on his account
 function splCorrRowHtml(x, status) {
   const lab = Object.fromEntries(status.map(([k, l]) => [k, l])), ct = x.chg('type'), cm = x.chg('time'), cr = x.chg('rpe'), cv = x.chg('vmax');
   const opts = status.map(([k, l]) => `<option value="${escapeHtml(k)}" ${k === x.now.type ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('') + (lab[x.now.type] ? '' : `<option selected>${escapeHtml(x.now.type)}</option>`);
@@ -695,11 +703,13 @@ function splCorrRowHtml(x, status) {
     <td><select class="${ct ? 'c' : ''}" data-cf="type" aria-label="Status">${opts}</select><span class="was" data-was="type">${ct ? escapeHtml(lab[x.xl.type] || x.xl.type) : ''}</span></td>
     <td><input type="number" min="0" max="300" class="${cm ? 'c' : ''}" data-cf="time" value="${x.now.time ?? ''}" aria-label="Time"><span class="was" data-was="time">${cm ? `${x.xl.time ?? '—'}'` : ''}</span></td>
     <td><input type="number" min="0" max="10" step="0.5" class="${cr ? 'c' : ''}" data-cf="rpe" value="${x.now.rpe ?? ''}" aria-label="RPE"><span class="was" data-was="rpe">${cr ? x.xl.rpe ?? '—' : ''}</span></td>
-    <td><input type="number" min="0" max="45" step="0.1" class="${cv ? 'c' : ''}" data-cf="vmax" value="${x.now.vmax ?? ''}" aria-label="Max speed"><span class="was" data-was="vmax">${cv ? x.xl.vmax ?? '—' : ''}</span></td>
-    <td class="r">${splF0(x.td)}</td><td class="r${cm ? ' c' : ''}" data-cc="mpm">${splCorrCell(x, 'mpm')}</td><td class="r${cm || cr ? ' c' : ''}" data-cc="cg">${splCorrCell(x, 'cg')}</td><td data-cc="dr">${splCorrDrills(x)}</td></tr>`;
+    ${splAllCols() ? SPL_GPS.map(([f, l]) => `<td><input type="number" min="0" max="${SPL_CMAX[f]}" step="${f === 'vmax' ? 0.1 : 1}" class="sp-gin${x.chg(f) ? ' c' : ''}" data-cf="${f}" value="${x.now[f] ?? ''}" aria-label="${l}" ${x.now.inv ? 'disabled' : ''}><span class="was" data-was="${f}">${x.chg(f) ? x.xl[f] ?? '—' : ''}</span></td>`).join('')
+      + `<td class="c"><label class="sp-inv" title="GPS invalid: his values = his position's average in this session, out of the references"><input type="checkbox" data-cf="inv" ${x.now.inv ? 'checked' : ''}>${x.chg('inv') ? '<b>invalid</b>' : ''}</label></td>`
+    : `<td><input type="number" min="0" max="45" step="0.1" class="${cv ? 'c' : ''}" data-cf="vmax" value="${x.now.vmax ?? ''}" aria-label="Max speed"><span class="was" data-was="vmax">${cv ? x.xl.vmax ?? '—' : ''}</span></td><td class="r">${splF0(x.td)}</td>`}
+    <td class="r${cm ? ' c' : ''}" data-cc="mpm">${splCorrCell(x, 'mpm')}</td><td class="r${cm || cr ? ' c' : ''}" data-cc="cg">${splCorrCell(x, 'cg')}</td><td data-cc="dr">${splCorrDrills(x)}</td></tr>`;
 }
 function splCorrCell(x, c) {
-  if (c === 'mpm') return `${splF0(splMpm(x, x.now.time))}${x.chg('time') ? `<span class="was">${splF0(splMpm(x, x.xl.time))}</span>` : ''}`;
+  if (c === 'mpm') return `${splF0(splMpm(x, x.now.time, true))}${x.chg('time') || x.chg('td') ? `<span class="was">${splF0(splMpm(x, x.xl.time))}</span>` : ''}`;
   return `${splF0(splCarga(x.now.rpe, x.now.time))}${x.chg('time') || x.chg('rpe') ? `<span class="was">${splF0(splCarga(x.xl.rpe, x.xl.time))}</span>` : ''}`;
 }
 /** Changed against the published correction (or the data, when there is none)? */
@@ -709,7 +719,7 @@ function splCorrectHtml() {
   const rows = splCorrRows(date), status = splStatusList();
   return `${splHead(date, 2)}
     <div class="sp-corr"><div class="sp-h3">Correct ${escapeHtml(r.sid)} <small>Change a status, a time, an RPE or a max speed (a GPS glitch): the other columns follow. Yellow = changed (the old value struck through).</small></div>
-      <div class="sp-tw"><table class="sp-ctbl"><thead><tr><th>Player</th><th>Status</th><th>Time</th><th>RPE</th><th>Max speed</th><th class="r">DT</th><th class="r">m/min</th><th class="r">Carga RPE</th><th>Drills</th></tr></thead>
+      <div class="sp-tw"><table class="sp-ctbl"><thead><tr><th>Player</th><th>Status</th><th>Time</th><th>RPE</th>${splAllCols() ? SPL_GPS.map(([, l]) => `<th>${l}</th>`).join('') + '<th title="GPS invalid">GPS ✗</th>' : '<th>Max speed</th><th class="r">DT</th>'}<th class="r">m/min</th><th class="r">Carga RPE</th><th>Drills</th></tr></thead>
         <tbody>${rows.map((x) => splCorrRowHtml(x, status)).join('')}</tbody></table></div>
       <div class="sp-csum" id="spl-csum">${splCorrSummary(rows)}</div>
       <div class="sp-actions"><button type="button" class="btn-primary" data-corr-pub ${splCorrDirty(date) ? '' : 'disabled'}>Publish the correction</button><button type="button" class="btn-light" data-corr-cancel>Cancel</button>
@@ -720,19 +730,20 @@ function splCorrectHtml() {
 function splCorrEdit(t) {
   const date = SPL.date, tr = t.closest('tr[data-ck]'), k = tr.dataset.ck, f = t.dataset.cf, ch = splCorrDraft(date);
   const x0 = splCorrRows(date).find((y) => y.k === k);
-  const v = f === 'type' ? t.value : t.value === '' ? null : Number(t.value);
-  if (f !== 'type' && v != null && (!Number.isFinite(v) || v < 0 || v > SPL_CMAX[f])) { t.value = x0.now[f] ?? ''; return; }
+  const v = f === 'type' ? t.value : f === 'inv' ? t.checked : t.value === '' ? null : Number(t.value);
+  if (f !== 'type' && f !== 'inv' && v != null && (!Number.isFinite(v) || v < 0 || v > SPL_CMAX[f])) { t.value = x0.now[f] ?? ''; return; }
   const c = ch[k] || (ch[k] = {});
   if (v === x0.xl[f]) delete c[f]; else c[f] = v;
   if (!Object.keys(c).length) delete ch[k];
   const rows = splCorrRows(date), x = rows.find((y) => y.k === k), lab = Object.fromEntries(splStatusList().map(([a, l]) => [a, l]));
+  tr.querySelectorAll('.sp-gin').forEach((el) => { el.disabled = !!x.now.inv; });
   SPL_CF.forEach((g) => {
     const el = tr.querySelector(`[data-cf="${g}"]`), w = tr.querySelector(`[data-was="${g}"]`);
-    if (el) el.classList.toggle('c', x.chg(g));
+    if (el && g !== 'inv') el.classList.toggle('c', x.chg(g));
     if (w) w.textContent = !x.chg(g) ? '' : g === 'type' ? lab[x.xl.type] || x.xl.type : g === 'time' ? `${x.xl.time ?? '—'}'` : String(x.xl[g] ?? '—');
   });
   const mp = tr.querySelector('[data-cc="mpm"]'), cg = tr.querySelector('[data-cc="cg"]'), dr = tr.querySelector('[data-cc="dr"]');
-  mp.innerHTML = splCorrCell(x, 'mpm'); mp.classList.toggle('c', x.chg('time'));
+  mp.innerHTML = splCorrCell(x, 'mpm'); mp.classList.toggle('c', x.chg('time') || x.chg('td'));
   cg.innerHTML = splCorrCell(x, 'cg'); cg.classList.toggle('c', x.chg('time') || x.chg('rpe'));
   dr.innerHTML = splCorrDrills(x);
   document.getElementById('spl-csum').innerHTML = splCorrSummary(rows);
@@ -757,8 +768,9 @@ function splCorrLineHtml(date) {
   if (!key) return '';
   const r = SPL.lib.recent[date], c = (SPL.saved.corrections || {})[key];
   if (!c) return `<p class="sp-corrline"><button type="button" class="btn-light" data-corr-open>✎ Correct this session</button><span>a status, a time, an RPE or a max speed that is wrong — your Excel file isn't touched</span></p>`;
-  const col = { type: 3, time: 4, rpe: 5, vmax: 12 }, n = Object.keys(c.changes || {}).length;
-  const applied = Object.entries(c.changes || {}).every(([k, ch]) => { const row = r.rows.find((x) => x[0] === k); return row && Object.entries(ch).every(([f, v]) => row[col[f]] === v); });
+  const col = { type: 3, time: 4, rpe: 5, td: 6, hit: 7, vmax: 12, d15: 13, spr: 14, spr_n: 15, acc: 16, dec: 17, hit_n: 18 }, n = Object.keys(c.changes || {}).length;
+  const applied = Object.entries(c.changes || {}).every(([k, ch]) => { const row = r.rows.find((x) => x[0] === k);
+    return row && Object.entries(ch).every(([f, v]) => (f === 'inv' ? ((r.orig || {})[k] || {}).inv === false : f in col ? row[col[f]] === v : true)); });
   return `<p class="sp-corrline on"><button type="button" class="btn-light" data-corr-open>✎ Edit the correction</button><span>Corrected on the site${c.by ? ' by ' + escapeHtml(String(c.by).split('@')[0]) : ''} · ${n} player${n > 1 ? 's' : ''} · ${applied ? 'in the dashboard ✓' : 'applied at the next update'}</span></p>`;
 }
 
