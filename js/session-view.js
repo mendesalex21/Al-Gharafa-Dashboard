@@ -114,18 +114,34 @@ function svRpePlan(p, mc) {
   });
   return { rows };
 }
-const SV_MCG = [['td', 'Total distance'], ['spd', 'Distance', [['d15', '> 15'], ['hit', '> 20'], ['spr', '> 25']]], ['acc_dec', 'Acc + Dec'], ['spr_n', 'Sprints'], ['int', 'Internal load', [['rpe', 'RPE'], ['srpe', 'sRPE']]]];
+/** His wellness each morning of the microcycle against his usual (the mean of his check-ins of the 28 days before). */
+function svWellPlan(p, mc) {
+  const days = (TR.whist && TR.whist.days) || [], by = Object.fromEntries(days.map((d) => [d.date, (d.byId || {})[p.id]]));
+  const rows = [];
+  mc.days.filter((d) => d.date <= mc.today).forEach((d) => {
+    const v = by[d.date];
+    if (v == null) return;
+    const hist = days.filter((x) => x.date < d.date && x.date >= addDays(d.date, -28) && (x.byId || {})[p.id] != null).map((x) => x.byId[p.id]);
+    if (hist.length < 5) return;
+    const u = hist.reduce((a, b) => a + b, 0) / hist.length, sd = Math.max(3, Math.sqrt(hist.reduce((a, b) => a + (b - u) ** 2, 0) / hist.length));
+    rows.push({ date: d.date, md: d.md, past: true, today: d.date === mc.today, u, sd, v, z: (v - u) / sd });
+  });
+  return { rows };
+}
+const SV_MCG = [['td', 'Total distance'], ['spd', 'Distance', [['d15', '> 15'], ['hit', '> 20'], ['spr', '> 25']]], ['acc_dec', 'Acc + Dec'], ['spr_n', 'Sprints'], ['int', 'Internal load', [['rpe', 'RPE'], ['srpe', 'sRPE']]], ['well', 'Wellness · morning']];
 /** The five charts of the player sheet: distance, high-speed (> 15 / 20 / 25), Acc + Dec, sprints, RPE / sRPE. */
 function svMcGrid(plan, p, mc, ins, leg) {
   if (!SV.mcs) SV.mcs = { spd: 'hit', int: 'rpe' };
-  const rpe = svRpePlan(p, mc);
+  const rpe = svRpePlan(p, mc), well = svWellPlan(p, mc);
   const card = ([slot, l, opts]) => {
-    const k = opts ? SV.mcs[slot] : slot, m = k === 'rpe' ? rpe : plan[k];
+    const k = opts ? SV.mcs[slot] : slot, m = k === 'rpe' ? rpe : k === 'well' ? well : plan[k];
     const seg = opts ? `<span class="seg sv-mcs">${opts.map(([v, t]) => `<button type="button" data-mcs="${slot}:${v}" class="${v === k ? 'active' : ''}">${t}</button>`).join('')}</span>` : '';
     return `<div class="sv-mcc"><div class="sv-mcc-h"><b>${l}</b>${seg}</div>${m && m.rows.length ? svMcChart(m, k, 380) : '<p class="muted" style="font-size:12px">no usual for these days</p>'}</div>`;
   };
-  return `<div class="sv-mcg">${SV_MCG.map(card).join('')}<div class="sv-mcc sv-mcc-ins">${ins}${leg}</div></div>
-    <p class="sv-mcg-n">day by day · colour = that day vs his usual for its MD · dark line = his usual · dashed = his objective for the days to come (RPE: his usual score)</p>`;
+  const zleg = `<div class="sv-zleg"><b>Colour = z vs his usual</b>${[['below', 'below (z ≤ −1)'], ['on', 'usual'], ['above', 'slightly above (1 to 2)'], ['high', 'well above (z ≥ 2)']].map(([c, t]) => `<span><i style="background:${Z_COL[c]}"></i>${t}</span>`).join('')}<span><i style="background:#aeaeb2"></i>no usual</span><span><i class="ln"></i>his usual</span><span><i class="ds"></i>his objective for the days to come</span></div>`;
+  return `<div class="sv-mcg">${SV_MCG.map(card).join('')}</div>${zleg}
+    <div class="sv-mcg-ins">${ins}${leg}</div>
+    <p class="sv-mcg-n">day by day · each day vs his usual for its MD (RPE: his usual score; dashed = his usual score) · wellness: his morning score vs his average of the 28 days before</p>`;
 }
 const SV_HS = ['d15', 'hit', 'spr', 'spr_n'];
 /** Joker / top-up reading of a player's plan (high-speed metrics only; sprints in number are a complement). */
@@ -148,7 +164,7 @@ function svMcChart(m, k, W = 560) {
   const e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e;
   const top = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e;
   const y = (v) => P.t + ih * (1 - Math.min(v, top) / top), base = y(0);
-  const fv = (v) => (k === 'td' && v >= 1000 ? (v / 1000).toFixed(1) + 'k' : k === 'rpe' ? fmtN(v, v % 1 ? 1 : 0) : fmtN(v));
+  const fv = (v) => (k === 'td' && v >= 1000 ? (v / 1000).toFixed(1) + 'k' : k === 'rpe' ? fmtN(v, v % 1 ? 1 : 0) : k === 'well' ? Math.round(v) + '%' : fmtN(v));
   let g = '';
   [0, top / 2, top].forEach((t) => { g += `<line x1="${P.l}" x2="${W - P.r}" y1="${y(t)}" y2="${y(t)}" style="stroke:var(--hairline)"/><text x="${P.l - 6}" y="${y(t) + 4}" text-anchor="end">${fv(t)}</text>`; });
   m.rows.forEach((r, i) => {
