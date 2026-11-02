@@ -47,6 +47,8 @@ function renderTactical2() {
 function t2NextOpponent(cal) { // the next league match in the calendar whose opponent has a file
   const today = new Date().toISOString().slice(0, 10), teams = Object.keys(T2.data.teams || {});
   const ev = (cal.events || []).filter((e) => e.kind === 'match' && e.gharafa === 'yes' && !e.played_date && (e.confirmed_date || e.start) >= today).sort((a, b) => (a.confirmed_date || a.start).localeCompare(b.confirmed_date || b.start));
+  const first = ev[0] && !teams.some((x) => clubSlug(x) === clubSlug(ev[0].opponent)) ? ev[0] : null; // the very next match, without a file (a cup / ACL game)
+  T2.nextOther = first ? { opp: first.opponent, comp: first.competition || '', when: t2day(first.confirmed_date || first.start) } : null;
   for (const e of ev) { const t = teams.find((x) => clubSlug(x) === clubSlug(e.opponent)); if (t) return { team: t, when: t2day(e.confirmed_date || e.start) }; }
   return null;
 }
@@ -92,7 +94,8 @@ function drawTactical2() {
 function t2Strip() {
   const V = T2.data, pts = (t) => V.teams[t].rec[0] * 3 + V.teams[t].rec[1], nx = T2.next && T2.next.team;
   const ord = Object.keys(V.teams).sort((a, b) => (a === T2_US ? -1 : b === T2_US ? 1 : a === nx ? -1 : b === nx ? 1 : pts(b) - pts(a) || a.localeCompare(b)));
-  return `<div class="strip">${ord.map((t) => `<button class="${t === T2.team ? 'on' : ''} ${t === T2_US ? 'us' : ''}" data-team="${escapeHtml(t)}">${t === nx ? `<em>next · ${escapeHtml(T2.next.when)}</em>` : t === T2_US ? '<em>us</em>' : ''}${crestHtml(t, 30)}<span>${escapeHtml(t)}</span></button>`).join('')}</div>`;
+  const other = T2.nextOther ? `<div class="t2-nextoth">Next match: <b>${escapeHtml(T2.nextOther.opp)}</b>${T2.nextOther.comp ? ' · ' + escapeHtml(T2.nextOther.comp) : ''} · ${escapeHtml(T2.nextOther.when)} — no tactical data${nx ? ` · next league opponent: <b>${escapeHtml(nx)}</b> (${escapeHtml(T2.next.when)})` : ''}</div>` : '';
+  return `${other}<div class="strip">${ord.map((t) => `<button class="${t === T2.team ? 'on' : ''} ${t === T2_US ? 'us' : ''}" data-team="${escapeHtml(t)}">${t === nx ? `<em>next · ${escapeHtml(T2.next.when)}</em>` : t === T2_US ? '<em>us</em>' : ''}${crestHtml(t, 30)}<span>${escapeHtml(t)}</span></button>`).join('')}</div>`;
 }
 function t2Header(team, extra = '') {
   const T = t2T(team), [w, d, l, gf, ga] = T.rec;

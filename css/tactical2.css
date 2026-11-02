@@ -278,3 +278,4 @@
 #view-tactical2 .vr2 .vr-list { max-height: 520px; }
 #view-tactical2 .tiles.two { grid-template-columns: repeat(2, 1fr); }
 @media (max-width: 1000px) { #view-tactical2 .vr2 { grid-template-columns: 1fr; } }
+#view-tactical2 .t2-nextoth { font-size: 12.5px; color: var(--ink-2); margin: 0 0 6px 2px; } /* the next match without a file (2026-11-02) */
