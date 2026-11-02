@@ -75,6 +75,8 @@ function tmBuild() {
   return { d, t, days, idx, keys, sess, well, weeks, real, acAt, wellOf };
 }
 /** One chart: bars, and under them on the same x a strip — the A:C line in its zones, or small bars (check-ins). */
+/** A session's MD under its bar (his ask, 2026-11-02): −3, −2, −1, G, +1… */
+const tmMd = (s) => { const m = s && s.md; return !m || m === '/' ? '' : m === 'MD' ? 'G' : String(m).replace(/^MD/, ''); };
 let TM_GRAD = 0; // the A:C line gradients' ids (one per chart)
 function tmChart(o) {
   const ns = o.strip === 'none', W = o.W || TM.cw || 548, cap = W > 700 ? 40 : 34, padL = 44, padR = 12, H1 = W > 700 ? 180 : 168, top = 20, gap = ns ? 12 : 30, H2 = ns ? 0 : 60, n = o.items.length || 1, bw = (W - padL - padR) / n;
@@ -165,13 +167,13 @@ function drawTeam() {
     const tick = (x, i) => { const dow = dateOf(x).getUTCDay(); return few ? fmtDay(x, { weekday: 'short', day: 'numeric' }) : dow === 0 || (i === 0 && ds.length < 8) ? fmtDay(x, { day: 'numeric', month: 'short' }) : ''; };
     cards = B.keys.map(([k, l, u]) => `<div class="tm-card">${head(l, `per day${u ? ' · ' + u : ''} · grey box = usual for that MD`)}${tmChart({ title: l, dots: few,
       items: ds.map((x, i) => { const j = B.idx[x], v = B.t.daily[k][j], s = B.sess[x], ok = s && s.group !== 'compensatory' && !(s.kind === 'training' && s.md === 'MD'), r = ok && s.team_ref ? s.team_ref[k] : null, zz = r && v > 0 ? r.z : null, ac = B.t.acwr[k][j];
-        return { v, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], lo: r && v > 0 ? r.p25 : null, hi: r && v > 0 ? r.p75 : null, ac, game: !!(s && s.kind === 'match'), sep: dateOf(x).getUTCDay() === 0 && !few, tick: tick(x, i), label: few && v > 0 ? tmK(v) : '',
+        return { v, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], lo: r && v > 0 ? r.p25 : null, hi: r && v > 0 ? r.p75 : null, ac, game: !!(s && s.kind === 'match'), md: tmMd(s), sep: dateOf(x).getUTCDay() === 0 && !few, tick: tick(x, i), label: few && v > 0 ? tmK(v) : '',
           tip: `${fmtDay(x)}${s && s.md ? ' · ' + s.md : ''}: ${fmtN(v)}${r ? ` · usual ${fmtN(r.p25)}–${fmtN(r.p75)}${zz == null ? '' : ' · z ' + tmS(zz)}` : ''}${ac == null ? '' : ' · A:C ' + ac.toFixed(2)}` }; }) })}</div>`).join('');
     const wd = ds.map((x) => ({ x, o: B.well[x] }));
     const hist = (x) => tmStats(Object.entries(B.well).filter(([y, o]) => y < x && y >= addDays(x, -28) && !o.pre).map(([, o]) => o.v));
     cards += `<div class="tm-card">${head('Wellness', 'team score per day · % · green band = 70 % or more')}${tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'count', dots: few,
       items: wd.map(({ x, o }, i) => { const st = o ? hist(x) : null, zz = o && st.sd ? tmZof(o.v, st) : null, s = B.sess[x];
-        return { v: o ? o.v : 0, n: o ? o.n : 0, col: !o ? '#aeaeb2' : z ? TM_ZCOL[tmZ(zz)] : tmWell(o.v), game: !!(s && s.kind === 'match'), sep: dateOf(x).getUTCDay() === 0 && !few, tick: tick(x, i), label: few && o ? Math.round(o.v) : '',
+        return { v: o ? o.v : 0, n: o ? o.n : 0, col: !o ? '#aeaeb2' : z ? TM_ZCOL[tmZ(zz)] : tmWell(o.v), game: !!(s && s.kind === 'match'), md: tmMd(s), sep: dateOf(x).getUTCDay() === 0 && !few, tick: tick(x, i), label: few && o ? Math.round(o.v) : '',
           tip: o ? `${fmtDay(x)}: ${Math.round(o.v)} % · ${o.n} check-ins${zz == null ? '' : ' · z ' + tmS(zz) + ' vs the 4 weeks before'}` : '' }; }) })}</div>`;
   } else if (view === 'games') {
     const ms = Object.values(B.sess).filter((x) => x.kind === 'match' && x.date >= from && x.date <= to && x.team).sort((a, b) => (a.date < b.date ? -1 : 1)), few = ms.length <= fit;

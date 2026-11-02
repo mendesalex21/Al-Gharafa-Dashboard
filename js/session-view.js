@@ -303,7 +303,7 @@ function svAttentionHtml(s) {
     ['red', '2 weeks overload', `A:C > ${SV_OVER} this week and last`, over],
     ['red', 'Wellness', '< 50 % that morning, or −10 % two mornings', well],
     ['orange', 'Big change', 'today or week so far, |z| ≥ 2', big],
-    ...(document.documentElement.classList.contains('is-admin') ? [['orange', 'RPE high · GPS normal', 'RPE z ≥ +1, distance and > 20 km/h at or below his usual', rpeHi]] : []),
+    ...(rpeHi.length ? [['orange', 'RPE high · GPS normal', 'RPE z ≥ +1, distance and > 20 km/h at or below his usual', rpeHi]] : []),
     ['blue', 'Speed top-up' + (next ? ' · ' + next : ''), 'no run at 90 % of max speed ≥ 10 days' + (left.length ? ', or behind his high-speed target' : ''), tops],
     ...(left.length ? [['green', 'Joker candidates · ' + next, 'high-speed target of the microcycle reached', jok]] : []),
   ];
