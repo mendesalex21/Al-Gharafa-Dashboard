@@ -2307,3 +2307,5 @@ table.dvm-t { width: 100%; border-collapse: separate; border-spacing: 3px; font-
 .sv-lg-band { display: inline-block; width: 18px; height: 10px; border-radius: 2px; background: var(--ink); opacity: .14; vertical-align: middle; margin-right: 4px; }
 .sv-rp .rp-chip .rp-v[class*="dvm-c3"], .sv-rp .rp-chip .rp-v[class*="dvm-c4"] { color: #fff; }
 .rs-day .mcb-bar s { border-color: #6a6f80; opacity: .6; } /* the days still to come in the staff PDF (2026-11-01) */
+
+.tm-md { font-size: 9px; font-weight: 700; fill: var(--ink-2); } /* the day's MD under its bar (Workload › Player, days) */

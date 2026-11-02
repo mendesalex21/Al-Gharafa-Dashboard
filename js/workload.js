@@ -290,6 +290,7 @@ function plBuild(pid) {
   const sess = Object.fromEntries(((TR.sessions && TR.sessions.sessions) || []).map((x) => [x.date, x]));
   const mine = (x) => { const se = sess[x]; return se ? se.players.find((r) => r.id === pid) : null; };
   const dayZ = (x, k) => { const q = mine(x); return q && q.mdref && q.mdref.z ? q.mdref.z[k] : null; };
+  const mdOf = (x) => { const m = sess[x] && sess[x].md; return !m || m === '/' ? '' : m === 'MD' ? 'G' : String(m).replace(/^MD/, ''); }; // the day's MD under its bar (his ask, 2026-11-02): −3, −2, −1, G, +1…
   // the load of each metric by day, and its A:C (the workload series, or computed here for d15 and the sprints)
   const L = { ...s.load }, A = { ...s.acwr };
   ['d15', 'spr_n'].forEach((k) => {
@@ -319,7 +320,7 @@ function plBuild(pid) {
       const tot = rh.length ? rh.reduce((u, v) => u + v, 0) : null;
       IW[x.ws] = { td: b ? b.td[0] : null, hi: b ? b.hi[0] : null, rh: tot, rx: tot != null && mb ? tot / mb : null }; });
   }
-  return { d, s, p, n, days, dayZ, L, A, weeks, real, acAt, zw, t, tIdx, tw, wh, wellOf, I, g, IW };
+  return { d, s, p, n, days, dayZ, mdOf, L, A, weeks, real, acAt, zw, t, tIdx, tw, wh, wellOf, I, g, IW };
 }
 
 function plTiles(B) {
@@ -384,10 +385,10 @@ function plCharts(B) {
     out = plKeys().map((k) => { const [l, u] = PL_LAB[k];
       return card(head(k, l, `per day${u ? ' · ' + u : ''} · colour = ${z ? 'z vs his usual for that MD' : 'A:C 7:28'}${teamNote}`) + tmChart({ title: l, dots: ds.length <= (TM.fit || 99),
         items: ds.map((x) => { const i = daysBetween(s.start, x), v = L[k][i], zz = v > 0 ? B.dayZ(x, k) : null, ac = A[k] ? A[k][i] : null, c = s.cat[i], tv = tval(k, B.tIdx(x));
-          return { v, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, game: c === 'm' || c === 'b', sep: dateOf(x).getUTCDay() === 0, label: few && v > 0 ? tmK(v) : '', ...tk(tv), tick: dtick(x),
+          return { v, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, game: c === 'm' || c === 'b', md: B.mdOf(x), sep: dateOf(x).getUTCDay() === 0, label: few && v > 0 ? tmK(v) : '', ...tk(tv), tick: dtick(x),
             tip: `${fmtDay(x)} · ${(CAT_INFO[c] || CAT_INFO['-'])[0]}: ${fmtN(v)}${zz == null ? '' : ' · z ' + tmS(zz)}${ac == null ? '' : ' · A:C ' + ac.toFixed(2)}${PL.team && tv ? ' · team ' + fmtN(tv) : ''}` }; }) })); }).join('');
     out += card(head('', 'Wellness', 'his score each morning · % · green band = 70 % or more') + tmChart({ title: 'Wellness', max: 100, band: [70, 100], strip: 'none', dots: true,
-      items: ds.map((x) => { const v = B.wh[x]; return { v: v || 0, col: v == null ? '#aeaeb2' : tmWell(v), label: few && v != null ? Math.round(v) : '', sep: dateOf(x).getUTCDay() === 0, tick: dtick(x), tip: v == null ? `${fmtDay(x)}: no check-in` : `${fmtDay(x)}: ${Math.round(v)} %` }; }) }));
+      items: ds.map((x) => { const v = B.wh[x]; return { v: v || 0, col: v == null ? '#aeaeb2' : tmWell(v), md: B.mdOf(x), label: few && v != null ? Math.round(v) : '', sep: dateOf(x).getUTCDay() === 0, tick: dtick(x), tip: v == null ? `${fmtDay(x)}: no check-in` : `${fmtDay(x)}: ${Math.round(v)} %` }; }) }));
     return out;
   }
   if (PL.view === 'month') {

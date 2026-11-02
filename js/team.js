@@ -90,6 +90,7 @@ function tmChart(o) {
     if (x.v > 0) s += `<rect x="${cx - w / 2}" y="${Y(x.v)}" width="${w}" height="${top + H1 - Y(x.v)}" rx="${Math.min(4, w / 3)}" fill="${x.col}"${x.soft ? ' opacity=".55"' : ''}><title>${escapeHtml(x.tip || '')}</title></rect>`;
     if (x.label) s += `<text x="${cx}" y="${Y(Math.max(x.v || 0, x.hi || 0)) - 5}" class="tm-val" text-anchor="middle">${x.label}</text>`;
     if (x.game) s += `<text x="${cx}" y="${top + H1 + 11}" class="tm-game" text-anchor="middle">G</text>`;
+    else if (x.md && bw >= 12) s += `<text x="${cx}" y="${top + H1 + 11}" class="${x.md === 'G' ? 'tm-game' : 'tm-md'}" text-anchor="middle">${escapeHtml(x.md)}</text>`; // the day's MD (Workload › Player, days)
     if (x.logo) s += `<image href="${x.logo}" x="${cx - 8}" y="${y2 + H2 + 2}" width="16" height="16"><title>${escapeHtml(x.tip || '')}</title></image>`;
     else if (x.tick) s += `<text x="${cx}" y="${y2 + H2 + 14}" class="tm-ax${x.now ? ' now' : ''}" text-anchor="middle">${x.tick}</text>`;
     if (x.go) s += `<rect x="${cx - bw / 2}" y="${top - 14}" width="${bw}" height="${H1 + 14}" class="tm-hit" data-wk="${x.go}"><title>${escapeHtml((x.tip ? x.tip + ' — ' : '') + 'click for the detail of the week')}</title></rect>`;
