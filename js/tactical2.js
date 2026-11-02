@@ -340,7 +340,13 @@ function t2Code(x) {
   if (x.c === 'entry') return `Final-third entry · ${x.kind}`;
   return T2_CAT[x.c][1];
 }
-const t2Clock = (s) => { const p = String(s || '0').trim().split(':').map(Number); return p.some(isNaN) ? 0 : p.reduce((a, v) => a * 60 + v, 0); };
+/** A time typed in the video: "6:06.83", "6,06,83", "1:02:40"… (2026-11-02: commas accepted; three parts with seconds
+ * over 59 or minutes 4+ = minutes : seconds : hundredths — a match video is under 4 hours). null when unreadable. */
+const t2Clock = (s) => { const p = String(s || '0').trim().replace(/[,;]/g, ':').split(':').map(Number);
+  if (p.some(isNaN)) return null;
+  if (p.length === 3 && (p[2] >= 60 || p[0] >= 4)) return p[0] * 60 + p[1] + p[2] / 100;
+  return p.reduce((a, v) => a * 60 + v, 0); };
+const t2ClockTxt = (v) => (v == null ? 'not understood — type e.g. 6:06.83' : `= ${Math.floor(v / 3600) ? Math.floor(v / 3600) + ':' : ''}${String(Math.floor(v / 60) % 60).padStart(Math.floor(v / 3600) ? 2 : 1, '0')}:${(v % 60).toFixed(2).padStart(5, '0')}`);
 async function t2Export(mid) {
   const md = document.getElementById('t2-modal'), M = t2M();
   if (!mid || !M[mid]) return;
@@ -352,7 +358,7 @@ async function t2Export(mid) {
     if (!tms.includes(E.team)) E.team = m.home;
     const mine = pk.moments.filter((x) => (E.both || x.t === E.team));
     const X = mine.filter((x) => E.cats.has(x.c)).sort((a, b) => a.h - b.h || a.a - b.a);
-    const ko1 = t2Clock(E.ko1), ko2 = t2Clock(E.ko2), e = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const ko1 = t2Clock(E.ko1) || 0, ko2 = t2Clock(E.ko2) || 0, e = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const lab = (g, t) => (t == null || t === '' ? '' : `\n      <label><group>${e(g)}</group><text>${e(t)}</text></label>`);
     const inst = X.map((x, k) => { const off = x.h === 1 ? ko1 : ko2, s = Math.max(0, off + x.a / 1000 - E.pre), en = off + x.b / 1000 + +E.post;
       return `    <instance>\n      <ID>${k + 1}</ID>\n      <start>${s.toFixed(2)}</start>\n      <end>${en.toFixed(2)}</end>\n      <code>${e(t2Code(x))}</code>${lab('Team', x.t)}${lab('Outcome', x.tag)}${lab('Player', (pk.players[x.p] || [])[0])}${lab('Half', x.h)}${lab('Minute', t2Min(x))}\n    </instance>`; });
@@ -364,8 +370,8 @@ async function t2Export(mid) {
       <div class="row"><label>Match <select class="select" id="x-mid">${ms.map((z) => `<option value="${z.id}" ${z.id === E.mid ? 'selected' : ''}>${t2day(z.date)} · ${escapeHtml(z.home)} ${z.score[0]}–${z.score[1]} ${escapeHtml(z.away)}</option>`).join('')}</select></label>
         <label><select class="select" id="x-team"><option value="1" ${E.both ? 'selected' : ''}>Both teams</option>${tms.map((t) => `<option value="t:${escapeHtml(t)}" ${!E.both && E.team === t ? 'selected' : ''}>${escapeHtml(t)} only</option>`).join('')}</select></label></div>
       <div class="cats">${T2_CATS.map(([c, l]) => `<label><input type="checkbox" data-xc="${c}" ${E.cats.has(c) ? 'checked' : ''}> ${escapeHtml(l)} <span class="muted">${mine.filter((x) => x.c === c).length}</span></label>`).join('')}</div>
-      <div class="row"><label>1st half kick-off in the video <input type="text" id="x-ko1" value="${escapeHtml(E.ko1)}" placeholder="mm:ss"></label><label>2nd half kick-off <input type="text" id="x-ko2" value="${escapeHtml(E.ko2)}" placeholder="h:mm:ss"></label>
-        <label>extra before (s) <input type="number" id="x-pre" value="${E.pre}" min="0" max="20"></label><label>after (s) <input type="number" id="x-post" value="${E.post}" min="0" max="20"></label></div>
+      <div class="row"><label>1st half kick-off in the video <input type="text" id="x-ko1" value="${escapeHtml(E.ko1)}" placeholder="mm:ss"> <small class="muted" style="${t2Clock(E.ko1) == null ? 'color:#c9252c' : ''}">${t2ClockTxt(t2Clock(E.ko1))}</small></label><label>2nd half kick-off <input type="text" id="x-ko2" value="${escapeHtml(E.ko2)}" placeholder="h:mm:ss"> <small class="muted" style="${t2Clock(E.ko2) == null ? 'color:#c9252c' : ''}">${t2ClockTxt(t2Clock(E.ko2))}</small></label>
+        <label title="seconds added before each action, to see how it starts">extra before (s) <input type="number" id="x-pre" value="${E.pre}" min="0" max="20"></label><label title="seconds added after each action, to see how it ends">after (s) <input type="number" id="x-post" value="${E.post}" min="0" max="20"></label></div>
       <pre>${escapeHtml(txt.split('\n').slice(0, 20).join('\n'))}${txt.split('\n').length > 20 ? '\n…' : ''}</pre>
       <div class="foot"><span class="muted" style="font-size:12.5px"><b>${X.length}</b> clips</span><button class="btn blue" id="x-dl" ${X.length ? '' : 'disabled'}>⬇ Download .xml</button></div></div>`;
     md.hidden = false;
