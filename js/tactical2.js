@@ -46,7 +46,8 @@ function renderTactical2() {
 }
 function t2NextOpponent(cal) { // the next league match in the calendar whose opponent has a file
   const today = new Date().toISOString().slice(0, 10), teams = Object.keys(T2.data.teams || {});
-  const ev = (cal.events || []).filter((e) => e.kind === 'match' && e.gharafa === 'yes' && !e.played_date && (e.confirmed_date || e.start) >= today).sort((a, b) => (a.confirmed_date || a.start).localeCompare(b.confirmed_date || b.start));
+  const evs = typeof applyCalendarEdits === 'function' ? applyCalendarEdits(cal) : (cal.events || []); // the staff's edits (a match moved, added or hidden: 2026-11-02)
+  const ev = evs.filter((e) => e.kind === 'match' && e.gharafa === 'yes' && !e.played_date && (e.confirmed_date || e.start) >= today).sort((a, b) => (a.confirmed_date || a.start).localeCompare(b.confirmed_date || b.start));
   const first = ev[0] && !teams.some((x) => clubSlug(x) === clubSlug(ev[0].opponent)) ? ev[0] : null; // the very next match, without a file (a cup / ACL game)
   T2.nextOther = first ? { opp: first.opponent, comp: first.competition || '', when: t2day(first.confirmed_date || first.start) } : null;
   for (const e of ev) { const t = teams.find((x) => clubSlug(x) === clubSlug(e.opponent)); if (t) return { team: t, when: t2day(e.confirmed_date || e.start) }; }
