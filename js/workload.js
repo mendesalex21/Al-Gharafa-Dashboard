@@ -425,6 +425,14 @@ function plGamesTable(B) {
     <div class="table-wrap"><table class="tm-tbl tm-wide"><thead><tr><th>Date</th><th class="l">Opponent</th><th class="l">Comp.</th><th class="b">Minutes</th>${K.map(([, l]) => `<th class="b">${l}</th><th>z</th>`).join('')}<th>Max speed</th></tr></thead><tbody>${rows || '<tr><td colspan="19" class="muted">No match yet</td></tr>'}</tbody></table></div></section>`;
 }
 
+/** His RPE score in the colour of its z vs his usual score of that MD (his ask, 2026-11-02 — as the Sessions table). */
+function plRpe(q) {
+  const z = q.mdref && q.mdref.z ? q.mdref.z.rpe : null;
+  if (z == null) return String(q.rpe);
+  const [bg, fg] = SV_ZCHIP[mzClass(z)], u = q.mdref.mean ? q.mdref.mean.rpe : null;
+  return `<span class="tw-rpe" style="background:${bg};color:${fg}" title="RPE ${q.rpe}${u != null ? ` · his usual ${u.toFixed(1)}` : ''} · z ${fmtSigned(z)}">${q.rpe}</span>`;
+}
+
 function plTable(B) {
   const { d } = B, pc = (v) => (v == null ? '—' : `<span class="tm-acchip" style="background:${v >= 100 ? '#1f7a3d' : v >= 90 ? '#34a853' : v >= 80 ? '#8ccf9f' : v >= 60 ? '#e8a33d' : '#d9534f'}">${Math.round(v)} %</span>`);
   const main = (w, k) => { const zz = B.zw(w, k), ac = w[k] > 0 ? B.acAt(k, w.done ? w.end : d.as_of) : null;
@@ -497,7 +505,7 @@ function plWeekOpen(start) {
   const cell = (x, k) => { const v = val(x, k), r = zDay(x, k); return `<td>${v > 0 ? fmtN(v) : '—'}${r ? chip(r.z) : v > 0 ? '<span class="mz na">—</span>' : ''}</td>`; };
   const short = { td: 'Distance', d15: '> 15', hit: '> 20', spr: 'Sprint dist.', spr_n: 'Sprints', acc_dec: 'Acc + Dec', srpe: 'sRPE' };
   const dayRows = ds.map((x) => { const k = kindOf(x), q = mine(x), v = B.wh[x], md = mdOf(x), c = cat(x);
-    return `<tr class="${k === 'off' || k === 'later' || k === 'out' ? 'off' : ''}"><td><b>${fmtDay(x, { weekday: 'short', day: 'numeric', month: 'short' })}</b></td><td class="l">${md ? `<span class="tw-md${md === 'G' ? ' g' : ''}">${md === 'G' ? 'G · MD' : md}</span>` : ''}</td><td class="l">${k === 'later' ? 'Not yet' : c === '-' ? 'No team session' : escapeHtml(CAT_INFO[c][0])}${q && q.type && !['m', 't'].includes(c) && q.type.toLowerCase() !== CAT_INFO[c][0].toLowerCase() ? ` <small class="muted">${escapeHtml(q.type)}</small>` : ''}</td><td>${mins(x) ? mins(x) + '\'' : ''}</td><td>${q && q.rpe ? q.rpe : ''}</td>${KS.map((kk) => cell(x, kk)).join('')}<td>${v != null ? `<b style="color:${tmWell(v)}">${Math.round(v)} %</b>` : '—'}</td></tr>`; }).join('');
+    return `<tr class="${k === 'off' || k === 'later' || k === 'out' ? 'off' : ''}"><td><b>${fmtDay(x, { weekday: 'short', day: 'numeric', month: 'short' })}</b></td><td class="l">${md ? `<span class="tw-md${md === 'G' ? ' g' : ''}">${md === 'G' ? 'G · MD' : md}</span>` : ''}</td><td class="l">${k === 'later' ? 'Not yet' : c === '-' ? 'No team session' : escapeHtml(CAT_INFO[c][0])}${q && q.type && !['m', 't'].includes(c) && q.type.toLowerCase() !== CAT_INFO[c][0].toLowerCase() ? ` <small class="muted">${escapeHtml(q.type)}</small>` : ''}</td><td>${mins(x) ? mins(x) + '\'' : ''}</td><td>${q && q.rpe ? plRpe(q) : ''}</td>${KS.map((kk) => cell(x, kk)).join('')}<td>${v != null ? `<b style="color:${tmWell(v)}">${Math.round(v)} %</b>` : '—'}</td></tr>`; }).join('');
   const tot = `<tr class="tot"><td colspan="5">This week${W.done ? '' : ' so far'}</td>${M.map((m) => `<td>${fmtN(m.v)}${chip(m.z)}</td>`).join('')}<td>${wAvg == null ? '—' : Math.round(wAvg) + ' %'}</td></tr>
     <tr class="usu"><td colspan="5">His usual week (middle half of his ${others.length} other full weeks)</td>${M.map((m) => `<td>${m.st.p25 == null ? '—' : `${tmK(m.st.p25)}–${tmK(m.st.p75)}`}</td>`).join('')}<td></td></tr>`;
   const cls = (a, b) => (b == null || !W.done ? '' : a - b >= 0.75 ? 'hi' : b - a >= 0.75 ? 'lo' : '');

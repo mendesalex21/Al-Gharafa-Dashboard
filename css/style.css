@@ -2309,3 +2309,4 @@ table.dvm-t { width: 100%; border-collapse: separate; border-spacing: 3px; font-
 .rs-day .mcb-bar s { border-color: #6a6f80; opacity: .6; } /* the days still to come in the staff PDF (2026-11-01) */
 
 .tm-md { font-size: 9px; font-weight: 700; fill: var(--ink-2); } /* the day's MD under its bar (Workload › Player, days) */
+.tw-rpe { display: inline-block; min-width: 24px; padding: 1px 6px; border-radius: 5px; font-weight: 700; text-align: center; } /* the RPE score by z (Workload › Player › week) */

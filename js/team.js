@@ -111,9 +111,9 @@ function tmChart(o) {
   [0.78, 1.37].forEach((r) => { s += `<text x="${padL - 6}" y="${R(r) + 3.5}" class="tm-ax" text-anchor="end">${r}</text>`; });
   const pts = o.items.map((x, i) => (x.ac == null ? null : [X(i), R(x.ac), x.ac]));
   let run = [];
-  // his trial (2026-11-02, his account first): the line in the colour of its zone — a vertical gradient with hard stops at
+  // his ask (2026-11-02): the line in the colour of its zone — a vertical gradient with hard stops at
   // 1.5 / 1.37 / 0.78 / 0.5, so the colour changes exactly where the line crosses a threshold
-  const zl = document.documentElement.classList.contains('is-admin'), gid = 'tmz' + (++TM_GRAD);
+  const zl = true, gid = 'tmz' + (++TM_GRAD); // released to the staff the same day
   if (zl) { const off = (v) => (1 - v / 2).toFixed(4), Z = [[2, '#e5484d'], [1.5, '#ff9f0a'], [1.37, '#34c759'], [0.78, '#7fb0ea'], [0.5, '#1d5fae'], [0, null]];
     s += `<defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="0" y1="${R(2)}" x2="0" y2="${R(0)}">${Z.slice(0, -1).map(([v, c], i) => `<stop offset="${off(v)}" stop-color="${c}"/><stop offset="${off(Z[i + 1][0])}" stop-color="${c}"/>`).join('')}</linearGradient></defs>`; }
   const flush = () => { if (run.length > 1) s += `<polyline points="${run.map((p) => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}" class="tm-line"${zl ? ` style="stroke:url(#${gid});stroke-width:2.6"` : ''}/>`; run = []; };
