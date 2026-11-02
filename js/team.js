@@ -75,6 +75,7 @@ function tmBuild() {
   return { d, t, days, idx, keys, sess, well, weeks, real, acAt, wellOf };
 }
 /** One chart: bars, and under them on the same x a strip — the A:C line in its zones, or small bars (check-ins). */
+let TM_GRAD = 0; // the A:C line gradients' ids (one per chart)
 function tmChart(o) {
   const ns = o.strip === 'none', W = o.W || TM.cw || 548, cap = W > 700 ? 40 : 34, padL = 44, padR = 12, H1 = W > 700 ? 180 : 168, top = 20, gap = ns ? 12 : 30, H2 = ns ? 0 : 60, n = o.items.length || 1, bw = (W - padL - padR) / n;
   const max = o.max || Math.max(...o.items.map((x) => Math.max(x.v || 0, x.hi || 0)), o.band ? o.band[1] : 0) * 1.14 || 1;
@@ -110,7 +111,12 @@ function tmChart(o) {
   [0.78, 1.37].forEach((r) => { s += `<text x="${padL - 6}" y="${R(r) + 3.5}" class="tm-ax" text-anchor="end">${r}</text>`; });
   const pts = o.items.map((x, i) => (x.ac == null ? null : [X(i), R(x.ac), x.ac]));
   let run = [];
-  const flush = () => { if (run.length > 1) s += `<polyline points="${run.map((p) => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}" class="tm-line"/>`; run = []; };
+  // his trial (2026-11-02, his account first): the line in the colour of its zone — a vertical gradient with hard stops at
+  // 1.5 / 1.37 / 0.78 / 0.5, so the colour changes exactly where the line crosses a threshold
+  const zl = document.documentElement.classList.contains('is-admin'), gid = 'tmz' + (++TM_GRAD);
+  if (zl) { const off = (v) => (1 - v / 2).toFixed(4), Z = [[2, '#e5484d'], [1.5, '#ff9f0a'], [1.37, '#34c759'], [0.78, '#7fb0ea'], [0.5, '#1d5fae'], [0, null]];
+    s += `<defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="0" y1="${R(2)}" x2="0" y2="${R(0)}">${Z.slice(0, -1).map(([v, c], i) => `<stop offset="${off(v)}" stop-color="${c}"/><stop offset="${off(Z[i + 1][0])}" stop-color="${c}"/>`).join('')}</linearGradient></defs>`; }
+  const flush = () => { if (run.length > 1) s += `<polyline points="${run.map((p) => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}" class="tm-line"${zl ? ` style="stroke:url(#${gid});stroke-width:2.6"` : ''}/>`; run = []; };
   pts.forEach((p) => { if (p) run.push(p); else flush(); });
   flush();
   const lastPt = pts.reduce((a, p, i) => (p ? i : a), -1);
