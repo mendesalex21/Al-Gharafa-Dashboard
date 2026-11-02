@@ -357,7 +357,7 @@ async function t2Export(mid) {
     const m = M[E.mid], tms = [m.home, m.away], pk = T2.packs[E.mid] || { moments: [], players: {} };
     if (!tms.includes(E.team)) E.team = m.home;
     const mine = pk.moments.filter((x) => (E.both || x.t === E.team));
-    const X = mine.filter((x) => E.cats.has(x.c)).sort((a, b) => a.h - b.h || a.a - b.a);
+    const X = mine.filter((x) => E.cats.has(x.c) && (!E.half || x.h === E.half)).sort((a, b) => a.h - b.h || a.a - b.a); // E.half: one half only (a test without the 2nd kick-off, 2026-11-02)
     const ko1 = t2Clock(E.ko1) || 0, ko2 = t2Clock(E.ko2) || 0, e = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const lab = (g, t) => (t == null || t === '' ? '' : `\n      <label><group>${e(g)}</group><text>${e(t)}</text></label>`);
     const inst = X.map((x, k) => { const off = x.h === 1 ? ko1 : ko2, s = Math.max(0, off + x.a / 1000 - E.pre), en = off + x.b / 1000 + +E.post;
@@ -368,7 +368,8 @@ async function t2Export(mid) {
     md.innerHTML = `<div class="dlg"><div style="display:flex;justify-content:space-between;align-items:center"><h2>Export for the video · XML</h2><button class="btn" id="x-close">✕</button></div>
       <p>One file per match video, in the Sportscode XML format that Hudl Sportscode, Nacsport, Metrica Play, LongoMatch and Angles import: each moment becomes a clip on the video's timeline with its labels (team, outcome, player, minute). Type where each half kicks off in the video so that the clips land on the right images.</p>
       <div class="row"><label>Match <select class="select" id="x-mid">${ms.map((z) => `<option value="${z.id}" ${z.id === E.mid ? 'selected' : ''}>${t2day(z.date)} · ${escapeHtml(z.home)} ${z.score[0]}–${z.score[1]} ${escapeHtml(z.away)}</option>`).join('')}</select></label>
-        <label><select class="select" id="x-team"><option value="1" ${E.both ? 'selected' : ''}>Both teams</option>${tms.map((t) => `<option value="t:${escapeHtml(t)}" ${!E.both && E.team === t ? 'selected' : ''}>${escapeHtml(t)} only</option>`).join('')}</select></label></div>
+        <label><select class="select" id="x-team"><option value="1" ${E.both ? 'selected' : ''}>Both teams</option>${tms.map((t) => `<option value="t:${escapeHtml(t)}" ${!E.both && E.team === t ? 'selected' : ''}>${escapeHtml(t)} only</option>`).join('')}</select></label>
+        <label><select class="select" id="x-half"><option value="0" ${!E.half ? 'selected' : ''}>Both halves</option><option value="1" ${E.half === 1 ? 'selected' : ''}>1st half only</option><option value="2" ${E.half === 2 ? 'selected' : ''}>2nd half only</option></select></label></div>
       <div class="cats">${T2_CATS.map(([c, l]) => `<label><input type="checkbox" data-xc="${c}" ${E.cats.has(c) ? 'checked' : ''}> ${escapeHtml(l)} <span class="muted">${mine.filter((x) => x.c === c).length}</span></label>`).join('')}</div>
       <div class="row"><label>1st half kick-off in the video <input type="text" id="x-ko1" value="${escapeHtml(E.ko1)}" placeholder="mm:ss"> <small class="muted" style="${t2Clock(E.ko1) == null ? 'color:#c9252c' : ''}">${t2ClockTxt(t2Clock(E.ko1))}</small></label><label>2nd half kick-off <input type="text" id="x-ko2" value="${escapeHtml(E.ko2)}" placeholder="h:mm:ss"> <small class="muted" style="${t2Clock(E.ko2) == null ? 'color:#c9252c' : ''}">${t2ClockTxt(t2Clock(E.ko2))}</small></label>
         <label title="seconds added before each action, to see how it starts">extra before (s) <input type="number" id="x-pre" value="${E.pre}" min="0" max="20"></label><label title="seconds added after each action, to see how it ends">after (s) <input type="number" id="x-post" value="${E.post}" min="0" max="20"></label></div>
@@ -377,11 +378,12 @@ async function t2Export(mid) {
     md.hidden = false;
     md.querySelector('#x-close').onclick = () => { md.hidden = true; };
     md.querySelector('#x-mid').onchange = (ev) => { E.mid = ev.target.value; draw(); };
+    md.querySelector('#x-half').onchange = (ev) => { E.half = +ev.target.value; draw(); };
     md.querySelector('#x-team').onchange = (ev) => { const v = ev.target.value; E.both = v === '1'; if (!E.both) E.team = v.slice(2); draw(); };
     md.querySelectorAll('[data-xc]').forEach((b) => (b.onchange = () => { b.checked ? E.cats.add(b.dataset.xc) : E.cats.delete(b.dataset.xc); draw(); }));
     [['x-ko1', 'ko1'], ['x-ko2', 'ko2'], ['x-pre', 'pre'], ['x-post', 'post']].forEach(([id, k]) => (md.querySelector('#' + id).onchange = (ev) => { E[k] = ev.target.value; draw(); }));
     md.querySelector('#x-dl').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'application/xml' }));
-      a.download = `${m.date}_${m.home}_v_${m.away}_${E.both ? 'both' : E.team}.xml`.replace(/\s+/g, '_'); document.body.appendChild(a); a.click(); a.remove(); };
+      a.download = `${m.date}_${m.home}_v_${m.away}_${E.both ? 'both' : E.team}${E.half ? '_half' + E.half : ''}.xml`.replace(/\s+/g, '_'); document.body.appendChild(a); a.click(); a.remove(); };
   };
   draw();
 }
