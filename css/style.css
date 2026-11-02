@@ -2310,3 +2310,13 @@ table.dvm-t { width: 100%; border-collapse: separate; border-spacing: 3px; font-
 
 .tm-md { font-size: 9px; font-weight: 700; fill: var(--ink-2); } /* the day's MD under its bar (Workload › Player, days) */
 .tw-rpe { display: inline-block; min-width: 24px; padding: 1px 6px; border-radius: 5px; font-weight: 700; text-align: center; } /* the RPE score by z (Workload › Player › week) */
+
+/* the player sheet's five charts (2026-11-02) */
+.sv-mcg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+@media (max-width: 1000px) { .sv-mcg { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .sv-mcg { grid-template-columns: 1fr; } }
+.sv-mcc { border: 1px solid var(--hairline); border-radius: 12px; padding: 8px 10px 4px; min-width: 0; }
+.sv-mcc-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; margin-bottom: 2px; min-height: 26px; }
+.sv-mcs button { font-size: 11px; padding: 2px 8px; }
+.sv-mcc-ins { display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+.sv-mcg-n { font-size: 11px; color: var(--ink-muted); margin: 6px 2px 0; }

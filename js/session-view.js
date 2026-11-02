@@ -104,6 +104,29 @@ function svMcStatus(m) {
   const r = m.expected ? m.done / m.expected : 1;
   return r < 0.75 ? { lv: 'below', t: 'Behind' } : r > 1.25 ? { lv: 'above', t: 'Ahead' } : { lv: 'on', t: 'On track' };
 }
+/** His RPE score day by day over the microcycle: each day against his usual score of that MD; a day to come = his usual. */
+function svRpePlan(p, mc) {
+  const rows = [];
+  mc.days.forEach((d) => {
+    const past = d.date <= mc.today, q = past && d.sess ? d.sess.players.find((y) => y.id === p.id) : null, u = svUsualFor(p.id, d.md, mc.type, 'rpe', d.sess);
+    if (!u || u[0] == null || (q && !(q.rpe > 0))) return;
+    rows.push({ date: d.date, md: d.md, past, today: d.date === mc.today, u: u[0], sd: u[1], v: past ? (q ? q.rpe : 0) : null, z: q && q.mdref && q.mdref.z ? q.mdref.z.rpe : null, absent: past && !q, obj: past ? null : u[0] });
+  });
+  return { rows };
+}
+const SV_MCG = [['td', 'Total distance'], ['spd', 'Distance', [['d15', '> 15'], ['hit', '> 20'], ['spr', '> 25']]], ['acc_dec', 'Acc + Dec'], ['spr_n', 'Sprints'], ['int', 'Internal load', [['rpe', 'RPE'], ['srpe', 'sRPE']]]];
+/** The five charts of the player sheet: distance, high-speed (> 15 / 20 / 25), Acc + Dec, sprints, RPE / sRPE. */
+function svMcGrid(plan, p, mc, ins, leg) {
+  if (!SV.mcs) SV.mcs = { spd: 'hit', int: 'rpe' };
+  const rpe = svRpePlan(p, mc);
+  const card = ([slot, l, opts]) => {
+    const k = opts ? SV.mcs[slot] : slot, m = k === 'rpe' ? rpe : plan[k];
+    const seg = opts ? `<span class="seg sv-mcs">${opts.map(([v, t]) => `<button type="button" data-mcs="${slot}:${v}" class="${v === k ? 'active' : ''}">${t}</button>`).join('')}</span>` : '';
+    return `<div class="sv-mcc"><div class="sv-mcc-h"><b>${l}</b>${seg}</div>${m && m.rows.length ? svMcChart(m, k, 380) : '<p class="muted" style="font-size:12px">no usual for these days</p>'}</div>`;
+  };
+  return `<div class="sv-mcg">${SV_MCG.map(card).join('')}<div class="sv-mcc sv-mcc-ins">${ins}${leg}</div></div>
+    <p class="sv-mcg-n">day by day · colour = that day vs his usual for its MD · dark line = his usual · dashed = his objective for the days to come (RPE: his usual score)</p>`;
+}
 const SV_HS = ['d15', 'hit', 'spr', 'spr_n'];
 /** Joker / top-up reading of a player's plan (high-speed metrics only; sprints in number are a complement). */
 function svReading(plan) {
@@ -118,14 +141,14 @@ function svReading(plan) {
   return { reached, behind, joker, topup: !!kTop, kTop, k0, short: k0 ? plan[k0].done + plan[k0].planned < plan[k0].target * 0.9 : false };
 }
 
-function svMcChart(m, k) {
-  const W = 560, H = 196, P = { l: 40, r: 6, t: 20, b: 36 }, n = m.rows.length || 1;
+function svMcChart(m, k, W = 560) {
+  const H = 196, P = { l: 40, r: 6, t: 20, b: 36 }, n = m.rows.length || 1;
   const iw = W - P.l - P.r, ih = H - P.t - P.b, step = iw / n, bw = Math.min(50, step * 0.46);
   const raw = Math.max(1, ...m.rows.map((r) => Math.max(r.v || 0, r.u || 0, r.obj || 0))) * 1.12;
   const e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e;
   const top = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e;
   const y = (v) => P.t + ih * (1 - Math.min(v, top) / top), base = y(0);
-  const fv = (v) => (k === 'td' && v >= 1000 ? (v / 1000).toFixed(1) + 'k' : fmtN(v));
+  const fv = (v) => (k === 'td' && v >= 1000 ? (v / 1000).toFixed(1) + 'k' : k === 'rpe' ? fmtN(v, v % 1 ? 1 : 0) : fmtN(v));
   let g = '';
   [0, top / 2, top].forEach((t) => { g += `<line x1="${P.l}" x2="${W - P.r}" y1="${y(t)}" y2="${y(t)}" style="stroke:var(--hairline)"/><text x="${P.l - 6}" y="${y(t) + 4}" text-anchor="end">${fv(t)}</text>`; });
   m.rows.forEach((r, i) => {
@@ -142,7 +165,7 @@ function svMcChart(m, k) {
     g += `<line x1="${bx - 7}" x2="${bx + bw + 7}" y1="${y(r.u)}" y2="${y(r.u)}" style="stroke:var(--ink)" stroke-width="2.5" stroke-linecap="round"/>`;
     g += `<text x="${x}" y="${H - 20}" text-anchor="middle" style="font-weight:700;fill:var(--ink-2)">${r.md}</text><text x="${x}" y="${H - 6}" text-anchor="middle">${r.today ? 'today' : fmtDay(r.date, { weekday: 'short', day: 'numeric' })}</text>`;
   });
-  return `<svg class="sv-mc-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${SV_LBL[k]} day by day">${g}</svg>`;
+  return `<svg class="sv-mc-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${SV_LBL[k] || 'RPE'} day by day">${g}</svg>`;
 }
 
 /** Match day: was his preparation (MD-k → MD-1) lighter or heavier than usual? */
@@ -269,10 +292,18 @@ function svAttentionHtml(s) {
   const well = at.filter((a) => a.well || a.wdrop).sort((a, b) => !!b.well - !!a.well || (a.well ? a.w : a.dr.now) - (b.well ? b.w : b.dr.now))
     .map((a) => (a.well ? { p: a.p, v: `${a.w} %`, t: a.well, c: 'red' } : { p: a.p, v: `${a.dr.prev} → ${a.dr.now} %`, t: a.wdrop, c: 'orange' }));
   const big = at.filter((a) => a.big || a.week).map((a) => { const x = a.bigs.length ? a.bigs[0] : a.wk[0]; return { p: a.p, v: `${a.bigs.length ? 'today' : 'week'} ${SV_BIGS[x.k] || x.k} z ${fmtSigned(x.z)}`, t: [a.big, a.week].filter(Boolean).join(' '), c: 'orange' }; });
+  // felt harder than the load: his RPE z ≥ +1 while distance and > 20 km/h are at or below his usual (a classic early
+  // sign of fatigue, illness or poor recovery — his ask, 2026-11-02, his account first)
+  const rpeHi = !document.documentElement.classList.contains('is-admin') ? [] : svFlat(s).filter((p) => {
+    const zr = svZ(p, 'rpe'), zt = svZ(p, 'td'), zh = svZ(p, 'hit');
+    return zr != null && zr >= 1 && zt != null && zt <= 0 && zh != null && zh <= 0 && !((s.kind === 'match' || p.cat === 'b') && (p.min || 0) < 75);
+  }).sort((a, b) => svZ(b, 'rpe') - svZ(a, 'rpe')).map((p) => ({ p, v: `RPE ${fmtN(p.rpe, 1)} · usual ${fmtN(p.mdref.mean.rpe, 1)}`,
+    t: `Felt harder than the load: RPE ${fmtN(p.rpe, 1)} vs his usual ${fmtN(p.mdref.mean.rpe, 1)} (z ${fmtSigned(svZ(p, 'rpe'))}) while his distance (z ${fmtSigned(svZ(p, 'td'))}) and > 20 km/h (z ${fmtSigned(svZ(p, 'hit'))}) are at or below his usual — fatigue, illness or poor recovery?`, c: 'orange' }));
   const cols = [
     ['red', '2 weeks overload', `A:C > ${SV_OVER} this week and last`, over],
     ['red', 'Wellness', '< 50 % that morning, or −10 % two mornings', well],
     ['orange', 'Big change', 'today or week so far, |z| ≥ 2', big],
+    ...(document.documentElement.classList.contains('is-admin') ? [['orange', 'RPE high · GPS normal', 'RPE z ≥ +1, distance and > 20 km/h at or below his usual', rpeHi]] : []),
     ['blue', 'Speed top-up' + (next ? ' · ' + next : ''), 'no run at 90 % of max speed ≥ 10 days' + (left.length ? ', or behind his high-speed target' : ''), tops],
     ...(left.length ? [['green', 'Joker candidates · ' + next, 'high-speed target of the microcycle reached', jok]] : []),
   ];
@@ -280,7 +311,7 @@ function svAttentionHtml(s) {
   const col = ([c, t, note, xs]) => `<div class="sv-acol ${c}"><div class="sv-acol-h"><i></i><b>${t}</b><span>${xs.length}</span></div><small class="sv-acol-n">${note}</small>
     ${c === 'blue' && shortN > 6 ? `<p class="sv-acol-hint"><b>${shortN} of ${n}</b> short of high-speed running — a speed block for everyone on ${next}?</p>` : ''}
     ${xs.length ? xs.map(row).join('') + (xs.length > 10 ? `<button type="button" class="sv-more-btn" data-more>+ ${xs.length - 10} more</button>` : '') : '<span class="sv-acol-none">None</span>'}</div>`;
-  const flagged = new Set([...over, ...well, ...big].map((x) => x.p.id)).size;
+  const flagged = new Set([...over, ...well, ...big, ...rpeHi].map((x) => x.p.id)).size;
   return `<section class="panel sv-bleed">
     <div class="panel-head"><h2 class="panel-title small">Attention today</h2>
       <span class="sv-sum">${flagged ? `<b>${flagged}</b> of ${n} players to look at · hover a player for the detail, click for his session` : '✓ No alert today'}</span></div>
@@ -582,7 +613,10 @@ function svSheetHtml(s, p, nav) {
       <thead><tr class="grp"><th></th><th colspan="3">Today vs his usual ${game ? 'match' : comp ? 'compensatory session' : s.md || ''} <small>${refTxt}</small></th><th colspan="3" class="sep">${cycTxt}</th><th colspan="2" class="sep">Today vs</th></tr>
         <tr><th>Metric</th><th>blue · green usual · orange · red &nbsp;● today &nbsp;| usual</th><th class="r">today / usual</th><th class="c">z</th><th class="sep">${prep ? 'done · | his usual' : 'done · to do · target'}</th><th class="r">${prep ? 'done / usual' : 'done / target'}</th><th class="c">status</th><th class="r sep">team</th><th class="r">match</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-    ${plan ? `<div class="sv-bottom"><div class="sv-ins">${ins.map((x) => `<div class="sv-in ${x.lv}"><i>${x.i}</i><span>${x.t}</span></div>`).join('')}
+    ${plan && document.documentElement.classList.contains('is-admin') ? svMcGrid(plan, p, mc, `<div class="sv-ins">${ins.map((x) => `<div class="sv-in ${x.lv}"><i>${x.i}</i><span>${x.t}</span></div>`).join('')}</div>`,
+      prep ? '<div class="sv-leg"><span><i class="lg-done"></i>done, MD-k → MD-1</span><span><i class="lg-tgt"></i>his usual for these days, added up</span></div>'
+        : '<div class="sv-leg"><span><i class="lg-done"></i>done</span><span><i class="lg-todo"></i>his objective for the days left</span><span><i class="lg-exp"></i>his usual by today</span><span><i class="lg-tgt"></i>microcycle target</span></div>')
+    : plan ? `<div class="sv-bottom"><div class="sv-ins">${ins.map((x) => `<div class="sv-in ${x.lv}"><i>${x.i}</i><span>${x.t}</span></div>`).join('')}
         ${prep ? '<div class="sv-leg"><span><i class="lg-done"></i>done, MD-k → MD-1</span><span><i class="lg-tgt"></i>his usual for these days, added up</span></div></div>'
           : '<div class="sv-leg"><span><i class="lg-done"></i>done</span><span><i class="lg-todo"></i>his objective for the days left</span><span><i class="lg-exp"></i>his usual by today</span><span><i class="lg-tgt"></i>microcycle target</span><span>target = his own usual for each day, added up · re-planned after every session</span></div></div>'}
       <div class="sv-chart"><div class="sv-chart-h"><b>${SV_LBL[SV.mc]}</b> day by day <small>· click a line above to change · dark line = his usual for that day${prep ? '' : ' · dashed = his objective'}</small></div>${svMcChart(plan[SV.mc], SV.mc)}</div></div>` : ''}`;
@@ -603,7 +637,9 @@ function svOpen(s, id) {
   if (wasHidden) dr.scrollTop = 0;
   sheet.querySelector('.sv-x').onclick = svClose;
   sheet.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => { svOpen(s, list[Number(b.dataset.go)].id); dr.scrollTop = 0; }; });
-  sheet.querySelectorAll('[data-mck]').forEach((b) => { b.onclick = () => { SV.mc = b.dataset.mck; svOpen(s, id); }; });
+  sheet.querySelectorAll('[data-mck]').forEach((b) => { b.onclick = () => { const k = b.dataset.mck; SV.mc = k; SV.mcs = SV.mcs || { spd: 'hit', int: 'rpe' };
+    if (['d15', 'hit', 'spr'].includes(k)) SV.mcs.spd = k; else if (k === 'srpe') SV.mcs.int = k; svOpen(s, id); }; });
+  sheet.querySelectorAll('[data-mcs]').forEach((b) => { b.onclick = () => { const [slot, k] = b.dataset.mcs.split(':'); SV.mcs[slot] = k; svOpen(s, id); }; });
   sheet.querySelector('[data-load]').onclick = () => { svClose(); switchView('player', { player: p.id }); };
   if (wasHidden) sheet.querySelector('.sv-x').focus({ preventScroll: true });
 }
