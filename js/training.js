@@ -213,7 +213,7 @@ function drawSessions(opts) {
         <span class="tag">${cycText}</span>
         ${cyc.competition ? `<span class="tag">${escapeHtml(cyc.competition)}${cyc.opponent ? ' · ' + escapeHtml(cyc.opponent) : ''}</span>` : ''}</div>
       <div class="sh-r"><span class="sh-meta">${fmtN(s.minutes)} min · ${s.n} players${s.n_core !== s.n ? ` · team averages on ${s.n_core} ${s.kind === 'match' ? 'whole-game players' : s.group === 'compensatory' ? 'compensatory players' : 'full-session players'}` : ''}${s.kind === 'match' ? '' : ` · ${escapeHtml(sessComposition(s))}`}</span>
-        ${daysBetween(s.date, todayIso()) <= 30 ? `<button type="button" class="linkbtn sh-corr" data-correct="${s.date}">✎ Correct this session</button>` : ''}</div>
+        ${daysBetween(s.date, todayIso()) <= (document.documentElement.classList.contains('is-admin') ? 90 : 30) ? `<button type="button" class="linkbtn sh-corr" data-correct="${s.date}">✎ Correct this session</button>` : ''}</div>
     </section>
     ${sePanels(s)}
     <div id="sv-attention"></div>
