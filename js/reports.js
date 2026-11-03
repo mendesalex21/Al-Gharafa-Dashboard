@@ -12,7 +12,7 @@ const RP_LOGO = 'img/logo.png';
 
 const RP_COLORS = { hitn: '#e3c85e', td: '#6fb0ee', d15: '#e3c85e', d20: '#ea8a63', d25: '#e98b96', vmax: '#c4c7cf', sprints: '#e98b96', accdec: '#6cd13c' };
 const RP_LABELS = { rhie: 'RHIE', wcs: 'WCS 1′', hitn: 'count > 20km/h', time: 'Time', min: 'Min', rpe: 'RPE', mpm: 'm/min', td: 'TOTAL DISTANCE', d15: 'DIST > 15km/h', d20: 'DIST > 20km/h', d25: 'DIST > 25km/h', vmax: 'MAX SPEED', pmax: '% Max Speed', days: 'Days', sprints: 'Sprints', accdec: 'High Acc+Dec' };
-const RP_WIDTHS = { rhie: '64px', wcs: '50px', hitn: 'minmax(0,1fr)', td: 'minmax(0,2.3fr)', d15: 'minmax(0,1.7fr)', d20: 'minmax(0,1.15fr)', d25: 'minmax(0,1fr)', vmax: 'minmax(0,1.3fr)', accdec: 'minmax(0,1fr)', pmax: '54px', mpm: '48px', sprints: '52px', time: '36px', min: '40px', days: '44px', rpe: '36px' };
+const RP_WIDTHS = { rhie: '64px', wcs: '50px', hitn: '52px', td: 'minmax(0,2.3fr)', d15: 'minmax(0,1.7fr)', d20: 'minmax(0,1.15fr)', d25: 'minmax(0,1fr)', vmax: 'minmax(0,1.3fr)', accdec: 'minmax(0,1fr)', pmax: '54px', mpm: '48px', sprints: '52px', time: '36px', min: '40px', days: '44px', rpe: '36px' };
 const RP_BARS = ['td', 'd15', 'd20', 'd25', 'vmax', 'accdec', 'hitn'];
 const RP_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -128,6 +128,7 @@ function rpTable(D, rows, cols, fixed = {}, budget = RP_TABLE_H, opts = {}) {
   const midH = Math.max(10, Math.min(18, rowH - 6)); // the max-speed bar follows the row: a gap between players, as the other bars
   const cell = (r, k) => {
     const v = fixed[k] ?? r[k];
+    if (k === 'hitn') { const [bg, fg] = rpSprintColor(t01(k, v)); return `<div class="rp-c rp-chip"><span class="rp-v" style="background:${bg};color:${fg}">${rpFmt(k, v)}</span></div>`; } // count > 20 km/h: as the sprints (2026-11-03)
     if (RP_BARS.includes(k)) {
       const m = scaleMax(k), trk = rpPct(teamMax(k), m);
       if (k === 'vmax') return `<div class="rp-c"><div class="rp-bar rp-mid" style="height:${midH}px"><i class="rp-trk" style="width:${trk}"></i><i style="width:${rpPct(v, m)};background:${RP_COLORS[k]}"></i><em>${rpFmt(k, v)}</em></div></div>`;
