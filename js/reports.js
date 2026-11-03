@@ -55,8 +55,8 @@ function rpDoc(data, i, part = 'all') {
   // a row's report (index 12): 0 the session · 1 the B-team game · 2 a match day's extra session · 3 week load only
   const extra = part === 'x', mark = { t: 0, b: 1, x: 2 }[part];
   const inPart = (r) => { const m = r[12] || 0; return m !== 3 && (part === 'all' ? m < 2 : m === mark); };
-  const fullSession = s.full.filter((r) => known(r[0]) && inPart(r)).map(([name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro, , rec]) =>
-    ({ name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro: part === 'b' ? 1 : pro, rec: rec === 1 }));
+  const fullSession = s.full.filter((r) => known(r[0]) && inPart(r)).map(([name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro, , rec, hitn]) =>
+    ({ name, time, mpm, td, d15, d20, vmax, pmax, days, sprints, accdec, pro: part === 'b' ? 1 : pro, rec: rec === 1, hitn }));
   const inX = new Set(part !== 'all' ? fullSession.map((r) => r.name) : []); // a part's drills: its own players only
   const pm = (s.parts && s.parts[part]) || {};
   const gameAvg = {};
@@ -240,7 +240,7 @@ function rpPages(D) {
   const meta = [['WEEK', s.week], ['MD', s.md], ['TIME', s.time + "'"], ['N EXERCICE', s.exercise], ['AM/PM', s.ampm]];
   const title = `${s.hidden ? 'Rehab / individual' : s.id} · ${s.dateLabel}`;
   const kicker = s.extra ? 'EXTRA SESSION · MATCH DAY' : 'FULL SESSION' + (s.part ? ' · ' + s.part.toUpperCase() : '');
-  pages.push(rpHeader(kicker, title, meta) + rpTable(D, D.fullSession, ['time', 'mpm', 'td', 'd15', 'd20', 'vmax', 'pmax', 'days', 'sprints', 'accdec']));
+  pages.push(rpHeader(kicker, title, meta) + rpTable(D, D.fullSession, ['time', 'mpm', 'td', 'd15', 'd20', ...(D.fullSession.some((r) => r.hitn != null) ? ['hitn'] : []), 'vmax', 'pmax', 'days', 'sprints', 'accdec'])); // count > 20 km/h (2026-11-03)
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'td', 'TOTAL DISTANCE', 'TOTAL DISTANCE', 'td') + rpChart(D, 'd20', 'DISTANCE >20kmh', 'DISTANCE >20kmh', 'd20'));
   pages.push(rpHeader(kicker, title, meta) + rpChart(D, 'accdec', 'Acceleration + Deceleration', 'HI Acc+Dec', 'accdec') + rpChart(D, 'sprints', 'Number of Sprints >25kmh', 'SPRINTS', 'sprints'));
   const halves = rpHalves(D);
