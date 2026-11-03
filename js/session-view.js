@@ -262,7 +262,7 @@ function svAttention(s) {
   const out = [], wday = TR.whist && TR.whist.days ? TR.whist.days.find((d) => d.date === s.date) : null; // wellness of that morning
   const st = TR.staff && TR.staff.days ? TR.staff.days[s.date] : null, wkeys = (TR.staff && TR.staff.week_keys) || [], drops = svWellDrops(TR.whist, s.date);
   [...svFlat(s), ...svOffGps(s), ...svKeepers(s)].forEach((p) => {
-    const partial = (s.kind === 'match' || p.cat === 'b') && (p.min || 0) < 75; // under 75 min a game is scaled: not flagged
+    const partial = (s.kind === 'match' || p.cat === 'b') && (p.min || 0) < 80; // under 80 min a game has no z: not flagged
     const ser = TR.workload && TR.workload.series ? TR.workload.series[p.id] : null, i = ser && ser.a7 ? daysBetween(ser.start, s.date) : -1;
     const ov = i >= 0 ? SV_AC.map(([k]) => ({ k, a: ser.a7[k] ? ser.a7[k][i] : null, b: ser.a14[k] ? ser.a14[k][i] : null }))
       .filter((x) => x.a != null && x.b != null && x.a > SV_OVER && x.b > SV_OVER).sort((x, y) => y.a - x.a) : [];
@@ -312,7 +312,7 @@ function svAttentionHtml(s) {
   // sign of fatigue, illness or poor recovery — his ask, 2026-11-02, released the same day)
   const rpeHi = svFlat(s).filter((p) => {
     const zr = svZ(p, 'rpe'), zt = svZ(p, 'td'), zh = svZ(p, 'hit');
-    return zr != null && zr >= 1 && zt != null && zt <= 0 && zh != null && zh <= 0 && !((s.kind === 'match' || p.cat === 'b') && (p.min || 0) < 75);
+    return zr != null && zr >= 1 && zt != null && zt <= 0 && zh != null && zh <= 0 && !((s.kind === 'match' || p.cat === 'b') && (p.min || 0) < 80);
   }).sort((a, b) => svZ(b, 'rpe') - svZ(a, 'rpe')).map((p) => ({ p, v: `RPE ${fmtN(p.rpe, 1)} · usual ${fmtN(p.mdref.mean.rpe, 1)}`,
     t: `Felt harder than the load: RPE ${fmtN(p.rpe, 1)} vs his usual ${fmtN(p.mdref.mean.rpe, 1)} (z ${fmtSigned(svZ(p, 'rpe'))}) while his distance (z ${fmtSigned(svZ(p, 'td'))}) and > 20 km/h (z ${fmtSigned(svZ(p, 'hit'))}) are at or below his usual — fatigue, illness or poor recovery?`, c: 'orange' }));
   const cols = [
@@ -612,7 +612,7 @@ function svSheetHtml(s, p, nav) {
   const game = s.kind === 'match' || p.cat === 'b'; // A-team match, or a B-team game on a training day
   const comp = p.mdref && p.mdref.kind === 'comp'; // a compensatory session: vs his usual compensatory session
   const among = !game && s.mdref && s.mdref.last ? ` among the last ${comp ? s.mdref.comp : s.mdref.sessions} ${comp ? 'compensatory sessions' : s.md}` : '';
-  const refTxt = p.mdref ? `${p.mdref.src === 'own' ? `his ${p.mdref.n} ${game ? 'games of 75 min + (A + B, this season and last)' : comp ? 'compensatory sessions' : 'sessions'}${among}` : `squad${among || (comp ? ', compensatory sessions' : ' reference')}`}${per90 && p.min < 75 ? `, scaled to his ${fmtN(p.min)} min — indicative` : ''}`
+  const refTxt = p.mdref ? `${p.mdref.src === 'own' ? `his ${p.mdref.n} ${game ? 'full games of 80 min + (A + B, this season and last, raw totals)' : comp ? 'compensatory sessions' : 'sessions'}${among}` : `squad${among || (comp ? ', compensatory sessions' : ' reference')}`}${p.mdref.short ? ` — he played ${fmtN(p.min)} min: no colour under 80 min (m/min tells his intensity)` : ''}`
     : game && p.min < 20 ? 'under 20 min: no comparison' : 'no reference';
   const prep = plan && mc.prep;
   const cycTxt = prep ? `His preparation → this match <small>${mc.days[0].md} → MD-1 · vs his usual for these days</small>`
