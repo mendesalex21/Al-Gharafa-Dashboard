@@ -326,7 +326,7 @@ function drawMdz(s) {
   // each player vs his own sessions of the same type: training (this MD, same microcycle type), compensatory, or match
   const nC = s.players.filter((p) => p.mdref && p.mdref.kind === 'comp').length, nT = s.players.filter((p) => p.mdref && p.mdref.kind !== 'comp').length;
   const dd = (d) => (d ? fmtDay(d, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
-  const day = ref.tag === 'MD' ? 'his previous A and B games of 80 min or more, this season and the last (raw totals; a player under 80 min today: his usual shown, no colour)' : `the last ${ref.sessions} ${ref.tag} sessions of ${(TYPE_LABEL[ref.type] || '').toLowerCase()} microcycles`;
+  const day = ref.tag === 'MD' ? 'the average of his 3 best A and B games of 75 min or more, this season and the last (raw totals; a player under 75 min today: no colour)' : `the last ${ref.sessions} ${ref.tag} sessions of ${(TYPE_LABEL[ref.type] || '').toLowerCase()} microcycles`;
   const compTxt = `the last ${ref.comp} <b>compensatory sessions</b>${ref.comp_since ? ` (since ${dd(ref.comp_since)})` : ''} — the players who did not play the match`;
   const dayTxt = ref.tag === 'MD' ? `${day} (${ref.sessions} games since ${dd(ref.since)})` : `${day}${ref.since ? ` (since ${dd(ref.since)})` : ''}`;
   const what = nC && nT ? `compensatory players with his ${compTxt}, the others with his ${dayTxt}` : nC ? `his ${compTxt}, not with a usual ${ref.tag || 'training'}` : `his ${dayTxt}`;

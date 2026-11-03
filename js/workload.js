@@ -349,7 +349,7 @@ function plTiles(B) {
   return tiles + wcs + rh + well;
 }
 
-/** His matches (A and B team games he played), each with its minutes, his z vs his usual match (per 90) and the opponent. */
+/** His matches (A and B team games he played), each with its minutes, his z vs his 3 best games and the opponent. */
 function plGames(B) {
   const { s, days } = B, sess = Object.fromEntries(((TR.sessions && TR.sessions.sessions) || []).map((x) => [x.date, x]));
   return days.map((x, i) => ({ x, i, c: s.cat[i], min: s.min[i] || 0 })).filter((g) => (g.c === 'm' || g.c === 'b') && g.min > 0).map((g) => {
@@ -370,11 +370,11 @@ function plCharts(B) {
     const short = (g) => (g.c === 'b' ? 'B' : g.opp.replace(/^Al[\s-]+/i, '').slice(0, 3).toUpperCase()), roomy = gs.length <= (TM.fit || 99) / 2;
     const tick = (g) => (roomy ? `${short(g)} ${fmtDay(g.x, { day: 'numeric', month: 'numeric' })}` : short(g));
     out = plKeys().map((k) => { const [l, u] = PL_LAB[k];
-      return card(head(k, l, `per match${p90 ? ' · per 90 min' : ` · his minutes`}${u ? ' · ' + u : ''} · grey box = his usual match${p90 ? '' : ' for those minutes'} · colour = z per 90`) + tmChart({ title: l, dots: few, strip: 'none',
-        items: gs.map((g) => { const raw = L[k] ? L[k][g.i] || 0 : 0, f = p90 ? 90 / g.min : 1, v = raw * f, r = g.ref, m = r && r.mean ? r.mean[k] : null, sd = r && r.sd ? r.sd[k] : null, sc = p90 ? 1 : g.min / 90;
+      return card(head(k, l, `per match${p90 ? ' · per 90 min' : ` · his minutes`}${u ? ' · ' + u : ''} · grey box = his 3 best games (75 min +) · colour = z vs them, from 75 min`) + tmChart({ title: l, dots: few, strip: 'none',
+        items: gs.map((g) => { const raw = L[k] ? L[k][g.i] || 0 : 0, f = p90 ? 90 / g.min : 1, v = raw * f, r = g.ref, m = r && r.mean ? r.mean[k] : null, sd = r && r.sd ? r.sd[k] : null, sc = r && r.per90 && !p90 ? g.min / 90 : 1; // the top-3 reference is raw (2026-11-03)
           const zz = r && r.z ? r.z[k] : null, ac = A[k] ? A[k][g.i] : null;
           return { v, col: z ? TM_ZCOL[tmZ(zz)] : tmZone(ac)[0], ac, lo: m != null && sd != null ? Math.max(0, (m - 0.67 * sd) * sc) : null, hi: m != null && sd != null ? (m + 0.67 * sd) * sc : null, tick: tick(g), logo: g.c === 'b' ? null : tmLogo(g.opp), label: few && v > 0 ? tmK(v) : '',
-            tip: `${fmtDay(g.x)} · ${g.opp}${g.comp && g.comp !== g.opp ? ' · ' + g.comp : ''} · ${g.min}': ${fmtN(raw)}${g.min ? ` (${fmtN(raw * 90 / g.min)} per 90)` : ''}${m != null ? ` · his usual ${fmtN(m)} per 90` : ''}${zz == null ? '' : ' · z ' + tmS(zz)}` }; }) })); }).join('');
+            tip: `${fmtDay(g.x)} · ${g.opp}${g.comp && g.comp !== g.opp ? ' · ' + g.comp : ''} · ${g.min}': ${fmtN(raw)}${g.min ? ` (${fmtN(raw * 90 / g.min)} per 90)` : ''}${m != null ? (r.per90 ? ` · his usual ${fmtN(m)} per 90` : ` · his 3 best ${fmtN(m)}`) : ''}${zz == null ? '' : ' · z ' + tmS(zz)}` }; }) })); }).join('');
     out += card(head('', 'Minutes', 'per match') + tmChart({ title: 'Minutes', dots: few, strip: 'none', max: 110,
       items: gs.map((g) => ({ v: g.min, col: g.min >= 80 ? '#16269e' : g.min >= 45 ? '#5a7bd8' : '#aab8e8', tick: tick(g), logo: g.c === 'b' ? null : tmLogo(g.opp), label: few ? g.min : '', tip: `${fmtDay(g.x)} · ${g.opp}: ${g.min}'` })) }));
     return out;
@@ -421,7 +421,7 @@ function plGamesTable(B) {
   const cell = (g, k) => { const raw = B.L[k] ? B.L[k][g.i] || 0 : 0, v = p90 && g.min ? raw * 90 / g.min : raw, zz = g.ref && g.ref.z ? g.ref.z[k] : null;
     return `<td class="b">${raw > 0 ? tmK(v) : '—'}</td><td>${zz == null ? '' : `<span class="mz ${tmZ(zz)}">${tmS(zz)}</span>`}</td>`; };
   const rows = gs.slice().reverse().map((g) => `<tr><td><b>${fmtDay(g.x, { weekday: 'short', day: 'numeric', month: 'short' })}</b></td><td class="l">${g.c === 'b' ? '' : crestHtml(g.opp, 18) + ' '}${escapeHtml(g.opp)}</td><td class="l">${escapeHtml(g.comp && g.comp !== g.opp ? g.comp : '')}</td><td class="b">${g.min}'</td>${K.map(([k]) => cell(g, k)).join('')}<td>${g.q && g.q.vmax ? fmtN(g.q.vmax, 1) : '—'}</td></tr>`).join('');
-  return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Match by match</h2><span class="panel-note">${p90 ? 'per 90 minutes' : 'his raw numbers'} · z vs his usual match, per 90 (his last games) · max speed in km/h</span></div>
+  return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Match by match</h2><span class="panel-note">${p90 ? 'per 90 minutes' : 'his raw numbers'} · z vs his 3 best games of 75 min + (raw) · max speed in km/h</span></div>
     <div class="table-wrap"><table class="tm-tbl tm-wide"><thead><tr><th>Date</th><th class="l">Opponent</th><th class="l">Comp.</th><th class="b">Minutes</th>${K.map(([, l]) => `<th class="b">${l}</th><th>z</th>`).join('')}<th>Max speed</th></tr></thead><tbody>${rows || '<tr><td colspan="19" class="muted">No match yet</td></tr>'}</tbody></table></div></section>`;
 }
 
@@ -468,7 +468,7 @@ function plWeekOpen(start) {
   const val = (x, k) => { const i = ix(x); return i >= 0 && i < B.n && B.L[k] ? B.L[k][i] || 0 : 0; }, mins = (x) => { const i = ix(x); return i >= 0 && i < B.n ? s.min[i] || 0 : 0; };
   const kindOf = (x) => (x > asOf ? 'later' : ({ m: 'match', b: 'match', t: 'train', p: 'train', c: 'train', i: 'train', r: 'out', x: 'out', s: 'out', n: 'out', a: 'out' }[cat(x)] || 'off'));
   const pl = (n, w) => `${n} ${w}${n === 1 ? '' : w === 'match' ? 'es' : 's'}`, u1 = (v) => (v == null ? '—' : v.toFixed(1));
-  // his day vs his usual for that MD (the sessions payload: z and the usual mean; a match per 90 min)
+  // his day vs his usual for that MD (the sessions payload: z and the usual mean; a match: his 3 best games)
   const zDay = (x, k) => { const q = mine(x); return q && q.mdref && q.mdref.z && q.mdref.z[k] != null && val(x, k) > 0 ? { z: q.mdref.z[k], mean: (q.mdref.mean || {})[k], per90: q.mdref.per90 } : null; };
   const KS = ['td', 'd15', 'hit', 'spr', 'spr_n', 'acc_dec', 'srpe']; // speed thresholds in order
   const M = KS.map((k) => { const [l, u] = PL_LAB[k], st = tmStats(others.map((x) => x[k]).filter((v) => v > 0)); return { k, l, u, st, v: W[k] || 0, z: W.done && W[k] > 0 ? tmZof(W[k], st) : null, ac: W[k] > 0 ? B.acAt(k, W.done ? W.end : asOf) : null }; });
@@ -522,7 +522,7 @@ function plWeekOpen(start) {
     <div class="tw-card"><h4>Make-up of the week<small>compared with his other full weeks of the season</small></h4><div class="tw-mk">
       <div class="${cls(nM, uM)}"><span>Matches</span><b>${nM}</b><em>usual ${u1(uM)}${minG ? ` · ${minG}'` : ''}</em></div><div class="${cls(nT, uT)}"><span>Training days</span><b>${nT}</b><em>usual ${u1(uT)}</em></div>
       <div><span>Not available</span><b>${nOut}</b><em>injury, rehab, sick, national team, absent</em></div><div><span>Wellness</span><b>${wAvg == null ? '—' : Math.round(wAvg) + ' %'}</b><em>${pl(wv.length, 'morning')}</em></div></div></div>
-    <div class="tw-card"><h4>Day by day<small>his load · chip = z vs his usual for that MD (a match: vs his usual match, per 90)</small></h4>
+    <div class="tw-card"><h4>Day by day<small>his load · chip = z vs his usual for that MD (a match: vs his 3 best games of 75 min +)</small></h4>
       <div class="table-wrap"><table class="tw-dt"><thead><tr><th>Day</th><th class="l">MD</th><th class="l">Session</th><th>Time</th><th>RPE</th>${KS.map((k) => `<th>${short[k]}</th>`).join('')}<th>Wellness</th></tr></thead><tbody>${dayRows}${tot}</tbody></table></div></div>`;
   const dr = document.getElementById('sv-drawer'), wasHidden = dr.hidden;
   dr.hidden = false;
