@@ -126,12 +126,16 @@ function splSid(date) {
 /** The plan of a date: saved, else a new one (statuses carried over from the last session before it). */
 function splPlan(date) {
   const plans = SPL.saved.plans || (SPL.saved.plans = {});
-  if (plans[date]) return plans[date];
+  if (plans[date] && plans[date].status && plans[date].drills) return plans[date];
   const last = Object.keys(SPL.lib.recent).filter((d) => d < date).sort().pop(), types = last ? SPL.lib.recent[last].types : {};
   const status = {};
   const off = typeof DAY_OFF !== 'undefined' && !!DAY_OFF[date] && !splMatchOn(date); // set as a team day off in the Calendar
   SPL.lib.players.forEach((p) => { const t = types[p.id] || p.type; status[p.id] = SPL_KEEP.has(t) ? t : 'ProTraining'; if (off && SPL_IN_SESSION.has(status[p.id])) status[p.id] = 'Day_Off'; });
-  return { ampm: 'PM', drills: [], status, rpe: {}, fresh: true, ...(off ? { off: true, offCal: true } : {}) };
+  const made = { ampm: 'PM', drills: [], status, rpe: {}, fresh: true, ...(off ? { off: true, offCal: true } : {}) };
+  // a saved plan with missing parts (2 Nov 2026 was saved empty, {}: the import stopped on "reading 'bennacer'"): completed
+  // in place — what it has is kept, the rest as a new plan
+  if (plans[date]) { const p = plans[date]; ['ampm', 'drills', 'status', 'rpe'].forEach((k) => { if (p[k] == null) p[k] = made[k]; }); return p; }
+  return made;
 }
 /** A team day off on or off: the players planned in the session go Day off (and come back when it is switched off). */
 function splSetOff(p, on) {
