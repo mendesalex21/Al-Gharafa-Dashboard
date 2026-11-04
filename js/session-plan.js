@@ -147,13 +147,25 @@ function splAfterMatch(date) {
   const tag = splTag(date), k = tag === 'MD+1' ? 1 : tag === 'MD+2' ? 2 : 0;
   if (!k || !SPL.sess || splMatchOn(date)) return null; // released to the staff 2026-11-04
   const ym = (SPL.sess.sessions || []).find((x) => x.kind === 'match' && daysBetween(x.date, date) === k);
-  if (!ym) return null;
+  return ym ? splSplit(date, ym) : null;
+}
+/** The split of a day from a match sheet (sessions data). */
+function splSplit(date, ym) {
   const mine = new Map(SPL.lib.players.filter((q) => q.pos !== 'GK').map((q) => [q.id, q])), status = {}, n = { rec: 0, comp: 0 };
   const last = Object.keys(SPL.lib.recent).filter((d) => d < date).sort().pop(), types = last ? SPL.lib.recent[last].types : {};
   const set = (id, t) => { const q = mine.get(id); if (!q || SPL_KEEP.has(types[id] || q.type)) return; status[id] = t; n[t === 'Recovery' ? 'rec' : 'comp']++; };
   (ym.players || []).forEach((q) => set(q.id, q.min >= 45 ? 'Recovery' : 'Compensatory'));
   (ym.absent || []).filter((q) => q.cat !== 'x' && /^(Game|NC)$/.test(q.type)).forEach((q) => set(q.id, 'Compensatory'));
   return { date: ym.date, opp: (ym.cycle && ym.cycle.opponent) || '', status, n };
+}
+/** The day's MD changed away from MD+1 / MD+2 (Session Plan header or Calendar, e.g. MD-3 = the new cycle): the players
+ * still in the post-match split go back to the team session, and the objective with them. A player set by hand is kept. */
+function splSyncPost(date) {
+  const p = (SPL.saved.plans || {})[date];
+  if (!p || !p.post || !SPL.sess || date <= SPL.lib.last_date || splAfterMatch(date)) return;
+  const ym = (SPL.sess.sessions || []).find((x) => x.kind === 'match' && x.date === p.post);
+  if (ym) Object.entries(splSplit(date, ym).status).forEach(([id, t]) => { if (p.status[id] === t) p.status[id] = 'ProTraining'; });
+  delete p.post; splTouch(date);
 }
 /** The players' line of an MD+1 / MD+2: the split proposed from the match sheet, and a button when the plan differs. */
 function splAfterMatchHtml(date, p) {
@@ -199,7 +211,7 @@ function splDraw() {
   }
   document.getElementById('spl-wk').textContent = `${splWeekNo(SPL.week)} · ${SPL_DAY(SPL.week, { day: 'numeric', month: 'short' })} – ${SPL_DAY(addDays(SPL.week, 6), { day: 'numeric', month: 'short' })}`;
   document.getElementById('spl-sub').textContent = `Plan before training · drop the two StatSports files after it · data up to ${SPL_DAY(SPL.lib.last_date, { day: 'numeric', month: 'short' })} (${'S' + SPL.lib.last_sid})`;
-  splSyncOff(SPL.date);
+  splSyncOff(SPL.date); splSyncPost(SPL.date);
   splDrawWeek();
   if (SPL.view === 'correct' && !splCorrKey(SPL.date)) SPL.view = 'plan'; // nothing to correct on that day
   document.getElementById('spl-main').innerHTML = SPL.view === 'correct' ? splCorrectHtml() : SPL.view === 'import' && SPL.files.full ? splImportHtml() : splPlanHtml();
