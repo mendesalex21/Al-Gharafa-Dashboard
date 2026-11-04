@@ -79,9 +79,9 @@ function hoData() {
     pl.forEach((p) => { const g = HO_GROUP[st[p.id]]; if (g) groups[g].push(p); });
   } else out = pl.filter((p) => p.status !== 'available' && p.today !== 'NC'); // not in yesterday's squad (NC) is not an absence today
   // no plan yet, the day after a match and no day off: the compensatory group proposed from yesterday's match sheet; on an
-  // MD+2 too (still after the match: starters in recovery, substitutes compensatory — his rule, 2026-11-04; admin first)
+  // MD+2 too (still after the match: starters in recovery, substitutes compensatory — his rule, 2026-11-04, released the same day)
   let proposed = null;
-  const after = tag === 'MD+2' && document.documentElement.classList.contains('is-admin') ? 2 : 1;
+  const after = tag === 'MD+2' ? 2 : 1;
   const ym = P.sessions.sessions.find((x) => x.kind === 'match' && hoCount(x.date, today) === after);
   if (!st && !dayOff && ym) {
     const gk = new Set(Object.entries(P.sessions.roster || {}).filter(([, v]) => v.pos === 'GK').map(([k]) => k));
