@@ -44,6 +44,7 @@ function renderPlan() {
   document.getElementById('spl-main').addEventListener('change', splChange);
   document.getElementById('spl-main').addEventListener('input', splInput);
   withData('plan_lib', (d) => { SPL.lib = d; splDraw(); }, (err) => { document.getElementById('spl-main').innerHTML = loadError(err); });
+  withData('sessions', (d) => { SPL.sess = d; splDraw(); }, () => {}); // the last match sheet: who played (MD+1 / MD+2 groups)
   withData('calendar', (d) => { SPL.cal = d; SPL.events = applyCalendarEdits(d); splMatches(); splDraw(); }, () => { SPL.cal = { events: [], match_days: [] }; SPL.events = []; splDraw(); });
   splLoadSaved().then(() => splDraw()).catch((err) => { if (!SPL.saved) SPL.saved = { plans: {}, titles: {}, published: {}, drills: {} }; SPL.state = 'Plans not loaded: ' + (err.message || err); splDraw(); });
 }
@@ -131,11 +132,35 @@ function splPlan(date) {
   const status = {};
   const off = typeof DAY_OFF !== 'undefined' && !!DAY_OFF[date] && !splMatchOn(date); // set as a team day off in the Calendar
   SPL.lib.players.forEach((p) => { const t = types[p.id] || p.type; status[p.id] = SPL_KEEP.has(t) ? t : 'ProTraining'; if (off && SPL_IN_SESSION.has(status[p.id])) status[p.id] = 'Day_Off'; });
-  const made = { ampm: 'PM', drills: [], status, rpe: {}, fresh: true, ...(off ? { off: true, offCal: true } : {}) };
+  const pm = off ? null : splAfterMatch(date); // MD+1 / MD+2: starters in recovery, the others compensatory (his rule)
+  if (pm) Object.assign(status, pm.status);
+  const made = { ampm: 'PM', drills: [], status, rpe: {}, fresh: true, ...(off ? { off: true, offCal: true } : {}), ...(pm ? { post: pm.date } : {}) };
   // a saved plan with missing parts (2 Nov 2026 was saved empty, {}: the import stopped on "reading 'bennacer'"): completed
   // in place — what it has is kept, the rest as a new plan
   if (plans[date]) { const p = plans[date]; ['ampm', 'drills', 'status', 'rpe'].forEach((k) => { if (p[k] == null) p[k] = made[k]; }); return p; }
   return made;
+}
+/** Still after the match (MD+1 / MD+2, his rule 2026-11-04 — every MD+2 of 2026 in his Excel was Recovery + Compensatory):
+ * who played 45′ or more → Recovery; who played less, sat on the bench or was not called → Compensatory. Injured / rehab /
+ * NT / sick (carried over) and goalkeepers are left as they are. Same split as the Home page's proposal. */
+function splAfterMatch(date) {
+  const tag = splTag(date), k = tag === 'MD+1' ? 1 : tag === 'MD+2' ? 2 : 0;
+  if (!k || !SPL.sess || splMatchOn(date) || !document.documentElement.classList.contains('is-admin')) return null; // admin first
+  const ym = (SPL.sess.sessions || []).find((x) => x.kind === 'match' && daysBetween(x.date, date) === k);
+  if (!ym) return null;
+  const mine = new Map(SPL.lib.players.filter((q) => q.pos !== 'GK').map((q) => [q.id, q])), status = {}, n = { rec: 0, comp: 0 };
+  const last = Object.keys(SPL.lib.recent).filter((d) => d < date).sort().pop(), types = last ? SPL.lib.recent[last].types : {};
+  const set = (id, t) => { const q = mine.get(id); if (!q || SPL_KEEP.has(types[id] || q.type)) return; status[id] = t; n[t === 'Recovery' ? 'rec' : 'comp']++; };
+  (ym.players || []).forEach((q) => set(q.id, q.min >= 45 ? 'Recovery' : 'Compensatory'));
+  (ym.absent || []).filter((q) => q.cat !== 'x' && /^(Game|NC)$/.test(q.type)).forEach((q) => set(q.id, 'Compensatory'));
+  return { date: ym.date, opp: (ym.cycle && ym.cycle.opponent) || '', status, n };
+}
+/** The players' line of an MD+1 / MD+2: the split proposed from the match sheet, and a button when the plan differs. */
+function splAfterMatchHtml(date, p) {
+  const pm = !p.off && splAfterMatch(date);
+  if (!pm || !(pm.n.rec + pm.n.comp)) return '';
+  const same = Object.entries(pm.status).every(([id, t]) => (p.status[id] || 'ProTraining') === t);
+  return `<p class="sp-note sp-post">After the match${pm.opp ? ' vs ' + escapeHtml(pm.opp) : ''} (${SPL_DAY(pm.date, { weekday: 'short', day: 'numeric', month: 'short' })}): <b>${pm.n.rec}</b> who played 45′ or more → Recovery · <b>${pm.n.comp}</b> who played less, sat on the bench or were not called → Compensatory${same ? ' ✓' : ` <button type="button" class="btn-light" data-post-apply>Apply</button>`}</p>`;
 }
 /** A team day off on or off: the players planned in the session go Day off (and come back when it is switched off). */
 function splSetOff(p, on) {
@@ -429,7 +454,7 @@ function splPlanHtml() {
       <div class="sp-add"><select data-add aria-label="Add a drill"><option value="">+ Add a drill…</option>${list('')}<option value="__new">+ Create a new drill…</option></select>${sugg.length ? `<small>Often on ${tag}:</small>${sugg.map((x) => `<button type="button" data-sugg="${escapeHtml(splName(x.name))}">${escapeHtml(splName(x.name))} <small>${x.min}'</small></button>`).join('')}` : ''}</div>
       ${splCardHtml()}
       ${splLoadHtml(date, p)}</div>`}
-      ${splPlayersHtml(p)}</div>
+      ${splPlayersHtml(p, date)}</div>
     ${inData ? '' : sppHtml(date)}
     ${inData ? '' : `<div class="sp-after">${typeof cfOn === 'function' && cfOn() ? `<button type="button" class="btn-primary sp-api" data-statsports><b>After the ${p.off ? 'day' : 'session'}</b>⇣ Get it from StatSports</button>` : ''}${p.off ? '<button type="button" class="btn-light" data-nogps>Nobody worked — publish the day off as it is</button>' : ''}<label class="sp-drop mini" id="spl-drop"><input type="file" accept=".csv,text/csv" multiple hidden data-files>${typeof cfOn === 'function' && cfOn() ? '' : '<b>After the session</b>'}<span>${typeof cfOn === 'function' && cfOn() ? 'or drop' : 'Drop'} ${p.off ? 'the day’s StatSports exports (Full and Drills) here, or click to choose' : `<code>${escapeHtml(p.sid || splSid(date))}_Full.csv</code> and <code>${escapeHtml(p.sid || splSid(date))}_Drills.csv</code> here, or click to choose — the rows are built from this plan`}</span></label></div>`}
     ${splNtHtml()}`;
@@ -625,7 +650,7 @@ function splStatusList() {
   const known = new Set(SPL_STATUS.map(([k]) => k)), extra = (SPL.lib.types || []).filter((t) => !known.has(t) && !/^(Game|Friendly_Game|Game\+Compensatory|NC|Private)$/.test(t));
   return [...SPL_STATUS, ...extra.map((t) => [t, t, '#aeaeb2'])];
 }
-function splPlayersHtml(p) {
+function splPlayersHtml(p, date) {
   const known = new Set(SPL_STATUS.map(([k]) => k)), extra = (SPL.lib.types || []).filter((t) => !known.has(t) && !/^(Game|Friendly_Game|Game\+Compensatory|NC|Private)$/.test(t));
   const status = splStatusList(), col = Object.fromEntries(status.map(([k, , c]) => [k, c])), lab = Object.fromEntries(status.map(([k, l]) => [k, l]));
   const cnt = {}; SPL.lib.players.forEach((q) => { const t = p.status[q.id] || 'ProTraining'; cnt[t] = (cnt[t] || 0) + 1; });
@@ -633,7 +658,7 @@ function splPlayersHtml(p) {
   const groups = [...order, ''].filter((g) => SPL.lib.players.some((q) => (order.includes(q.pos) ? q.pos : '') === g));
   const face = (id) => { const ph = typeof PHOTO_DATA !== 'undefined' && PHOTO_DATA[id]; return `<span class="sp-face"${ph ? ` style="background-image:url('${ph}')"` : ''}></span>`; };
   return `<div class="sp-col"><div class="sp-h3">Players <small>${SPL.lib.players.length} · carried over from the last session · change only what is new</small></div>
-    <div class="sp-sum">${status.filter(([k]) => cnt[k]).map(([k, l, c]) => `<span><i style="background:${c}"></i>${cnt[k]} ${l.toLowerCase()}</span>`).join('')}</div>
+    ${date ? splAfterMatchHtml(date, p) : ''}<div class="sp-sum">${status.filter(([k]) => cnt[k]).map(([k, l, c]) => `<span><i style="background:${c}"></i>${cnt[k]} ${l.toLowerCase()}</span>`).join('')}</div>
     <div class="sp-pl">${groups.map((g) => `<div class="sp-g">${g || '—'}<small>${label[g] || 'No position'}</small></div>` + SPL.lib.players.filter((q) => (order.includes(q.pos) ? q.pos : '') === g)
       .sort((a, b) => ((p.status[a.id] || 'ProTraining') === 'ProTraining' ? 0 : 1) - ((p.status[b.id] || 'ProTraining') === 'ProTraining' ? 0 : 1) || a.name.localeCompare(b.name)).map((q) => {
         const t = p.status[q.id] || 'ProTraining';
@@ -1333,6 +1358,7 @@ function splClick(e) {
   if (!t || !SPL.date) return;
   const date = SPL.date, p = () => splEnsure(date);
   if (t.dataset.ampm) { p().ampm = t.dataset.ampm; splTouch(date); splDraw(); return; }
+  if (t.dataset.postApply != null) { const pm = splAfterMatch(date); if (pm) { const pp = p(); Object.assign(pp.status, pm.status); pp.post = pm.date; splTouch(date); splDraw(); } return; }
   // a team day off (the Calendar's day off follows)
   if (t.dataset.off != null) {
     const pp = p(); splSetOff(pp, !pp.off);
