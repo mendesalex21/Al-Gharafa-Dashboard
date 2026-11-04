@@ -57,7 +57,9 @@ function drawHome() {
 function hoData() {
   const P = HO.P, today = todayIso(), plan = P.objectives.plan || {};
   TR.sessions = P.sessions; // playerName() reads its roster
-  const tag = ((plan.days || []).find((d) => d.date === today) || {}).tag || null;
+  if (typeof applyCalendarEdits === 'function') applyCalendarEdits(P.calendar); // fills DAY_MD: the MD the staff chose for today
+  // today's MD: the staff's choice (Session Plan header / Calendar) at once, else the build's plan — as the Session Plan
+  const tag = (typeof DAY_MD !== 'undefined' && DAY_MD[today]) || ((plan.days || []).find((d) => d.date === today) || {}).tag || null;
   const yest = P.sessions.sessions.filter((x) => x.date < today && x.team_ref && x.team_ref.td).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
   const done = P.sessions.sessions.find((x) => x.date === today && x.team_ref && x.team_ref.td);
   // today's objective = the Sessions page's (the week until the match: the team's usual MD-k → MD-1 added up, minus what
@@ -76,13 +78,15 @@ function hoData() {
     groups = { team: [], comp: [], recovery: [], individual: [] };
     pl.forEach((p) => { const g = HO_GROUP[st[p.id]]; if (g) groups[g].push(p); });
   } else out = pl.filter((p) => p.status !== 'available' && p.today !== 'NC'); // not in yesterday's squad (NC) is not an absence today
-  // no plan yet, the day after a match and no day off: the compensatory group proposed from yesterday's match sheet
+  // no plan yet, the day after a match and no day off: the compensatory group proposed from yesterday's match sheet; on an
+  // MD+2 too (still after the match: starters in recovery, substitutes compensatory — his rule, 2026-11-04; admin first)
   let proposed = null;
-  const ym = P.sessions.sessions.find((x) => x.kind === 'match' && hoCount(x.date, today) === 1);
+  const after = tag === 'MD+2' && document.documentElement.classList.contains('is-admin') ? 2 : 1;
+  const ym = P.sessions.sessions.find((x) => x.kind === 'match' && hoCount(x.date, today) === after);
   if (!st && !dayOff && ym) {
     const gk = new Set(Object.entries(P.sessions.roster || {}).filter(([, v]) => v.pos === 'GK').map(([k]) => k));
     const outIds = new Set(out.map((p) => p.id));
-    proposed = [...ym.players.filter((p) => p.min < 45).map((p) => ({ id: p.id, why: `${p.min}' yesterday` })),
+    proposed = [...ym.players.filter((p) => p.min < 45).map((p) => ({ id: p.id, why: `${p.min}' ${after === 1 ? 'yesterday' : 'in the match'}` })),
       ...(ym.absent || []).filter((p) => p.cat !== 'x' && /^(Game|NC)$/.test(p.type)).map((p) => ({ id: p.id, why: p.type === 'NC' ? 'not in the squad' : 'did not play' }))]
       .filter((p) => !gk.has(p.id) && !outIds.has(p.id));
   }
