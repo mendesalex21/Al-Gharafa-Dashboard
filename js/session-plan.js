@@ -145,7 +145,7 @@ function splPlan(date) {
  * NT / sick (carried over) and goalkeepers are left as they are. Same split as the Home page's proposal. */
 function splAfterMatch(date) {
   const tag = splTag(date), k = tag === 'MD+1' ? 1 : tag === 'MD+2' ? 2 : 0;
-  if (!k || !SPL.sess || splMatchOn(date) || !document.documentElement.classList.contains('is-admin')) return null; // admin first
+  if (!k || !SPL.sess || splMatchOn(date)) return null; // released to the staff 2026-11-04
   const ym = (SPL.sess.sessions || []).find((x) => x.kind === 'match' && daysBetween(x.date, date) === k);
   if (!ym) return null;
   const mine = new Map(SPL.lib.players.filter((q) => q.pos !== 'GK').map((q) => [q.id, q])), status = {}, n = { rec: 0, comp: 0 };
