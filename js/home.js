@@ -74,9 +74,11 @@ function hoData() {
     || (P.calendar.edits || []).some((ed) => ed.id === 'day:' + today && ed.data && ed.data.off); // set in the Calendar
   let out, groups = null;
   if (st && !(tp && tp.off)) { // today's Session Plan: who trains, in which group, who is out
-    out = pl.filter((p) => HO_OUT[st[p.id]]).map((p) => ({ ...p, planStatus: HO_OUT[st[p.id]] }));
-    groups = { team: [], comp: [], recovery: [], individual: [] };
-    pl.forEach((p) => { const g = HO_GROUP[st[p.id]]; if (g) groups[g].push(p); });
+    // his count (2026-11-05): the GPS to hand out = team session + compensatory + individual + rehab, as the Session Plan;
+    // recovery (no GPS) shown beside; out = the others (injured, sick, NT, B team, absent)
+    out = pl.filter((p) => HO_OUT[st[p.id]] && st[p.id] !== 'Rehab').map((p) => ({ ...p, planStatus: HO_OUT[st[p.id]] }));
+    groups = { team: [], comp: [], individual: [], rehab: [], recovery: [] };
+    pl.forEach((p) => { const g = st[p.id] === 'Rehab' ? 'rehab' : HO_GROUP[st[p.id]]; if (g) groups[g].push(p); });
   } else out = pl.filter((p) => p.status !== 'available' && p.today !== 'NC'); // not in yesterday's squad (NC) is not an absence today
   // no plan yet, the day after a match and no day off: the compensatory group proposed from yesterday's match sheet; on an
   // MD+2 too (still after the match: starters in recovery, substitutes compensatory — his rule, 2026-11-04, released the same day)
@@ -103,7 +105,7 @@ function hoData() {
   const evs = typeof applyCalendarEdits === 'function' ? applyCalendarEdits(P.calendar) : (P.calendar.events || []), pn = plan.next || {};
   const matches = evs.filter((e) => e.kind === 'match' && e.start >= today).sort((a, b) => (a.start < b.start ? -1 : 1)).slice(0, 5)
     .map((e) => (e.id === pn.id ? { ...pn, ...e, time: e.time || pn.time, venue: e.venue || pn.venue, ha: e.ha || pn.ha } : e));
-  return { P, today, tag, plan, yest, done, row, out, avail: pl.length - out.length, total: pl.length, tp, dayOff, groups, proposed, comp: hoCompRef(P), w, by, red, dr, low, matches, matchToday: matches[0] && matches[0].start === today ? matches[0] : null };
+  return { P, today, tag, plan, yest, done, row, out, avail: groups ? groups.team.length + groups.comp.length + groups.individual.length + groups.rehab.length : pl.length - out.length, total: pl.length, tp, dayOff, groups, proposed, comp: hoCompRef(P), w, by, red, dr, low, matches, matchToday: matches[0] && matches[0].start === today ? matches[0] : null };
 }
 
 /* yesterday (the last session with a team average): each metric against the usual of that session (its objective) */
@@ -151,12 +153,12 @@ function hoToday(D) {
 function hoAvail(D) {
   const lab = { injured: 'Injury', rehab: 'Rehab', sick: 'Sick', national: 'National team', absent: 'Absent' }, col = { injured: '#e5484d', rehab: '#ff9f0a', Injury: '#e5484d', Rehab: '#ff9f0a' };
   const G = D.groups;
-  const split = G ? `<div class="ho-grp">${[['team', 'Team session'], ['comp', 'Compensatory'], ['recovery', 'Recovery'], ['individual', 'Individual']].filter(([k]) => G[k].length).map(([k, l]) => `<span class="${k}"><b>${G[k].length}</b> ${l}</span>`).join('')}</div>` : '';
+  const split = G ? `<div class="ho-grp">${[['team', 'Team session'], ['comp', 'Compensatory'], ['individual', 'Individual'], ['rehab', 'Rehab'], ['recovery', 'Recovery · no GPS']].filter(([k]) => G[k] && G[k].length).map(([k, l]) => `<span class="${k}"><b>${G[k].length}</b> ${l}</span>`).join('')}</div>` : '';
   return `<section class="ho-card"><div class="ho-k">Available for the session${G ? ' · today\'s plan' : D.dayOff ? ' · day off' : ''}</div>
-    <div class="ho-ab"><b>${D.avail}</b><span>/ ${D.total}</span></div>${split}
+    <div class="ho-ab"><b>${D.avail}</b><span>${G ? 'GPS to hand out' : '/ ' + D.total}</span></div>${split}
     <div class="ho-out">${D.out.map((p) => { const t = p.planStatus || lab[p.status] || p.today || p.status;
       return `<button type="button" class="ho-op" data-player="${p.id}">${avatarHtml(p.id, p.name, 26)}<b>${escapeHtml(p.name)}</b><i style="background:${col[p.planStatus] || col[p.status] || '#8e8e93'}">${escapeHtml(t)}</i></button>`; }).join('') || '<span class="ho-none">Everyone available</span>'}</div>
-    <div class="ho-sub">${G ? 'from today\'s Session Plan · out = injured, rehab, sick, national team, B team or absent' : 'out = injured, in rehab, sick, national team or absent today · the Session Plan of today replaces this once saved'}</div></section>`;
+    <div class="ho-sub">${G ? 'from today\'s Session Plan, as its count · GPS = team session, compensatory, individual and rehab · out = injured, sick, national team, B team or absent' : 'out = injured, in rehab, sick, national team or absent today · the Session Plan of today replaces this once saved'}</div></section>`;
 }
 function hoWell(D) {
   const W = D.w;

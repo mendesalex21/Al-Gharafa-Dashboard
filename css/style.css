@@ -2366,3 +2366,5 @@ table.dvm-t { width: 100%; border-collapse: separate; border-spacing: 3px; font-
 @media (max-width: 860px) { .pa-head { display: none; } .pa-row { grid-template-columns: 1fr; gap: 8px; } .pa-sp { display: none; } .pa-chips { grid-template-columns: 1fr; } }
 
 .pa-pill.out { background: var(--surface-2); } .pa-pill.out i { background: var(--ink-muted); }
+
+.ho-grp .rehab { background: color-mix(in srgb, #ff9f0a 16%, transparent); } .ho-grp .individual { background: color-mix(in srgb, #2a78d6 12%, transparent); }
