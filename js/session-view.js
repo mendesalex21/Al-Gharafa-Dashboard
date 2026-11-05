@@ -75,8 +75,16 @@ function svUsualFor(pid, tag, type, k, sess) {
 }
 /** Per metric: target = his usual for each day added up; done = what he did; the rest shared over the days left
  * (proportional to his usual, at most 160 % of it — 120 % on MD-1). A metric not recorded on a past day is left out. */
+/** Step 2 of "load vs the match" (admin first, 2026-11-05): a player whose usual weeks are under the floor of his match
+ * level gets his microcycle objective × the build's factor (+12 % a week at most; capped above the ceiling). Only the
+ * microcycle still running at the data's date (the factor is as of today), never a finished preparation. */
+function svRaise(pid, mc) {
+  const wl = TR.workload, q = wl && wl.players ? wl.players.find((x) => x.id === pid) : null;
+  if (!isAdminUi() || !q || !q.prep || !q.prep.obj || mc.prep || !wl.as_of || mc.matchDate <= wl.as_of) return null;
+  return Object.values(q.prep.obj).some((f) => f !== 1) ? { f: q.prep.obj, r: q.prep.r, fl: (wl.prep_floors || {}).floor || {} } : null;
+}
 function svPlan(p, mc) {
-  const out = {};
+  const out = {}, R = svRaise(p.id, mc);
   SV_M.forEach(([k]) => {
     const rows = [];
     mc.days.forEach((d) => {
@@ -85,15 +93,24 @@ function svPlan(p, mc) {
       if (!u || u[0] == null || (q && q[k] == null)) return;
       rows.push({ date: d.date, md: d.md, past, today: d.date === mc.today, u: u[0], sd: u[1], v: past ? (q ? q[k] || 0 : 0) : null, z: q && q.mdref && q.mdref.z ? q.mdref.z[k] : null, absent: past && !q });
     });
+    const f = R && R.f[k] ? R.f[k] : 1; // his usual × the factor: the objective pulled towards his match level
+    if (f !== 1) rows.forEach((r) => { r.u0 = r.u; r.u *= f; });
     const target = rows.reduce((a, r) => a + r.u, 0);
     const done = rows.filter((r) => r.past).reduce((a, r) => a + r.v, 0);
     const expected = rows.filter((r) => r.past).reduce((a, r) => a + r.u, 0);
     const fut = rows.filter((r) => !r.past);
     const share = shareOut(Math.max(0, target - done), fut.map((r) => ({ med: r.u, lo: 0, hi: (r.md === 'MD-1' ? 1.2 : 1.6) * r.u })));
     fut.forEach((r, i) => { r.obj = share[i] || 0; });
-    out[k] = { rows, target, done, expected, planned: fut.reduce((a, r) => a + r.obj, 0), left: fut.length, prep: !!mc.prep };
+    out[k] = { rows, target, done, expected, planned: fut.reduce((a, r) => a + r.obj, 0), left: fut.length, prep: !!mc.prep, f };
   });
   return out;
+}
+/** The header note of a raised objective: which metrics, by how much. */
+function svRaiseTxt(plan) {
+  const up = SV_M.filter(([k]) => plan[k] && plan[k].f && plan[k].f !== 1);
+  if (!up.length) return '';
+  const lab = { td: 'TD', hit: '> 20', acc_dec: 'Acc+Dec' };
+  return ` · <span class="sv-raise" title="His usual weeks are under the regular starters' level, in his own matches: the objective climbs by 12 % a week at most until that floor (above the ceiling: capped).">objective ${up.map(([k]) => `${lab[k] || k} ${plan[k].f > 1 ? '+' : ''}${Math.round((plan[k].f - 1) * 100)} %`).join(' · ')} · ${up[0] && plan[up[0][0]].f > 1 ? 'below' : 'above'} his match level</span>`;
 }
 function svMcStatus(m) {
   if (m.prep) { // his preparation for a match, done: compared with his usual for those days
@@ -603,7 +620,7 @@ function svSheetHtml(s, p, nav) {
     const mm = plan && plan[key];
     if (mm && mm.target) {
       const mx = Math.max(mm.target, mm.done + mm.planned) * 1.08, w = (x) => Math.max(0, Math.min(100, x / mx * 100)), st = svMcStatus(mm);
-      cyc = `<td class="sep"><span class="sv-pt" title="done ${fmtN(mm.done)} · usual by ${s.md} ${fmtN(mm.expected)} · target ${fmtN(mm.target)}${mm.planned ? ` · still to do ${fmtN(mm.planned)}` : ''}"><i class="done" style="width:${w(mm.done)}%;background:${Z_COL[st.lv]}"></i>${mm.planned ? `<i class="todo" style="left:${w(mm.done)}%;width:${w(mm.planned)}%"></i>` : ''}${mm.left ? `<s style="left:${w(mm.expected)}%"></s>` : ''}<b style="left:${w(mm.target)}%"></b></span></td>
+      cyc = `<td class="sep"><span class="sv-pt" title="done ${fmtN(mm.done)} · usual by ${s.md} ${fmtN(mm.expected)} · target ${fmtN(mm.target)}${mm.f && mm.f !== 1 ? ` (his usual ${mm.f > 1 ? '+' : ''}${Math.round((mm.f - 1) * 100)} %: ${mm.f > 1 ? 'below' : 'above'} his match level)` : ''}${mm.planned ? ` · still to do ${fmtN(mm.planned)}` : ''}"><i class="done" style="width:${w(mm.done)}%;background:${Z_COL[st.lv]}"></i>${mm.planned ? `<i class="todo" style="left:${w(mm.done)}%;width:${w(mm.planned)}%"></i>` : ''}${mm.left ? `<s style="left:${w(mm.expected)}%"></s>` : ''}<b style="left:${w(mm.target)}%"></b></span></td>
         <td class="num">${fmtN(mm.done)}<small class="sv-us">/ ${fmtN(mm.target)}</small></td><td class="c"><span class="zs ${st.lv}">${st.t}</span></td>`;
     }
     const vt = s.team[key] ? Math.round(v / s.team[key] * 100) : null, vm = p['p3_' + key];
@@ -616,13 +633,13 @@ function svSheetHtml(s, p, nav) {
     : game && p.min < 20 ? 'under 20 min: no comparison' : 'no reference';
   const prep = plan && mc.prep;
   const cycTxt = prep ? `His preparation → this match <small>${mc.days[0].md} → MD-1 · vs his usual for these days</small>`
-    : plan ? `His microcycle → match ${fmtDay(mc.matchDate, { weekday: 'short', day: 'numeric', month: 'short' })} <small>${mc.days[0].md} → MD-1 · as of ${s.md}</small>` : 'His microcycle <small>no plan on a break</small>';
+    : plan ? `His microcycle → match ${fmtDay(mc.matchDate, { weekday: 'short', day: 'numeric', month: 'short' })} <small>${mc.days[0].md} → MD-1 · as of ${s.md}${svRaiseTxt(plan)}</small>` : 'His microcycle <small>no plan on a break</small>';
   const ins = prep ? svPrepInsights(plan, mc) : plan ? svInsights(s, plan, rd, left) : [];
   return `
     <div class="sv-head3">${svWellHtml(p)}
       <div class="sv-mid"><div class="sv-top"><div class="sv-id"><h3>${escapeHtml(playerName(p.id))}</h3>
         <p>${escapeHtml(svPos(p.id))}${svPos(p.id) ? ' · ' : ''}${escapeHtml(p.type || '')} · ${fmtDay(s.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${s.kind === 'match' ? 'match' : s.md || 'training'}${s.cycle.type ? ` of a ${TYPE_LABEL[s.cycle.type].toLowerCase()} microcycle` : ''} · <button type="button" class="sv-link" data-load="${p.id}">Workload history ›</button></p></div>${nav}</div>
-        ${kpis}</div>
+        ${kpis}${isAdminUi() ? msgsHtml(msgsOf(p.id)) : ''}</div>
       ${svAcHtml(s, p)}</div>
     <div class="sv-grid-wrap"><table class="sv-grid">
       <colgroup><col style="width:104px"><col><col style="width:112px"><col style="width:58px"><col><col style="width:112px"><col style="width:92px"><col style="width:56px"><col style="width:56px"></colgroup>

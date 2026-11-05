@@ -184,3 +184,21 @@ async function withData(action, onData, onError) {
     if (!cached) onError(err);
   }
 }
+
+// ---------------------------------------------------------------- player messages (load vs the match, his ask 2026-11-05)
+// One message per player in words instead of a list of ratios (build player_messages). Admin first: the staff keep the
+// old alerts until he releases them.
+const isAdminUi = () => document.documentElement.classList.contains('is-admin');
+const MSG_COL = { red: '#d03b3b', orange: '#e89a00', blue: '#2a78d6' };
+function msgsOf(pid) { const wl = typeof TR !== 'undefined' && TR.workload, p = wl && wl.players ? wl.players.find((x) => x.id === pid) : null; return p && p.msgs ? p.msgs : []; }
+/** The messages as lines (title in bold, the detail after). */
+function msgsHtml(msgs, cls = '') {
+  if (!msgs || !msgs.length) return '';
+  return `<div class="pmsg ${cls}">${msgs.map((m) => `<div class="pm ${m.lv}"><i style="background:${MSG_COL[m.lv]}"></i><span><b>${escapeHtml(m.t)}</b> ${escapeHtml(m.x)}</span></div>`).join('')}</div>`;
+}
+/** The first message, compact (a table cell), the others on hover. */
+function msgsCompact(msgs) {
+  if (!msgs || !msgs.length) return '<span class="muted">nothing to do</span>';
+  const m = msgs[0];
+  return `<span class="flags one" title="${escapeHtml(msgs.map((x) => `${x.t} — ${x.x}`).join('\n'))}"><span><i style="background:${MSG_COL[m.lv]}"></i><b>${escapeHtml(m.t)}</b></span>${msgs.length > 1 ? `<small class="muted">+${msgs.length - 1}</small>` : ''}</span>`;
+}

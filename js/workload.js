@@ -213,7 +213,10 @@ function drawBoard() {
   d.players.forEach((p) => {
     const s = d.series[p.id], w = s && bdWeek(p, s, end, th);
     if (!w || (!now && !w.v.minutes && w.out === 0)) return;
-    const flags = now ? p.flags : w.flags, risk = now ? p.risk : w.out === 7 ? 'na' : flags.some((f) => f.level === 'red') ? 'red' : flags.length ? 'orange' : 'green';
+    const flags = now ? p.flags : w.flags;
+    const msgs = now && isAdminUi() && p.msgs ? p.msgs : null; // admin first: one message in words instead of the ratios (2026-11-05)
+    const risk = msgs ? (p.status !== 'available' ? 'na' : msgs.some((m) => m.lv === 'red') ? 'red' : msgs.length ? 'orange' : 'green')
+      : now ? p.risk : w.out === 7 ? 'na' : flags.some((f) => f.level === 'red') ? 'red' : flags.length ? 'orange' : 'green';
     const status = now ? p.status : ({ x: 'injured', r: 'rehab', s: 'sick', n: 'national team', a: 'absent' }[w.last] || 'available');
     const hurt = status === 'injured' || status === 'rehab';
     const cell = (k) => {
@@ -229,11 +232,11 @@ function drawBoard() {
     const key = (k) => (BD_Z.includes(k) ? (zm ? w.z[k] : w.ratio[k] ?? w.v[k]) : k === 'vmax' ? w.vmax : k === 'hsv' ? w.hsv : k === 'rpe' ? w.rpe : k === 'well' ? w.well : k === 'mono' ? w.mono : w.ac[k.slice(3)]);
     const ks = BD_GROUPS.flatMap(([, , c]) => c.map(([k]) => k));
     rows.push({ id: p.id,
-      cells: [`<i class="riskdot" style="background:${STATUS_COL[risk]}" title="${risk}"></i>`, playerCell(p.id, p.name, status === 'available' ? p.pos : `${p.pos || ''} · ${STATUS_LABEL[status] || status}`), ...ks.map(cell), flagsCompact(flags)],
-      keys: [RISK_ORDER[risk] * 100 - flags.length, p.name, ...ks.map(key), flags.length] });
+      cells: [`<i class="riskdot" style="background:${STATUS_COL[risk]}" title="${risk}"></i>`, playerCell(p.id, p.name, status === 'available' ? p.pos : `${p.pos || ''} · ${STATUS_LABEL[status] || status}`), ...ks.map(cell), msgs ? msgsCompact(msgs) : flagsCompact(flags)],
+      keys: [RISK_ORDER[risk] * 100 - (msgs || flags).length, p.name, ...ks.map(key), (msgs || flags).length] });
   });
   sortableTable(board, [{ label: 'Risk', cls: 'c' }, { label: 'Player' },
-    ...BD_GROUPS.flatMap(([, , c]) => c.map(([k, l], j) => ({ label: l, cls: `c${j === 0 ? ' gsep' : ''}`, desc: k !== 'well' }))), { label: 'Alert', cls: 'gsep', desc: true }],
+    ...BD_GROUPS.flatMap(([, , c]) => c.map(([k, l], j) => ({ label: l, cls: `c${j === 0 ? ' gsep' : ''}`, desc: k !== 'well' }))), { label: now && isAdminUi() ? 'Message' : 'Alert', cls: 'gsep', desc: true }],
   rows, { col: 0, dir: 1 }, (r) => `data-id="${r.id}" class="clickable"`, '',
   [['', 2], ...BD_GROUPS.map(([l, c, cs]) => [l, cs.length, c]), ['', 1]]);
   board.onclick = (e) => { const tr = e.target.closest('tr[data-id]'); if (tr) switchView('player', { player: tr.dataset.id }); };
@@ -573,7 +576,7 @@ function drawPlayerLoad(opts) {
   const box = (t, note, inner, extra = '') => `<section class="panel"><div class="panel-head"><h2 class="panel-title small">${t}</h2>${note ? `<span class="panel-note">${note}</span>` : ''}${extra}</div>${inner}</section>`;
   const legend = PL.color === 'z' ? [['vlow', 'well below'], ['low', 'below'], ['ok', 'usual'], ['up', 'above'], ['vup', 'well above']].map(([c, l]) => `<span><i style="background:${TM_ZCOL[c]}"></i>${l}</span>`).join('')
     : [0.4, 0.6, 1, 1.4, 1.6].map((r) => `<span><i style="background:${tmZone(r)[0]}"></i>${tmZone(r)[1]}</span>`).join('');
-  body.innerHTML = `<div class="tm-tiles pl-tiles">${plTiles(B)}</div>
+  body.innerHTML = `${isAdminUi() ? plMatchLevelHtml(p, d) : ''}<div class="tm-tiles pl-tiles">${plTiles(B)}</div>
     <div class="grid2">${box('Weekly load z-score', 'Sunday–Saturday weeks vs his previous 6 weeks', '<div class="table-wrap" id="pl-z"></div>')}${box(`Availability · last ${s.cat.length} days`, '', '<div id="pl-timeline"></div>')}</div>
     <div class="tm-bar"><div class="tm-dates${PL.view === 'day' ? '' : ' muted'}">${PL.view === 'day' ? `<label>From <input type="date" id="pl-from" min="${s.start}" max="${d.as_of}" value="${plDayRange(s, d)[0]}"></label><label>to <input type="date" id="pl-to" min="${s.start}" max="${d.as_of}" value="${plDayRange(s, d)[1]}"></label>${PL.from ? '<button type="button" class="linkbtn" id="pl-reset">Reset</button>' : ''}` : PL.view === 'week' ? 'The last weeks' : PL.view === 'games' ? 'His last matches' : 'The season'}</div>
       <div class="tm-ctl">${PL.view === 'games' ? segHtml('pl-g90', [['raw', 'Raw'], ['p90', 'Per 90']], PL.g90 || 'raw') : `<span class="tm-lab">Team</span>${segHtml('pl-team', [['off', 'Off'], ['on', 'Show']], PL.team ? 'on' : 'off')}`}<span class="tm-lab">Colour</span>${segHtml('pl-color', [['z', 'z-score'], ['ac', 'A:C']], PL.color)}${segHtml('pl-view', [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['games', 'Games']], PL.view)}</div></div>
@@ -594,6 +597,21 @@ function drawPlayerLoad(opts) {
   drawZTable(s);
   drawTimeline(s);
   drawPlayerTests(p);
+}
+
+/** Admin first (2026-11-05): his messages and his last 4 weeks against his match (×/week; floor = the regular starters'
+ * lower quartile), with the factor his week objective gets. */
+function plMatchLevelHtml(p, d) {
+  const pr = p.prep, fl = d.prep_floors || {}, F = fl.floor || {}, C = fl.ceil || {};
+  const lab = { td: 'Total distance', hit: '> 20 km/h', acc_dec: 'Acc + Dec' }, unit = { td: 'km', hit: 'm', acc_dec: '' };
+  const fmt = (k, v) => (k === 'td' ? (v / 1000).toFixed(1) + ' km' : Math.round(v) + (unit[k] ? ' ' + unit[k] : ''));
+  const rows = pr ? Object.keys(lab).filter((k) => pr.r[k] != null).map((k) => { const r = pr.r[k], lv = r < F[k] ? 'red' : r > C[k] ? 'orange' : 'green', f = (pr.obj || {})[k];
+    return `<tr><td class="b">${lab[k]}</td><td class="num"><span class="chip-v ${lv}">${r.toFixed(2)}×</span></td><td class="num muted">floor ${F[k]}× · ceiling ${C[k]}×</td>
+      <td class="num">${pr.w[k].map((x) => (x == null ? '<span class="muted">out</span>' : `<span style="color:${x < F[k] ? MSG_COL.red : 'inherit'}">${x.toFixed(1)}</span>`)).join(' · ')}</td>
+      <td class="num">${fmt(k, pr.usual[k])} <span class="muted">· his match ${fmt(k, pr.ref[k])}</span></td><td class="num">${f && f !== 1 ? `<b class="sv-raise">${f > 1 ? '+' : ''}${Math.round((f - 1) * 100)} %</b>` : '<span class="muted">as usual</span>'}</td></tr>`; }).join('') : '';
+  return `<section class="panel"><div class="panel-head"><h2 class="panel-title small">Messages · load vs his match</h2><span class="panel-note">admin only for now · ${pr ? `his last 4 weeks (${pr.n} available), in his ${pr.src === 'own' ? 'own matches' : 'position matches (fewer than 3 full games)'}` : 'not enough available weeks'} · floor = the regular starters' lower quartile (${fl.n || 0} starters)</span></div>
+    ${msgsHtml(p.msgs) || '<p class="muted" style="margin:6px 0 0">Nothing to do.</p>'}
+    ${rows ? `<div class="table-wrap" style="margin-top:10px"><table class="table"><thead><tr><th></th><th class="r">×/week</th><th class="r">reference</th><th class="r">last 4 weeks</th><th class="r">his usual week</th><th class="r">week objective</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}</section>`;
 }
 
 /** The Day view's dates: his choice (From / to), else the last 5 weeks — within his series. */

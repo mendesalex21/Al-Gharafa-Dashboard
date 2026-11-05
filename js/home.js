@@ -197,11 +197,19 @@ function hoAttnData(D) {
   }
   const big = at.filter((a) => a.big || a.week).map((a) => { const x = a.bigs.length ? a.bigs[0] : a.wk[0]; return { p: a.p, v: `${a.bigs.length ? 'today' : 'week'} ${SV_BIGS[x.k] || x.k} z ${fmtSigned(x.z)}`, t: [a.big, a.week].filter(Boolean).join(' ') }; });
   const speed = [...svFlat(s), ...svOffGps(s)].filter((p) => p.days_hsv >= 10 && p.cat !== 'r').sort((a, b) => b.days_hsv - a.days_hsv).map((p) => ({ p, v: `${p.days_hsv} days`, t: `No run at 90 % of his max speed for ${p.days_hsv} days.` }));
-  return { s, n: svFlat(s).length + svOffGps(s).length + svKeepers(s).length, flagged: new Set([...over, ...well, ...big].map((x) => x.p.id)).size, G: [
+  const G = [
     { k: 'over', c: 'red', t: '2 weeks overload', note: `A:C > ${SV_OVER} this week and last`, xs: over },
     { k: 'well', c: 'red', t: 'Wellness', note: wellNote, xs: well },
     { k: 'big', c: 'orange', t: 'Big change', note: 'today or week so far, |z| ≥ 2', xs: big },
-    { k: 'speed', c: 'blue', t: 'Speed top-up', note: 'no run at 90 % of max speed ≥ 10 days', xs: speed }] };
+    { k: 'speed', c: 'blue', t: 'Speed top-up', note: 'no run at 90 % of max speed ≥ 10 days', xs: speed }];
+  if (isAdminUi() && P.workload && P.workload.players) { // admin first (2026-11-05): load vs his match + back from injury
+    const all = [...svFlat(s), ...svOffGps(s), ...svKeepers(s)], find = (id) => all.find((p) => p.id === id) || { id, cat: 't' };
+    const pick = (keys) => P.workload.players.flatMap((q) => (q.msgs || []).filter((m) => keys.includes(m.k)).map((m) => ({ q, m })));
+    const lvl = pick(['under', 'catchup', 'over']).map(({ q, m }) => ({ p: find(q.id), v: m.k === 'over' ? 'above' : `TD ${q.prep.r.td.toFixed(2)}×`, t: `${m.t}: ${m.x}` }));
+    const back = pick(['back']).sort((a, b) => a.q.back.days - b.q.back.days).map(({ q, m }) => ({ p: find(q.id), v: `${q.back.days} d`, t: `${m.t}: ${m.x}` }));
+    G.splice(3, 0, { k: 'level', c: 'orange', t: 'Below his match level', note: 'last 4 weeks, in his own matches', xs: lvl }, { k: 'back', c: 'blue', t: 'Back from injury', note: 'the 4 weeks after 5 days or more out', xs: back });
+  }
+  return { s, n: svFlat(s).length + svOffGps(s).length + svKeepers(s).length, flagged: new Set([...over, ...well, ...big].map((x) => x.p.id)).size, G };
 }
 function hoAttn(D) {
   const A = hoAttnData(D);
@@ -212,7 +220,7 @@ function hoAttn(D) {
   const list = open && open.xs.length ? `<div class="ho-list ${open.c}">${open.xs.map((x) => `<button type="button" class="ho-row" data-id="${x.p.id}"${x.p.gk ? ' data-gk="1"' : ''}>${avatarHtml(x.p.id, playerName(x.p.id), 26)}<b>${escapeHtml(playerName(x.p.id))}<small>${escapeHtml(svSub(x.p) || '')}</small></b><span class="ho-rv">${escapeHtml(x.v)}</span><span class="ho-rt">${escapeHtml(x.t)}</span><i>›</i></button>`).join('')}</div>` : '';
   return `<section class="ho-card" id="ho-attn"><div class="ho-ah"><div class="ho-k">Players to look at · ${s.date === D.today ? 'today' : hoDay(s.date, { weekday: 'short', day: 'numeric' })} · ${s.kind === 'match' ? 'match' : s.md || 'training'}</div>
     <span class="ho-as"><b>${A.flagged}</b> of ${A.n} players · click a tile for the list</span></div>
-    <div class="ho-tiles">${A.G.map(tile).join('')}</div>${list}</section>`;
+    <div class="ho-tiles${A.G.length > 4 ? ' six' : ''}">${A.G.map(tile).join('')}</div>${list}</section>`;
 }
 function hoBind(D) {
   const root = document.getElementById('view-home');
