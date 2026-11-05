@@ -202,3 +202,5 @@ function msgsCompact(msgs) {
   const m = msgs[0];
   return `<span class="flags one" title="${escapeHtml(msgs.map((x) => `${x.t} — ${x.x}`).join('\n'))}"><span><i style="background:${MSG_COL[m.lv]}"></i><b>${escapeHtml(m.t)}</b></span>${msgs.length > 1 ? `<small class="muted">+${msgs.length - 1}</small>` : ''}</span>`;
 }
+/** A U23 (ticked in Squad): out of the load / wellness alerts everywhere; back from injury and high speed kept (his ask, 2026-11-05). */
+function isU23(pid) { const wl = typeof TR !== 'undefined' && TR.workload; return !!(wl && wl.players && (wl.players.find((x) => x.id === pid) || {}).u23); }

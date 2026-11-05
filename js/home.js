@@ -191,8 +191,8 @@ function hoAttnData(D) {
   if (s.date < D.today && D.w.date === D.today) { // no session yet today: the wellness of this morning (as the Wellness alerts card), not the last session's
     const all = [...svFlat(s), ...svOffGps(s), ...svKeepers(s)], find = (id) => all.find((p) => p.id === id) || { id, cat: 't' };
     well.length = 0;
-    D.red.forEach((x) => well.push({ p: find(x.id), v: `${x.v} %`, t: `Wellness ${x.v} % this morning — in the red.` }));
-    D.dr.forEach((x) => well.push({ p: find(x.id), v: `${x.d.prev} → ${x.d.now} %`, t: `Wellness below his average two mornings in a row (his average ${x.d.avg} %).` }));
+    D.red.filter((x) => !isU23(x.id)).forEach((x) => well.push({ p: find(x.id), v: `${x.v} %`, t: `Wellness ${x.v} % this morning — in the red.` }));
+    D.dr.filter((x) => !isU23(x.id)).forEach((x) => well.push({ p: find(x.id), v: `${x.d.prev} → ${x.d.now} %`, t: `Wellness below his average two mornings in a row (his average ${x.d.avg} %).` }));
     wellNote = 'this morning: < 50 %, or −10 % two mornings';
   }
   const big = at.filter((a) => a.big || a.week).map((a) => { const x = a.bigs.length ? a.bigs[0] : a.wk[0]; return { p: a.p, v: `${a.bigs.length ? 'today' : 'week'} ${SV_BIGS[x.k] || x.k} z ${fmtSigned(x.z)}`, t: [a.big, a.week].filter(Boolean).join(' ') }; });

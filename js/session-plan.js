@@ -575,7 +575,7 @@ function splOffCardHtml(date, p) {
       <ul><li>each player on StatSports: <b>B-team training</b> by default — one click to switch to individual, rehab or compensatory (or not counted);</li>
         <li>a player with the halves of a match: <b>B-team game</b> (Game_B, MD, his two halves);</li>
         <li>everyone else: <b>Day off</b>, or his status (injured, national team…), 0 min.</li></ul>
-      <p class="sp-note">Written as on your MD+1 days off: session “/”, his own minutes, one drill row with his status. No staff report or e-mail — each player's work counts in his week and his A:C. Set the players you already know (B-team training, rehab…) on the right.</p></div></div>`;
+      <p class="sp-note">Written as on your MD+1 days off: session “/”, his own minutes, one drill row with his status. When a player worked, his staff report (“OFF”) and the e-mail go as for a session; each player's work counts in his week and his A:C. Set the players you already know (B-team training, rehab…) on the right.</p></div></div>`;
 }
 /** A session in the data: its players still without an RPE — the answers given since on the RPE page, or a value typed
  * here (saved like a player's answer); both are added to the data at the next update, a value there is never replaced. */
@@ -947,8 +947,14 @@ async function splFromStatsports(btn) {
   try {
     const r = await fetch(`/api/statsports?date=${date}`, { headers: cfHeaders() });
     if (!r.ok) throw new Error(r.status === 401 ? 'sign in again' : `StatSports did not answer (${r.status}) — try again, or drop the files`);
-    const out = spFromStatsports(await r.json(), p.ampm || 'PM', { match: !!splMatchOn(date), all: !!p.off }); // a day off: every recording of the day
+    const json = await r.json();
+    let out = spFromStatsports(json, p.ampm || 'PM', { match: !!splMatchOn(date), all: !!p.off }); // a day off: every recording of the day
     if (!out) throw new Error('no session on StatSports for this day yet');
+    if (!p.off && !splMatchOn(date) && splOnlyOwnWork(p, out)) { // nobody in a team session: the team's day off, set on its own
+      splSetOff(p, true); splSaveOffCal(date, true); splTouch(date);
+      out = spFromStatsports(json, p.ampm || 'PM', { all: true }) || out;
+      SPL.autoOff = date;
+    }
     const tag = `StatSports · ${out.start.slice(11, 16)} · ${out.players} players${out.recordings > 1 ? ` · ${out.recordings} recordings` : ''}`;
     SPL.files = { full: { name: `${tag} · full session`, text: out.full }, drills: { name: `${tag} · drills`, text: out.drills } };
     SPL.view = 'import';
@@ -960,6 +966,14 @@ async function splFromStatsports(btn) {
     btn.disabled = false; btn.innerHTML = label;
     splStateLine();
   }
+}
+/** A team day off without saying so (his ask, 2026-11-05): no player planned in a team session (training, compensatory,
+ * recovery), or StatSports has only individual / rehab work that day → no session number, written as a day off. */
+const SPL_TEAM_ST = new Set(['ProTraining', 'Partial', 'ProTraining+ExtraWork', 'Compensatory', 'Recovery', 'Adapted']);
+function splOnlyOwnWork(p, out) {
+  if (!SPL.lib.players.some((q) => SPL_TEAM_ST.has(p.status[q.id] || 'ProTraining'))) return true;
+  const titles = [...new Set(spParseCsv(out.drills).map((r) => String(r['Drill Title'] || '').trim()).filter((t) => t && !SP_SESSION_TOTAL.test(t)))];
+  return titles.length > 0 && titles.every((t) => /individual|rehab|gym|recovery/i.test(t));
 }
 /** Full session or drills file: its name (S75_Full / S75_Drills), else its rows. A full export can have a "Drill Title"
  * column too ("Entire Session - Live", one row per player — S75); a drills export has the drills' own titles. */
@@ -1301,7 +1315,7 @@ function splImportHtml() {
       ${b.off.games.length ? `<div class="sp-ngs">${b.off.games.map((x) => `<span class="sp-ng" style="background:${col.Game_B}22;color:${col.Game_B}">${escapeHtml(x.name)}<small>Game_B · ${Math.floor(x.t + 1e-9)}′ · ${x.n} half${x.n > 1 ? 'ves' : ''}</small></span>`).join('')}</div><p class="sp-note">Game_B, MD, his two halves (Game_1stHalf, Game_2ndHalf) with his own minutes — as on 2 Oct in your Excel.</p>` : ''}
       <div class="sp-ngs">${b.full.filter((r) => !r.Time && r.DT == null).map((r) => `<span class="sp-ng">${escapeHtml(r.Players)}<small>${escapeHtml(lab[r.Type] || r.Type)}</small></span>`).join('') || '<span class="sp-note">nobody</span>'}</div></div>`;
   return `${splHead(date, 1)}
-    ${b.off ? `<p class="sp-banner ok">Team day off, as on your MD+1 days off: session “/” (no session number), ${escapeHtml(splTag(date) || '/')}, ${escapeHtml(p.label || splLabel(date))}. Each player who worked: his own minutes and one drill row with his status; a B-team game: Game_B and its halves; everyone else Day off. No staff report or e-mail — the work counts in each player's week and A:C.</p>` : ''}
+    ${b.off ? `<p class="sp-banner ok">Team day off, as on your MD+1 days off: session “/” (no session number), ${escapeHtml(splTag(date) || '/')}, ${escapeHtml(p.label || splLabel(date))}. Each player who worked: his own minutes and one drill row with his status; a B-team game: Game_B and its halves; everyone else Day off. When a player worked, his staff report (“OFF”) and the e-mail go as for a session; the work counts in each player's week and A:C.${SPL.autoOff === date ? ' <b>Set as a day off on its own: nobody in a team session on StatSports (only individual / rehab work) — switch “Team day off” off if that is wrong.</b>' : ''}</p>` : ''}
     ${b.bList ? `<p class="sp-banner ok">B-team game: ${b.bList.map((x) => `${escapeHtml(x.name)} ${x.t}′`).join(', ')} — written apart, as in your Excel (Game_B, session “/”, MD, his two halves) and published with ${escapeHtml(p.sid || splSid(date))}.</p>` : ''}
     ${b.match ? '<p class="sp-banner ok">Match day, as in your Excel: a match row per player (“Game” = his two halves added up, 0′ if he did not come on; “NC” if not called) and a second row for the session he did that day. One RPE per player: on his match row, or on his session row if he did not play. The 10-minute cuts go to Data_10min on their own.</p>' : ''}
     ${b.fileDate && b.fileDate !== date ? `<p class="sp-banner warn">These files are from ${SPL_DAY(b.fileDate, { weekday: 'long', day: 'numeric', month: 'long' })}, not from this day. <button type="button" class="linkbtn" data-goto="${b.fileDate}">Open ${SPL_DAY(b.fileDate, { weekday: 'short', day: 'numeric', month: 'short' })}</button></p>` : ''}

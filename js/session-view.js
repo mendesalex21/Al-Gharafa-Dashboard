@@ -279,6 +279,7 @@ function svAttention(s) {
   const out = [], wday = TR.whist && TR.whist.days ? TR.whist.days.find((d) => d.date === s.date) : null; // wellness of that morning
   const st = TR.staff && TR.staff.days ? TR.staff.days[s.date] : null, wkeys = (TR.staff && TR.staff.week_keys) || [], drops = svWellDrops(TR.whist, s.date);
   [...svFlat(s), ...svOffGps(s), ...svKeepers(s)].forEach((p) => {
+    if (isU23(p.id)) return; // a U23: no load / wellness alert (the speed top-up keeps him)
     const partial = (s.kind === 'match' || p.cat === 'b') && (p.min || 0) < 75; // under 75 min a game has no z: not flagged
     const ser = TR.workload && TR.workload.series ? TR.workload.series[p.id] : null, i = ser && ser.a7 ? daysBetween(ser.start, s.date) : -1;
     const ov = i >= 0 ? SV_AC.map(([k]) => ({ k, a: ser.a7[k] ? ser.a7[k][i] : null, b: ser.a14[k] ? ser.a14[k][i] : null }))
@@ -327,7 +328,7 @@ function svAttentionHtml(s) {
   const big = at.filter((a) => a.big || a.week).map((a) => { const x = a.bigs.length ? a.bigs[0] : a.wk[0]; return { p: a.p, v: `${a.bigs.length ? 'today' : 'week'} ${SV_BIGS[x.k] || x.k} z ${fmtSigned(x.z)}`, t: [a.big, a.week].filter(Boolean).join(' '), c: 'orange' }; });
   // felt harder than the load: his RPE z ≥ +1 while distance and > 20 km/h are at or below his usual (a classic early
   // sign of fatigue, illness or poor recovery — his ask, 2026-11-02, released the same day)
-  const rpeHi = svFlat(s).filter((p) => {
+  const rpeHi = svFlat(s).filter((p) => !isU23(p.id)).filter((p) => {
     const zr = svZ(p, 'rpe'), zt = svZ(p, 'td'), zh = svZ(p, 'hit'), lim = p.mdref && p.mdref.top ? -1 : 0; // a match: vs his 3 best, −1 ≈ his usual
     return zr != null && zr >= 1 && zt != null && zt <= lim && zh != null && zh <= lim && !((s.kind === 'match' || p.cat === 'b') && (p.min || 0) < 75);
   }).sort((a, b) => svZ(b, 'rpe') - svZ(a, 'rpe')).map((p) => ({ p, v: `RPE ${fmtN(p.rpe, 1)} · usual ${fmtN(p.mdref.mean.rpe, 1)}`,
