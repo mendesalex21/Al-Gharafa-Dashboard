@@ -352,6 +352,42 @@ function plTiles(B) {
   return tiles + wcs + rh + well;
 }
 
+/** The top of the player page, mockup A (admin first, 2026-11-05): his messages, then one line per metric — one bar with
+ * his usual week (green band = his mean ± 1 SD: where the z is green), his match level (black tick: the regular starters' floor in his own
+ * matches), last week (dot, colour = z) and this week so far (ring) — the value, z, A:C and his last 8 weeks. WCS, RHIE
+ * and wellness in three small cards. */
+function plTopA(B) {
+  const { p, d } = B, last = B.real('td').slice(-1)[0], cur = B.weeks.filter((w) => !w.done).slice(-1)[0];
+  const fl = (d.prep_floors || {}).floor || {}, pr = p.prep, obj = (pr && pr.obj) || {};
+  const ms = (p.msgs || []).length ? p.msgs.map((m) => `<span class="pa-pill ${m.lv}"><i></i><b>${escapeHtml(m.t)}</b> ${escapeHtml(m.x)}</span>`).join('')
+    : '<span class="pa-pill ok"><i></i>Nothing to do — as usual and at his match level</span>';
+  const rows = ['td', 'hit', 'spr', 'acc_dec', 'srpe'].map((k) => {
+    const [l, u] = PL_LAB[k], s0 = tmStats(B.real(k).filter((w) => !last || w.start !== last.start).map((w) => w[k])), z = last ? B.zw(last, k) : null, v = last ? last[k] : null, so = cur ? cur[k] : null;
+    const st = s0.mean == null ? s0 : { ...s0, p25: Math.max(0, s0.mean - (s0.sd || 0)), p75: s0.mean + (s0.sd || 0) }; // the green band = z between −1 and +1: a green dot sits in it
+    const fm = pr && pr.ref && pr.ref[k] && fl[k] ? fl[k] * pr.ref[k] : null, ac = B.acAt(k, d.as_of), ac7 = B.acAt(k, addDays(d.as_of, -7));
+    const max = Math.max(st.p75 || 0, v || 0, so || 0, fm || 0) * 1.22 || 1, pc = (x) => Math.max(0, Math.min(100, (x || 0) / max * 100));
+    const sp = B.weeks.filter((w) => w.done).slice(-8), smx = Math.max(...sp.map((w) => w[k]), st.p75 || 0, 1) * 1.05, H = 30;
+    const band = st.p25 != null ? `<rect x="0" y="${H - st.p75 / smx * H}" width="152" height="${(st.p75 - st.p25) / smx * H}" fill="#34c759" opacity=".12"/>` : '';
+    const bars = sp.map((w, i) => { const h = Math.max(2, w[k] / smx * H); return `<rect x="${i * 19}" y="${H - h}" width="14" height="${h}" rx="3" fill="${i === sp.length - 1 ? TM_ZCOL[tmZ(z)] : '#d9d8d2'}"><title>${w.label} · ${tmK(w[k])}</title></rect>`; }).join('');
+    const f = obj[k] && obj[k] !== 1 ? `<small class="sv-raise">objective ${obj[k] > 1 ? '+' : ''}${Math.round((obj[k] - 1) * 100)} %</small>` : '';
+    const tip = `his usual week ${tmK(st.p25)}–${tmK(st.p75)}${fm ? ` · his match level ${tmK(fm)} (${fl[k]}× his match)` : ''}`;
+    return `<div class="pa-row"><div class="pa-l"><b>${l}</b><small>A:C ${ac == null ? '—' : ac.toFixed(2)}${ac7 != null ? ` · a week ago ${ac7.toFixed(2)}` : ''}</small></div>
+      <div class="pa-trk" title="${tip}">${st.p25 != null ? `<i class="band" style="left:${pc(st.p25)}%;width:${pc(st.p75) - pc(st.p25)}%"></i>` : ''}${fm ? `<i class="fl" style="left:${pc(fm)}%"></i>` : ''}${so != null ? `<i class="so" style="left:${pc(so)}%" title="this week so far ${tmK(so)}"></i>` : ''}${v != null ? `<i class="now" style="left:${pc(v)}%;background:${TM_ZCOL[tmZ(z)]}"></i>` : ''}</div>
+      <div class="pa-v"><b>${tmK(v)}</b>${u ? `<small> ${u}</small>` : ''}${z != null ? `<span class="pa-z" style="color:${TM_ZCOL[tmZ(z)]}">${tmS(z)}</span>` : ''}${f}</div><div class="pa-sp"><svg width="152" height="${H}" aria-hidden="true">${band}${bars}</svg></div></div>`;
+  }).join('');
+  const lw = B.weeks.filter((w) => w.done && B.IW[w.start] && B.IW[w.start].td != null).slice(-1)[0], x = lw ? B.IW[lw.start] : null;
+  const hist = (fk) => tmStats(Object.entries(B.IW).filter(([ws, vv]) => vv[fk] != null && (!lw || ws !== lw.start)).map(([, vv]) => vv[fk]));
+  const sw = hist('td'), sr = hist('rh'), dl = Object.keys(B.wh).sort().pop(), w7 = B.wellOf(addDays(d.as_of, -6), d.as_of), w28 = B.wellOf(addDays(d.as_of, -34), addDays(d.as_of, -7));
+  const chip = (t, v, side, col) => `<div class="pa-chip"><div><small>${t}</small><b${col ? ` style="color:${col}"` : ''}>${v}</b></div><span>${side}</span></div>`;
+  const wcs = chip(`WCS · best minute${lw ? ' · ' + lw.label : ''}`, x && x.td != null ? x.td + ' %' : '—', sw.p25 == null ? '' : `usual ${Math.round(sw.p25)}–${Math.round(sw.p75)} %`);
+  const rh = chip(`RHIE · bouts${lw ? ' · ' + lw.label : ''}`, x && x.rh != null ? x.rh : '—', `${sr.p25 == null ? '' : `usual ${Math.round(sr.p25)}–${Math.round(sr.p75)}`}${x && x.rx != null ? ` · × ${x.rx.toFixed(1)} his matches` : ''}`);
+  const well = chip(`Wellness${dl ? ' · ' + fmtDay(dl, { weekday: 'short', day: 'numeric', month: 'short' }) : ''}`, dl ? Math.round(B.wh[dl]) + ' %' : '—', `${w7 == null ? '' : `7 days ${Math.round(w7)} %`}${w28 == null ? '' : ` · before ${Math.round(w28)} %`}`, dl ? tmWell(B.wh[dl]) : null);
+  return `<section class="panel pa"><div class="pa-msgs">${ms}</div>
+    <div class="pa-head"><span></span><span>last week${last ? ' ' + last.label : ''} · vs his usual and his match level</span><span class="r">value · z</span><span>his last 8 weeks</span></div>${rows}
+    <div class="pa-leg"><span><i class="lg band"></i>his usual week</span><span><i class="lg fl"></i>his match level (starters' floor, in his matches)</span><span><i class="lg dot"></i>last week · colour = z</span><span><i class="lg ring"></i>this week so far</span></div>
+    <div class="pa-chips">${wcs}${rh}${well}</div></section>`;
+}
+
 /** His matches (A and B team games he played), each with its minutes, his z vs his 3 best games and the opponent. */
 function plGames(B) {
   const { s, days } = B, sess = Object.fromEntries(((TR.sessions && TR.sessions.sessions) || []).map((x) => [x.date, x]));
@@ -576,7 +612,7 @@ function drawPlayerLoad(opts) {
   const box = (t, note, inner, extra = '') => `<section class="panel"><div class="panel-head"><h2 class="panel-title small">${t}</h2>${note ? `<span class="panel-note">${note}</span>` : ''}${extra}</div>${inner}</section>`;
   const legend = PL.color === 'z' ? [['vlow', 'well below'], ['low', 'below'], ['ok', 'usual'], ['up', 'above'], ['vup', 'well above']].map(([c, l]) => `<span><i style="background:${TM_ZCOL[c]}"></i>${l}</span>`).join('')
     : [0.4, 0.6, 1, 1.4, 1.6].map((r) => `<span><i style="background:${tmZone(r)[0]}"></i>${tmZone(r)[1]}</span>`).join('');
-  body.innerHTML = `${isAdminUi() ? plMatchLevelHtml(p, d) : ''}<div class="tm-tiles pl-tiles">${plTiles(B)}</div>
+  body.innerHTML = `${isAdminUi() ? plTopA(B) : `<div class="tm-tiles pl-tiles">${plTiles(B)}</div>`}
     <div class="grid2">${box('Weekly load z-score', 'Sunday–Saturday weeks vs his previous 6 weeks', '<div class="table-wrap" id="pl-z"></div>')}${box(`Availability · last ${s.cat.length} days`, '', '<div id="pl-timeline"></div>')}</div>
     <div class="tm-bar"><div class="tm-dates${PL.view === 'day' ? '' : ' muted'}">${PL.view === 'day' ? `<label>From <input type="date" id="pl-from" min="${s.start}" max="${d.as_of}" value="${plDayRange(s, d)[0]}"></label><label>to <input type="date" id="pl-to" min="${s.start}" max="${d.as_of}" value="${plDayRange(s, d)[1]}"></label>${PL.from ? '<button type="button" class="linkbtn" id="pl-reset">Reset</button>' : ''}` : PL.view === 'week' ? 'The last weeks' : PL.view === 'games' ? 'His last matches' : 'The season'}</div>
       <div class="tm-ctl">${PL.view === 'games' ? segHtml('pl-g90', [['raw', 'Raw'], ['p90', 'Per 90']], PL.g90 || 'raw') : `<span class="tm-lab">Team</span>${segHtml('pl-team', [['off', 'Off'], ['on', 'Show']], PL.team ? 'on' : 'off')}`}<span class="tm-lab">Colour</span>${segHtml('pl-color', [['z', 'z-score'], ['ac', 'A:C']], PL.color)}${segHtml('pl-view', [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['games', 'Games']], PL.view)}</div></div>

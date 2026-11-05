@@ -4,6 +4,7 @@
  */
 const LOCAL_DEMO = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has('demo'); // local testing only
 const AUTH = { token: null, session: null, demo: !window.APP_CONFIG.GOOGLE_CLIENT_ID || LOCAL_DEMO, user: null };
+if (LOCAL_DEMO && new URLSearchParams(location.search).has('admin')) document.documentElement.classList.add('is-admin'); // local preview of the admin-first features
 const SESSION_KEY = 'staff_session'; // the 30-day staff session, kept on this device (Sign out removes it)
 
 /** Expiry (ms) of a sign-in: a Google ID token (one hour) or a staff session "s1.<payload>.<sig>" (30 days). */
