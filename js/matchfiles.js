@@ -109,7 +109,9 @@ async function mfShowLink() {
       buildBanner(j.build);
       if (!MF_POLL) MF_POLL = setInterval(mfShowLink, 120000); // the banner follows the online build's retries
     }
-  } catch (e) { /* not shown */ }
+  } catch (e) { // network hiccup or the worker waking up: try again, otherwise his Tactical / Match files links stayed hidden until a reload
+    if (!MF_POLL) setTimeout(mfShowLink, 5000);
+  }
 }
 
 /** His banner when an online build could not be sent (the Google script not answering): the build tries again by
