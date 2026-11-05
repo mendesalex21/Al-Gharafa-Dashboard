@@ -2364,3 +2364,5 @@ table.dvm-t { width: 100%; border-collapse: separate; border-spacing: 3px; font-
 .pa-chip { background: var(--surface-2); border-radius: 14px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .pa-chip small { display: block; color: var(--ink-muted); font-size: 12px; } .pa-chip b { font-size: 20px; } .pa-chip > span { color: var(--ink-muted); font-size: 12px; text-align: right; }
 @media (max-width: 860px) { .pa-head { display: none; } .pa-row { grid-template-columns: 1fr; gap: 8px; } .pa-sp { display: none; } .pa-chips { grid-template-columns: 1fr; } }
+
+.pa-pill.out { background: var(--surface-2); } .pa-pill.out i { background: var(--ink-muted); }

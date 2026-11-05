@@ -359,7 +359,8 @@ function plTiles(B) {
 function plTopA(B) {
   const { p, d } = B, last = B.real('td').slice(-1)[0], cur = B.weeks.filter((w) => !w.done).slice(-1)[0];
   const fl = (d.prep_floors || {}).floor || {}, pr = p.prep;
-  const ms = (p.msgs || []).length ? p.msgs.map((m) => `<span class="pa-pill ${m.lv}"><i></i><b>${escapeHtml(m.t)}</b> ${escapeHtml(m.x)}</span>`).join('')
+  const out = p.status && p.status !== 'available', stl = out ? String(p.status).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : '';
+  const ms = out ? `<span class="pa-pill out"><i></i><b>${escapeHtml(stl)}</b> no load message while he is out · "Back from injury" for 4 weeks once he trains again</span>` : (p.msgs || []).length ? p.msgs.map((m) => `<span class="pa-pill ${m.lv}"><i></i><b>${escapeHtml(m.t)}</b> ${escapeHtml(m.x)}</span>`).join('')
     : '<span class="pa-pill ok"><i></i>Nothing to do — as usual and at his match level</span>';
   const rows = ['td', 'hit', 'spr', 'acc_dec', 'srpe'].map((k) => {
     const [l, u] = PL_LAB[k], s0 = tmStats(B.real(k).filter((w) => !last || w.start !== last.start).map((w) => w[k])), z = last ? B.zw(last, k) : null, v = last ? last[k] : null, so = cur ? cur[k] : null;
