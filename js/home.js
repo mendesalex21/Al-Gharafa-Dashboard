@@ -202,7 +202,7 @@ function hoAttnData(D) {
     { k: 'well', c: 'red', t: 'Wellness', note: wellNote, xs: well },
     { k: 'big', c: 'orange', t: 'Big change', note: 'today or week so far, |z| ≥ 2', xs: big },
     { k: 'speed', c: 'blue', t: 'Speed top-up', note: 'no run at 90 % of max speed ≥ 10 days', xs: speed }];
-  if (isAdminUi() && P.workload && P.workload.players) { // admin first (2026-11-05): load vs his match + back from injury
+  if (P.workload && P.workload.players) { // the 4 tiles (load vs his match + back from injury): released to the staff 2026-11-05
     const all = [...svFlat(s), ...svOffGps(s), ...svKeepers(s)], find = (id) => all.find((p) => p.id === id) || { id, cat: 't' };
     const pick = (keys) => P.workload.players.flatMap((q) => (q.msgs || []).filter((m) => keys.includes(m.k)).map((m) => ({ q, m })));
     const lvl = pick(['under', 'catchup', 'over']).map(({ q, m }) => ({ p: find(q.id), v: m.k === 'over' ? 'above' : `TD ${q.prep.r.td.toFixed(2)}×`, t: `${m.t}: ${m.x}` }));
