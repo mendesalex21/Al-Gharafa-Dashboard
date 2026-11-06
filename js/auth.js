@@ -32,6 +32,9 @@ async function startSession(idToken) {
       if (j.ok && j.session) {
         AUTH.session = j.session; AUTH.token = j.session; AUTH.user = j.user;
         try { localStorage.setItem(SESSION_KEY, j.session); } catch (e) { /* private mode: asked again next visit */ }
+        // a first sign-in on this device (2026-11-06, a new staff member saw only "Loading…"): the pages started before the
+        // session existed, through the slow Google route — reload once, everything then comes from the server with the session
+        try { if (!sessionStorage.getItem('session_reload')) { sessionStorage.setItem('session_reload', '1'); location.reload(); } } catch (e) { /* private mode */ }
       } else if (j.error === 'forbidden' || j.error === 'invalid_token') return;
     } catch (e) { await new Promise((ok) => setTimeout(ok, 1500 * (i + 1))); } // the script's cold start
   }
