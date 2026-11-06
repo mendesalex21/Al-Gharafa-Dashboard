@@ -156,12 +156,12 @@ function tcPlayers() {
       <span class="pk-k" style="margin-top:8px">Al Gharafa · line-breaking passes / 90</span>${ours.map((q) => `<button class="pk-bar us ${q.pid === F.pl ? 'on' : ''}" data-pl="${q.pid}"><span class="n">${1 + ok.filter((x) => x.lb90 > q.lb90).length}</span><span><b>${escapeHtml(q.n)} <small>${PK_GRP(q.pos)} · ${q.min}'</small></b><i style="width:${q.lb90 / mxo * 100}%"></i></span><span class="v">${q.lb90}</span></button>`).join('')}</section>
     <section class="panel"><span class="pk-k">His line-breaking passes <small>${m.n} passes · ${m.two} through both lines · he attacks →</small></span>${m.svg}${PK_LEG}</section></div>`;
 }
-function tcPlayersBind() {
-  const box = document.getElementById('tc-body'), F = TC.pk;
-  [['pk-team', 'team'], ['pk-grp', 'grp'], ['pk-min', 'min']].forEach(([id, k]) => { const el = document.getElementById(id); if (el) el.onchange = () => { F[k] = k === 'min' ? +el.value : el.value; drawTactical(); }; });
-  if (document.getElementById('pk-view')) bindSeg('pk-view', (v) => { F.full = v === 'full'; F.runs = v === 'runs'; drawTactical(); });
-  box.querySelectorAll('[data-sort]').forEach((th) => (th.onclick = () => { F.sort = th.dataset.sort; drawTactical(); }));
-  box.querySelectorAll('[data-pl]').forEach((b) => (b.onclick = () => { F.pl = b.dataset.pl; F.full = false; F.runs = false; drawTactical(); }));
+function tcPlayersBind(box = document.getElementById('tc-body'), redraw = drawTactical) { // also Tactical › League › Passes & runs (2026-11-06)
+  const F = TC.pk;
+  [['pk-team', 'team'], ['pk-grp', 'grp'], ['pk-min', 'min']].forEach(([id, k]) => { const el = document.getElementById(id); if (el) el.onchange = () => { F[k] = k === 'min' ? +el.value : el.value; redraw(); }; });
+  if (document.getElementById('pk-view')) bindSeg('pk-view', (v) => { F.full = v === 'full'; F.runs = v === 'runs'; redraw(); });
+  box.querySelectorAll('[data-sort]').forEach((th) => (th.onclick = () => { F.sort = th.dataset.sort; redraw(); }));
+  box.querySelectorAll('[data-pl]').forEach((b) => (b.onclick = () => { F.pl = b.dataset.pl; F.full = false; F.runs = false; redraw(); }));
 }
 /** League: who breaks the lines in the team picked — its passers and its line-breaking passes (top 3 in colour). */
 function pkFocus(team) {

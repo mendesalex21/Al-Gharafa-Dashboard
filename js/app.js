@@ -7,18 +7,19 @@ const VIEW_RENDER = {
   home: () => renderHome(), wellness: () => renderWellness(), longitudinal: () => renderLongitudinal(),
   sessions: (o) => renderSessions(o), objectives: (o) => renderObjectives(o), intensity: () => renderIntensity(), team: () => renderTeam(), squad: () => renderSquad(),
   player: (o) => renderPlayerLoad(o), injuries: () => renderInjuries(), readiness: () => renderReadiness(), testing: (o) => renderTesting(o), calendar: (o) => renderCalendar(o),
-  reports: (o) => renderReports(o), roster: (o) => renderRoster(o), plan: () => renderPlan(), matchfiles: () => renderMatchFiles(), tactical: () => renderTactical(), tactical2: () => renderTactical2(),
+  reports: (o) => renderReports(o), roster: (o) => renderRoster(o), plan: () => renderPlan(), matchfiles: () => renderMatchFiles(), tactical2: () => renderTactical2(),
 };
 const VIEW_REDRAW = {
   home: () => { hoLoadPlans(); drawHome(); }, longitudinal: () => drawLongitudinal(), sessions: (o) => drawSessions(o), objectives: () => drawObjectives(), intensity: () => drawIntensity(),
-  team: () => drawTeam(), squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), injuries: () => drawInjuries(), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: (o) => { calSetMode(o); drawCalendar(); }, reports: () => rpFit(), roster: (o) => { roSetMode(o); drawRoster(); }, plan: () => splDraw(), matchfiles: () => drawMatchFiles(), tactical: () => drawTactical(), tactical2: () => drawTactical2(),
+  team: () => drawTeam(), squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), injuries: () => drawInjuries(), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: (o) => { calSetMode(o); drawCalendar(); }, reports: () => rpFit(), roster: (o) => { roSetMode(o); drawRoster(); }, plan: () => splDraw(), matchfiles: () => drawMatchFiles(), tactical2: () => drawTactical2(),
 };
 let CURRENT_VIEW = null;
 /** Pages taken out of the menu (2026-10-26, his call — already shown elsewhere): old links open where it now lives. */
-const VIEW_GONE = { longitudinal: 'wellness', objectives: 'sessions', readiness: 'squad' };
+const VIEW_GONE = { longitudinal: 'wellness', objectives: 'sessions', readiness: 'squad', tactical: 'tactical2' }; // the old Tactical (2026-11-06): all in the new one
 
 /** `opts` lets one page open another on a given item, e.g. switchView('player', {player: 'ounas'}). */
 function switchView(view, opts) {
+  if (VIEW_GONE[view]) view = VIEW_GONE[view];
   const section = VIEW_SECTION[view];
   document.querySelectorAll('.nav-item[data-section]').forEach((btn) => {
     if (btn.dataset.section === section) btn.setAttribute('aria-current', 'page'); else btn.removeAttribute('aria-current');

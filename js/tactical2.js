@@ -35,7 +35,7 @@ const t2M = () => Object.fromEntries((T2.data.matches || []).map((m) => [m.id, m
 // ------------------------------------------------------------------ loading
 function renderTactical2() {
   const root = document.getElementById('view-tactical2');
-  root.innerHTML = `${pageHead('Admin · new version', 'Tactical', 't2-sub', `<span class="tc-lock">🔒 only you can see this tab</span><button class="btn-light" onclick="switchView('tactical')">Old version</button>${segHtml('t2-seg', [['teams', 'Teams'], ['league', 'League'], ['matches', 'Matches']], T2.s)}`)}<div id="t2-body"><div class="panel"><div class="empty">Loading…</div></div></div><div class="t3-modal" id="t2-modal" hidden></div>`;
+  root.innerHTML = `${pageHead('Analysis', 'Tactical', 't2-sub', `<span class="tc-lock">🔒 tactical access only</span>${segHtml('t2-seg', [['teams', 'Teams'], ['league', 'League'], ['matches', 'Matches']], T2.s)}`)}<div id="t2-body"><div class="panel"><div class="empty">Loading…</div></div></div><div class="t3-modal" id="t2-modal" hidden></div>`;
   bindSeg('t2-seg', (v) => { T2.s = v; T2.ev = null; drawTactical2(); });
   loadData('workload').then((w) => { T2X.wl = w.players || null; }).catch(() => {}); // our players' status for the predicted line-up
   Promise.all([loadData('tactical'), loadData('calendar').catch(() => null)]).then(([d, cal]) => {
@@ -438,8 +438,9 @@ const T2_PM = [
 function t2League() {
   const G = T2.lg, players = G.view === 'players';
   const tog = (id, items, cur) => `<div class="mode" id="${id}">${items.map(([k, l]) => `<button class="${cur === k ? 'on' : ''}" data-v="${k}">${l}</button>`).join('')}</div>`;
-  const top = `<div class="sx-top"><h1 style="font-size:24px">League numbers<small>${players ? 'every QSL player' : 'every QSL team'} · season</small></h1><div style="display:flex;gap:10px;flex-wrap:wrap">${tog('lg-view', [['teams', 'Teams'], ['players', 'Players']], G.view)}${tog('lg-mode', [['total', 'Season total'], ['match', players ? 'Per 90 min' : 'Per match']], G.mode)}${players ? tog('lg-pv', [['A', 'Top 10 cards'], ['B', 'Full table']], G.pv) : ''}</div></div>`;
-  return `<div class="sx" style="padding:0">${top}${players ? (G.pv === 'B' ? t2PTable() : t2PCards()) : t2Season()}</div>`;
+  const pack = G.view === 'pack' && T2.raw && T2.raw.packing; // the old version's Players (moved in, 2026-11-06)
+  const top = `<div class="sx-top"><h1 style="font-size:24px">League numbers<small>${pack ? 'passes that break the lines, runs and receptions · tracking' : players ? 'every QSL player' : 'every QSL team'} · season</small></h1><div style="display:flex;gap:10px;flex-wrap:wrap">${tog('lg-view', [['teams', 'Teams'], ['players', 'Players'], ...(T2.raw && T2.raw.packing ? [['pack', 'Passes & runs']] : [])], G.view)}${pack ? '' : tog('lg-mode', [['total', 'Season total'], ['match', players ? 'Per 90 min' : 'Per match']], G.mode)}${players ? tog('lg-pv', [['A', 'Top 10 cards'], ['B', 'Full table']], G.pv) : ''}</div></div>`;
+  return `<div class="sx" style="padding:0">${top}${pack ? `<div class="t2-old">${tcPlayers()}</div>` : players ? (G.pv === 'B' ? t2PTable() : t2PCards()) : t2Season()}</div>`;
 }
 function t2Season() {
   const G = T2.lg, S0 = T2.data.season || {}, teams = Object.keys(S0), US = T2_US;
@@ -486,6 +487,7 @@ function t2LeagueBind() {
   box.querySelectorAll('[data-sort]').forEach((th) => (th.onclick = () => { if (G.sort === th.dataset.sort) G.asc = !G.asc; else { G.sort = th.dataset.sort; G.asc = false; } re(); }));
   box.querySelectorAll('[data-psort]').forEach((th) => (th.onclick = () => { if (G.pv === 'B' && G.psort === th.dataset.psort) G.pasc = !G.pasc; else { G.psort = th.dataset.psort; G.pasc = false; } G.pv = 'B'; re(); }));
   [['pf-t', 'ft'], ['pf-g', 'fg'], ['pf-m', 'minm']].forEach(([id, k]) => { const el = document.getElementById(id); if (el) el.onchange = () => { G[k] = k === 'minm' ? +el.value : el.value; re(); }; });
+  if (G.view === 'pack' && typeof tcPlayersBind === 'function') tcPlayersBind(box, re);
 }
 
 // ------------------------------------------------------------------ Matches: the match centre

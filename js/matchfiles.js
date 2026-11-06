@@ -99,6 +99,7 @@ async function mfShowLink() {
   if (!cfOn()) return;
   try {
     const r = await fetch('/api/me', { headers: cfHeaders() }), j = await r.json();
+    if (j.ok && j.user && j.user.role === 'tactical' && typeof tcShowLink === 'function') tcShowLink(); // a staff member with the tactical access: the Tactical tab only
     if (j.ok && j.user && j.user.role === 'admin') {
       document.getElementById('nav-matchfiles').hidden = false;
       if (typeof tcShowLink === 'function') tcShowLink(); // the Tactical tab: the admin only too
