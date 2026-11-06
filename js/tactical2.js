@@ -10,8 +10,10 @@ const T2 = { s: 'teams', team: null, seg: 'over', cat: 'goal_kick', f: {}, match
   lg: { view: 'teams', mode: 'total', sort: 'pts', asc: false, pv: 'A', ft: 'all', fg: 'all', minm: 270, psort: 'goals', pasc: false },
   data: null, packs: {}, full: {}, next: null };
 const T2_US = 'Al Gharafa';
-const T2_PRE = { goal_kick: 3000, build_up: 2000, press: 2000, regain_high: 6000, prog: 3000, shot: 10000, cross: 4000, corner: 2000, free_kick: 2000, entry: 4000, loss: 5000, counter: 3000 };
+const T2_PRE = { goal: 10000, goal_against: 10000, goal_kick: 3000, build_up: 2000, press: 2000, regain_high: 6000, prog: 3000, shot: 10000, cross: 4000, corner: 2000, free_kick: 2000, entry: 4000, loss: 5000, counter: 3000 };
 const T2_CATS = [
+  ['goal', 'Goals scored', [['h', 1, '1st half'], ['h', 2, '2nd half']]], // his ask (2026-11-06): the goals on their own, not only a filter of Shots
+  ['goal_against', 'Goals conceded', [['h', 1, '1st half'], ['h', 2, '2nd half']]],
   ['goal_kick', 'Goal kicks (6 m)', [['kind', 'short', 'Short'], ['kind', 'long', 'Long'], ['pressed', true, 'Pressed'], ['tag', 'progressed', 'Played out'], ['tag', 'lost in own third', 'Lost in own third'], ['tag', 'first ball won', 'First ball won'], ['tag', 'first ball lost', 'First ball lost']]],
   ['build_up', 'Build-ups', [['start', 'settled', 'Settled'], ['start', 'open play', 'After a regain'], ['pressed', true, 'Pressed'], ['tag', 'middle third', 'Middle third'], ['tag', 'final third', 'Last third'], ['tag', 'lost in own third', 'Lost in own third'], ['kind', 'direct', 'Long ball']]],
   ['press', 'Pressing', [['kind', 'organised', 'Organised'], ['kind', 'counter-press', 'Counter-press'], ['height', 'high', 'High (their third)'], ['tag', 'won back ≤ 5 s', 'Won back ≤ 5 s'], ['tag', 'won back ≤ 10 s', '≤ 10 s'], ['tag', 'forced long', 'Forced long'], ['tag', 'foul', 'Foul'], ['tag', 'beaten', 'Beaten']]],
@@ -70,7 +72,11 @@ function t2Moments(team) {
   const out = [], M = t2M(), sel = t2Sel(team);
   (T2.data.matches || []).filter((m) => (m.home === team || m.away === team) && (!sel || sel.has(m.id))).forEach((m) => {
     const pk = T2.packs[m.id]; if (!pk) return;
-    pk.moments.forEach((x) => { if (x.t === team) out.push({ ...x, m: m.id, opp: m.home === team ? m.away : m.home }); });
+    const opp = m.home === team ? m.away : m.home;
+    pk.moments.forEach((x) => {
+      if (x.t === team) out.push({ ...x, m: m.id, opp });
+      if (x.c === 'shot' && x.tag === 'goal') out.push({ ...x, c: x.t === team ? 'goal' : 'goal_against', m: m.id, opp }); // the goals, scored and conceded
+    });
   });
   return out.sort((a, b) => (M[b.m].date || '').localeCompare(M[a.m].date || '') || a.h - b.h || a.a - b.a);
 }
@@ -337,7 +343,7 @@ function t2Draw2(cvOut) {
 
 // ------------------------------------------------------------------ the XML export for the video
 const T2_COL = { goal_kick: [65535, 42405, 0], build_up: [13107, 39321, 65535], press: [65535, 13107, 13107], regain_high: [0, 39321, 13107], counter: [39321, 0, 65535], entry: [0, 52428, 52428],
-  prog: [26214, 26214, 65535], cross: [65535, 52428, 0], shot: [65535, 0, 32767], corner: [52428, 52428, 52428], free_kick: [39321, 39321, 39321], loss: [39321, 13107, 0] };
+  prog: [26214, 26214, 65535], cross: [65535, 52428, 0], shot: [65535, 0, 32767], goal: [0, 52428, 13107], goal_against: [52428, 0, 0], corner: [52428, 52428, 52428], free_kick: [39321, 39321, 39321], loss: [39321, 13107, 0] };
 function t2Code(x) {
   if (x.c === 'goal_kick') return `Goal kick · ${x.kind}`;
   if (x.c === 'build_up') return `Build-up · ${x.start === 'open play' ? 'after a regain' : 'settled'}${x.pressed ? ' · pressed' : ''}`;
