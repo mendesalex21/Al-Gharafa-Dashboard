@@ -70,7 +70,7 @@ function injCurve(I, s, k, lab) {
 function injSpeed(I, s) {
   const pts = (s.vmax_days || []).filter(([dd]) => dd < 7 * s.win);
   const m = s.ms || {}, f = (k) => (m[k] != null ? `day ${m[k]}` : '—');
-  const N = 7 * s.win, W = 380, H = 128, L = 30, R = 34, T = 8, Bm = 18, lo = 60, hi = 105;
+  const N = 7 * s.win, W = 560, H = 150, L = 30, R = 34, T = 8, Bm = 18, lo = 60, hi = 105;
   const x = (dd) => L + dd / Math.max(1, N - 1) * (W - L - R), y = (v) => T + (1 - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * (H - T - Bm);
   let g = `<svg viewBox="0 0 ${W} ${H}" class="inj-cv" role="img" aria-label="max speed after his return">`;
   [[90, '#34c759'], [85, '#a3d977'], [80, '#e8c26a']].forEach(([v, c]) => { g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${c}" stroke-width="1" stroke-dasharray="3 3"/><text x="${W - R + 5}" y="${y(v) + 3.5}" class="ax">${v}</text>`; });
@@ -79,6 +79,24 @@ function injSpeed(I, s) {
   if (pts.length > 1) g += `<polyline points="${pts.map(([dd, v]) => `${x(dd).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--ink-2)" stroke-width="1.2" stroke-linejoin="round" opacity=".55"/>`;
   pts.forEach(([dd, v]) => { g += `<circle cx="${x(dd).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${v >= 90 ? '#34c759' : v >= 85 ? '#a3d977' : v >= 80 ? '#e8c26a' : '#c9c8c1'}"><title>day ${dd} · ${injDay(addDays(s.back, dd))} · ${v} % of his max speed</title></circle>`; });
   return `<div class="inj-c"><div class="inj-ct">Max speed of each day · % of his max</div>${g}</svg><div class="inj-cs">first ≥ 80 % ${f('v80')} · ≥ 85 % ${f('v85')} · ≥ 90 % ${f('v90')}</div></div>`;
+}
+/** The load of his return in a small week table (his choice, mockup A 2026-11-06): one row per metric, one column per week,
+ * % of his week before (green from 90 %, orange 70–89, red under 70), the matches of each week under it. */
+function injWeekTable(s) {
+  const nw = s.win, ws = s.weeks.map((w, i) => ({ w, i })).filter(({ w, i }) => i < nw && (w.ok || (!w.done && w.days >= 3)));
+  const at = (i) => (ws.find((x) => x.i === i) || {}).w;
+  const col = (v) => (v >= 90 ? 'g' : v >= 70 ? 'o' : 'r');
+  const th = Array.from({ length: nw }, (_, i) => { const w = at(i); return `<th class="c">W${i + 1}${w && !w.done ? '<small> so far</small>' : ''}</th>`; }).join('');
+  const rows = [['td', 'Total distance'], ['hit', '> 20 km/h'], ['acc_dec', 'Acc + Dec']].map(([k, l]) => `<tr><td><b>${l}</b></td>${Array.from({ length: nw }, (_, i) => { const w = at(i), v = w ? w.pct[k] : null;
+    return v == null ? '<td class="c muted">·</td>' : `<td class="c"><span class="inj-wk ${col(v)}" title="week ${i + 1}: ${v} % of his week before">${v} %</span></td>`; }).join('')}</tr>`).join('');
+  const nm = Array.from({ length: nw }, (_, i) => { const w = at(i); return `<td class="c">${w && w.nm ? `${w.nm} match${w.nm > 1 ? 'es' : ''}` : ''}</td>`; }).join('');
+  return `<div class="inj-c"><div class="inj-ct">Load · % of his week before the injury</div><table class="dtable compact inj-wt"><thead><tr><th></th>${th}</tr></thead><tbody>${rows}<tr class="nm"><td>matches</td>${nm}</tr></tbody></table>
+    <div class="inj-cs">green ≥ 90 % = back to his load · orange 70–89 % · red under 70 %</div></div>`;
+}
+function injMsRow(I, s) {
+  const m = s.ms || {}, u = (I.ms_usual || {})[s.cls] || {};
+  return `<div class="inj-msl">${[['team', 'Team session'], ['v90', '≥ 90 % Vmax'], ['match', 'First match minutes'], ['m60', '60 min match']].map(([k, l]) => { const ok = m[k] != null;
+    return `<span class="${ok ? 'ok' : ''}" title="${ok ? injDay(addDays(s.back, m[k])) : ''}"><i>${ok ? '✓' : ''}</i>${l} <b>${ok ? 'day ' + m[k] : 'not yet'}</b>${u[k] != null ? `<small>usual ${u[k]}</small>` : ''}</span>`; }).join('')}</div>`;
 }
 function injMilestones(I, s) {
   const u = (I.ms_usual || {})[s.cls] || {};
@@ -93,11 +111,10 @@ function injCardHtml(d, p) {
   const ref = pre ? `His week before the injury (4 normal weeks): total distance ${(pre.td / 1000).toFixed(1)} km · > 20 km/h ${pre.hit} m · sprint ${pre.spr} m · Acc + Dec ${pre.acc_dec}` : 'No normal week before the injury to compare with.';
   return `<section class="panel inj-card"><div class="inj-ph"><div style="flex:1"><div class="inj-t">Return from injury</div>
       <div class="muted">${s.med ? escapeHtml(injMedTxt(s.med)) + ' · ' : ''}out ${s.out} days from ${injDay(s.inj_date || s.start)} · back on ${injDay(s.back)} · week ${wk} of ${s.win}</div></div>${injClsChip(I, s, true)}${injStateChip(s)}${injFastChip(I, s)}</div>
-    <div class="muted sm" style="margin:10px 0 4px">${ref}</div>
-    <div class="inj-g3">${pre ? injCurve(I, s, 'td', 'Total distance · % of his week before') + injCurve(I, s, 'hit', '> 20 km/h · % of his week before') + injCurve(I, s, 'acc_dec', 'Acc + Dec · % of his week before') : ''}${injSpeed(I, s)}</div>
-    ${pre ? `<div class="inj-lg"><span><i class="l1"></i>${escapeHtml(p.name)}</span><span><i class="l2"></i>usual return after a ${I.classes[s.cls].label.toLowerCase()} injury (our ${I.n[s.cls]} returns since 2024)</span><span><i class="l4"></i>90 % = back to his load</span></div>` : ''}
-    ${injMilestones(I, s)}
-    <p class="muted sm" style="margin:10px 0 0">${s.fast ? `<b>Fast high-speed return:</b> ${escapeHtml(injFastTxt(I, s))}.<br>` : ''}Return complete = ≥ 90 % of his max speed touched, and 90 % of his week before on total distance and > 20 km/h (a congested week compared with his congested weeks; ${s.cls === 'short' ? '1 week' : '2 weeks running'}) or a 60 min match at his usual intensity.</p></section>`;
+    <div class="muted sm" style="margin:8px 0 2px">${ref}</div>
+    <div class="inj-ab">${pre ? injWeekTable(s) : '<div class="inj-c muted sm">No normal week before the injury to compare with.</div>'}${injSpeed(I, s)}</div>
+    ${injMsRow(I, s)}
+    <p class="muted sm" style="margin:12px 0 0">${s.fast ? `<b>Fast high-speed return:</b> ${escapeHtml(injFastTxt(I, s))}.<br>` : ''}Return complete = ≥ 90 % of his max speed touched, and 90 % of his week before on total distance and > 20 km/h (a congested week compared with his congested weeks; ${s.cls === 'short' ? '1 week' : '2 weeks running'}) or a 60 min match at his usual intensity.</p></section>`;
 }
 /** Workload › Player, at the bottom: his injuries (admin; in place of the physical tests). */
 function injHistoryHtml(d, p) {
