@@ -154,10 +154,11 @@ function t2GoalGoals(om, mom) {
     return { e, team, mo: x && x[0] <= 3 ? x[1] : null };
   });
 }
-function t2MatchExtras(om, goals) {
+function t2MatchExtras(om, goals, tracking) {
   if (!om) return '<div class="card"><p class="muted">No match sheet for this match.</p></div>';
   const g = goals.map((x, i) => `<button class="gl-b ${x.e.side}" ${x.mo ? `data-goal="${i}"` : 'disabled title="no clip for this goal"'}>${x.mo ? '▶' : '⚽'} <b>${escapeHtml(x.e.m)}</b> ${escapeHtml(x.e.player || '')}${x.e.type === 'pen' ? ' (p)' : x.e.type === 'og' ? ' (og)' : ''} <small>${crestHtml(x.team, 14)} ${x.e.score ? x.e.score.join('–') : ''}${x.e.assist ? ' · ' + escapeHtml(x.e.assist) : ''}</small></button>`).join('');
-  return `<div class="card"><h3>Goals <small>click: the goal in 2D below${goals.some((x) => !x.mo) ? ' · ⚽ = no clip (no tracking, or an own goal)' : ''}</small></h3><div class="gl-row">${g || '<span class="muted">0–0</span>'}</div></div>
+  const note = tracking === false ? '<p class="gl-no">No tracking file for this match yet — no 2D clip of its goals. The goals of the matches marked 2D in the list can be played.</p>' : '';
+  return `<div class="card"><h3>Goals <small>${tracking === false ? 'no 2D for this match' : `click: the goal in 2D below${goals.some((x) => !x.mo) ? ' · ⚽ = no clip (an own goal, or the tracking misses it)' : ''}`}</small></h3>${note}<div class="gl-row">${g || '<span class="muted">0–0</span>'}</div></div>
     <div class="t2-old"><div class="tt-two">${tcEffective(om)}${tcStats(om)}</div>${tcLineups(om)}</div>`;
 }
 
