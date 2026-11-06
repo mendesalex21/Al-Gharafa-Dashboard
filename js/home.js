@@ -208,14 +208,20 @@ function hoAttnData(D) {
     const all = [...svFlat(s), ...svOffGps(s), ...svKeepers(s)], find = (id) => all.find((p) => p.id === id) || { id, cat: 't' };
     const pick = (keys) => P.workload.players.flatMap((q) => (q.msgs || []).filter((m) => keys.includes(m.k)).map((m) => ({ q, m })));
     const lvl = pick(['under', 'catchup', 'over']).map(({ q, m }) => ({ p: find(q.id), v: m.k === 'over' ? 'above' : `TD ${q.prep.r.td.toFixed(2)}×`, t: `${m.t}: ${m.x}` }));
-    const back = pick(['back']).sort((a, b) => a.q.back.days - b.q.back.days).map(({ q, m }) => ({ p: find(q.id), v: `${q.back.days} d`, t: `${m.t}: ${m.x}` }));
+    // back from injury (released 2026-11-06): the players still in their return (Workload › Injuries rule — watched 2, 4 or
+    // 6 weeks by injury length, out of the list as soon as the return is complete)
+    const W = P.workload, I = W.injuries;
+    const back = I && typeof injCur === 'function' ? W.players.map((q) => ({ q, r: injCur(W, q.id) })).filter(({ r }) => r && INJ_OPEN.includes(r.state) && injRecent(r, W.as_of, 0))
+      .sort((a, b) => String(b.r.back).localeCompare(String(a.r.back))).map(({ q, r }) => { const wk = Math.min(r.win, r.weeks.length || 1), st = (INJ_STATE[r.state] || [r.state])[0];
+        return { p: find(q.id), v: `week ${wk}/${r.win}`, t: `${I.classes[r.cls].label} injury${r.med && r.med.region ? ` (${r.med.region.toLowerCase()})` : ''}, ${r.out} days out, back ${injDay(r.back)} — ${st}${r.fast ? ' · fast high-speed return' : ''}` }; })
+      : pick(['back']).sort((a, b) => a.q.back.days - b.q.back.days).map(({ q, m }) => ({ p: find(q.id), v: `${q.back.days} d`, t: `${m.t}: ${m.x}` }));
     // 4 tiles, one question each (his choice, 2026-11-05): the Wellness tile goes (the Wellness card above shows it), the
     // 2-week overload and the big change are one "Load spike" (more than his usual: today, this week, or A:C two weeks)
     const spike = [...over.map((x) => ({ ...x, r: 0 })), ...big.filter((x) => !over.some((o) => o.p.id === x.p.id)).map((x) => ({ ...x, r: 1 }))];
     G.splice(0, G.length,
       { k: 'spike', c: 'red', t: 'Load spike', note: 'more than his usual: today or this week |z| ≥ 2, or A:C > 1.5 two weeks', xs: spike },
       { k: 'level', c: 'orange', t: 'Below his match level', note: 'last 4 weeks, in his own matches', xs: lvl },
-      { k: 'back', c: 'blue', t: 'Back from injury', note: 'the 4 weeks after 5 days or more out', xs: back },
+      { k: 'back', c: 'blue', t: 'Back from injury', note: 'until back to his load · 2, 4 or 6 weeks by injury length', xs: back },
       { k: 'speed', c: 'blue', t: 'Speed top-up', note: 'no run at 90 % of max speed ≥ 10 days', xs: speed });
   }
   return { s, n: svFlat(s).length + svOffGps(s).length + svKeepers(s).length, flagged: new Set((G[0].k === 'spike' ? G.flatMap((g) => g.xs) : [...over, ...well, ...big]).map((x) => x.p.id)).size, G };
