@@ -100,11 +100,20 @@ function spFromStatsports(sessions, ampm, opts = {}) {
   const list = (Array.isArray(sessions) ? sessions : [sessions]).filter((s) => s && (s.sessionPlayers || []).length);
   if (!list.length) return null;
   const hour = (s) => Number(String((s.sessionDetails || {}).startTime || '').slice(11, 13)) || 0;
-  // the team session of that half-day: the one with most players (a 1-player extra session can start later the same day)
-  const half = list.filter((x) => (hour(x) < 15 ? 'AM' : 'PM') === (ampm || 'PM'));
   const isGame = (x) => x.sessionPlayers.some((p) => (p.drills || []).some((dr) => /match|1st\s*h|2nd\s*h/i.test(dr.drillName)));
-  const s = (opts.match && list.find(isGame)) || (half.length ? half : list).slice().sort((x, y) => y.sessionPlayers.length - x.sessionPlayers.length)[0];
-  const use = opts.match || opts.all ? list : [s], startOf = (x) => String((x.sessionDetails || {}).startTime || '').slice(11, 16);
+  // the team session of that half-day: the one with most players (a 1-player extra session can start later the same day).
+  // Never a B-team game's own recording when there is a training one (4 Nov: the compensatory session of 6 at 14:31 and
+  // Yousef's B-team game at 16:27 — the game was taken for the session and the 6 were lost). AM = started before 13:00.
+  // a game's recording = most of its players have halves (9 Oct: one B-team player's halves inside the compensatory one: a training)
+  const gameRec = (x) => x.sessionPlayers.filter((p) => (p.drills || []).some((dr) => /match|1st\s*h|2nd\s*h/i.test(dr.drillName))).length * 2 >= x.sessionPlayers.length;
+  // … and smaller than the biggest training one (a club match's own recording, 13-14 players, is never set aside)
+  const big = (xs) => Math.max(0, ...xs.map((x) => x.sessionPlayers.length));
+  const train = list.filter((x) => !gameRec(x)), bGame = (x) => gameRec(x) && x.sessionPlayers.length < big(train);
+  const pool = list.filter((x) => !bGame(x));
+  const half = pool.filter((x) => (hour(x) < 13 ? 'AM' : 'PM') === (ampm || 'PM'));
+  const s = (opts.match && list.find(isGame)) || (half.length ? half : pool).slice().sort((x, y) => y.sessionPlayers.length - x.sessionPlayers.length)[0];
+  // a B-team game of a few players recorded apart that day goes with the session: its halves are written apart (Game_B)
+  const use = opts.match || opts.all ? list : [s, ...list.filter((x) => x !== s && bGame(x))], startOf = (x) => String((x.sessionDetails || {}).startTime || '').slice(11, 16);
   const d = String((s.sessionDetails || {}).sessionDate || '').slice(0, 10), date = d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '';
   const head = ['Player First Name', 'Drill Title', 'Session Date', 'Session Start', ...SP_API_COLS.map(([c]) => c)];
   const cell = (v) => { const t = String(v ?? ''); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
@@ -125,7 +134,7 @@ function spFromStatsports(sessions, ampm, opts = {}) {
     // is the work of the players who trained apart: a drill there.
     const total = !opts.match && dl.find((x) => SP_SESSION_TOTAL.test(x.drillName));
     const ent = dl.find((x) => /^entire session - live$/i.test(x.drillName)) || total || dl.find((x) => /^entire session$/i.test(x.drillName));
-    if (ent) { full.push(line(p, ent, ses)); if (/^entire session$/i.test(ent.drillName)) live = false; }
+    if (ent) { full.push(line(p, ent, ses)); if (ses === s && /^entire session$/i.test(ent.drillName)) live = false; }
     dl.filter((x) => !/^entire session/i.test(x.drillName) && (opts.match || !SP_SESSION_TOTAL.test(x.drillName))).forEach((x) => drills.push(line(p, x, ses)));
   }
   const others = list.filter((x) => !use.includes(x)).map((x) => `${String((x.sessionDetails || {}).startTime || '').slice(11, 16)} (${x.sessionPlayers.length} player${x.sessionPlayers.length > 1 ? 's' : ''})`);
