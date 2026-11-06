@@ -131,7 +131,7 @@ function injHistoryHtml(d, p) {
 const INJ = {};
 function renderInjuries() {
   const root = document.getElementById('view-injuries');
-  root.innerHTML = `<div class="sv-bleed">${pageHead('Workload', 'Injuries', 'inj-sub', '<span class="tc-lock">🔒 only you see this page</span>')}<div id="inj-body"><div class="panel"><div class="empty">Loading…</div></div></div></div>`;
+  root.innerHTML = `<div class="sv-bleed">${pageHead('Workload', 'Injuries', 'inj-sub')}<div id="inj-body"><div class="panel"><div class="empty">Loading…</div></div></div></div>`;
   withData('workload', (d) => { WL.data = d; drawInjuries(); }, (err) => { root.innerHTML = loadError(err); });
 }
 function drawInjuries() {
