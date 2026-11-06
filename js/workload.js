@@ -286,6 +286,68 @@ function renderPlayerLoad(opts) {
   withData('intensity', (d) => { WL.int = d; drawPlayerLoad(); }, () => {}); // his WCS and RHIE
 }
 
+/** His WCS and RHIE by week (payload intensity): td / hi = his best training minute as % of his WCS, rh = his bouts
+ * (training + matches), rx = rh ÷ his match bouts, rt = his TRAINING bouts ÷ his match bouts. */
+function plIW(pid) {
+  const I = WL.int, g = I && I.gps ? Object.keys(I.gps).find((k) => I.gps[k].pid === pid) : null, IW = {};
+  if (I && g) {
+    const mb = ((I.rhie.mref || {})[g] || {}).bouts;
+    I.weeks.forEach((x) => { const b = x.best[g];
+      const tr = Object.values(x.train).map((tt) => ((tt.rhie.players || {})[g] || {}).n).filter((v) => v != null);
+      const rh = [...tr, ...(x.matches || []).map((m) => ((I.rhie.matches[m] || {})[g] || {}).n)].filter((v) => v != null);
+      const tot = rh.length ? rh.reduce((u, v) => u + v, 0) : null, trn = tr.length ? tr.reduce((u, v) => u + v, 0) : null;
+      IW[x.ws] = { td: b ? b.td[0] : null, hi: b ? b.hi[0] : null, rh: tot, rx: tot != null && mb ? tot / mb : null, rt: trn != null && mb ? trn / mb : null }; });
+  }
+  return { I, g, IW };
+}
+/** WCS / RHIE in training vs his matches: his last 4 complete weeks, and the level of the regular starters (their p25;
+ * starters = 60 min of match a week or more, the same players as the load floor). Cached per data day. */
+function plIntLevels(asOf) {
+  if (WL._intLv && WL._intLv.at === asOf && WL._intLv.int === WL.int) return WL._intLv;
+  const avg4 = (IW, f) => { const v = Object.keys(IW).sort().filter((ws) => ws <= addDays(asOf, -7) && IW[ws][f] != null).slice(-4).map((ws) => IW[ws][f]); return v.length >= 2 ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  const st = (WL.data.players || []).filter((p) => p.prep && (p.prep.mmin || 0) >= 60).map((p) => plIW(p.id).IW);
+  const q25 = (xs) => { const v = xs.filter((x) => x != null).sort((a, b) => a - b); if (v.length < 6) return null; const i = (v.length - 1) * 0.25, lo = Math.floor(i); return v[lo] + (v[Math.min(lo + 1, v.length - 1)] - v[lo]) * (i - lo); };
+  WL._intLv = { at: asOf, int: WL.int, avg4, td: q25(st.map((IW) => avg4(IW, 'td'))), rt: q25(st.map((IW) => avg4(IW, 'rt'))), n: st.length };
+  return WL._intLv;
+}
+/** Tiles of the top, his choice (mockup A, 2026-11-06, admin first): the big z (vs his habit) + A:C; for total distance,
+ * > 20 km/h and Acc + Dec "vs his match" (4-week ×/week against the regular starters' level) with a gauge; WCS and RHIE
+ * in training against his matches with a gauge too. No usual week / last week values (they are in the charts). */
+function plTilesA(B) {
+  const { p, d } = B, last = B.real('td').slice(-1)[0], fl = (d.prep_floors || {}).floor || {}, ce = (d.prep_floors || {}).ceil || {}, pr = p.prep;
+  const gauge = (x, lv, max, tip) => (x == null ? '' : `<div class="pa-g" title="${tip}"><i class="f" style="width:${Math.max(0, Math.min(100, x / max * 100))}%;background:${lv == null || x >= lv ? '#34c759' : '#ff9f0a'}"></i>${lv != null ? `<i class="t" style="left:${Math.min(100, lv / max * 100)}%"></i>` : ''}</div>`);
+  const vs = (x, lv, txt, fmt) => `<div class="ln pa-mx"><span>${txt}</span><b style="color:${x == null ? 'var(--ink-muted)' : lv == null || x >= lv ? '#1d7a35' : '#b26a00'}">${x == null ? '—' : `${lv == null ? '' : x >= lv ? '✓ ' : '↓ '}${fmt(x)}`}${lv != null ? `<small> level ${fmt(lv)}</small>` : ''}</b></div>`;
+  const tiles = plKeys().map((k) => {
+    const [l] = PL_LAB[k], now = B.acAt(k, d.as_of), prev = B.acAt(k, addDays(d.as_of, -7)), [col, txt] = tmZone(now), z = last ? B.zw(last, k) : null;
+    const x = pr && pr.r ? pr.r[k] : null, lv = fl[k];
+    let extra = `<div class="ln"><span>A:C a week ago</span><b>${prev == null ? '—' : prev.toFixed(2)}</b></div>`;
+    if (lv != null && !p.u23) extra = vs(x, lv, 'Vs his match · 4 weeks', (v) => v.toFixed(2) + '×') + gauge(x, lv, Math.max(ce[k] || 2.9, x || 0) * 1.05, `his week ÷ his own match (4-week average) · black tick = the level of the regular starters (${lv}×)${pr && pr.ref ? ` = ${tmK(lv * pr.ref[k])} a week` : ''}`);
+    else if (k === 'spr' && p.days_hsv != null) extra = `<div class="ln"><span>Last ≥ 90 % of his max speed</span><b style="color:${p.days_hsv >= 10 ? '#b26a00' : '#1d7a35'}">${p.days_hsv} days ago</b></div>`;
+    return `<div class="tm-tile"><span class="k">${l}</span><div class="ac"><b style="color:${TM_ZCOL[tmZ(z)]}">${z == null ? '—' : tmS(z)}</b><span>z · ${last ? last.label : ''}</span></div>
+      <span class="tm-zone"><i style="background:${col}"></i><span title="${txt}">A:C <b>${now == null ? '—' : now.toFixed(2)}</b></span></span>${extra}</div>`;
+  }).join('');
+  const lw = B.weeks.filter((w) => w.done && B.IW[w.start] && B.IW[w.start].td != null).slice(-1)[0], xw = lw ? B.IW[lw.start] : null;
+  const pcol = (v) => (v == null ? 'var(--ink-muted)' : v >= 100 ? '#1f7a3d' : v >= 90 ? '#34a853' : v >= 80 ? '#5fbf7a' : v >= 60 ? '#e8a33d' : '#d9534f');
+  const LV = plIntLevels(d.as_of), w4 = LV.avg4(B.IW, 'td'), r4 = LV.avg4(B.IW, 'rt');
+  const wcs = `<div class="tm-tile"><span class="k">WCS · best minute in training</span><div class="ac"><b style="color:${pcol(xw && xw.td)}">${xw && xw.td != null ? xw.td : '—'}<small> %</small></b><span>of his WCS · ${lw ? lw.label : ''}</span></div>
+    <span class="tm-zone"><i style="background:${pcol(xw && xw.hi)}"></i>A/D + spr <b>${xw && xw.hi != null ? xw.hi + ' %' : '—'}</b></span>
+    ${vs(w4, LV.td, 'Vs his matches · 4 weeks', (v) => Math.round(v) + ' %')}${gauge(w4, LV.td, 120, `his best training minute of the week as % of his worst case in matches (4-week average) · black tick = the level of the regular starters${LV.td != null ? ` (${Math.round(LV.td)} %)` : ''}`)}</div>`;
+  const rh = `<div class="tm-tile"><span class="k">RHIE · bouts</span><div class="ac"><b>${xw && xw.rh != null ? xw.rh : '—'}</b><span>${lw ? lw.label : ''} · training + matches</span></div>
+    <span class="tm-zone"><i style="background:#16269e"></i>${xw && xw.rt != null ? `training × ${xw.rt.toFixed(1)} of his matches` : 'training + matches'}</span>
+    ${vs(r4, LV.rt, 'In training vs his matches · 4 weeks', (v) => v.toFixed(1) + '×')}${gauge(r4, LV.rt, Math.max(3, r4 || 0) * 1.05, `his training bouts of the week ÷ his bouts in a match (4-week average) · black tick = the level of the regular starters${LV.rt != null ? ` (${LV.rt.toFixed(1)}×)` : ''}`)}</div>`;
+  const dl = Object.keys(B.wh).sort().pop(), w7 = B.wellOf(addDays(d.as_of, -6), d.as_of), w28 = B.wellOf(addDays(d.as_of, -34), addDays(d.as_of, -7));
+  const well = `<div class="tm-tile"><span class="k">Wellness</span>${dl ? `<div class="ac"><b style="color:${tmWell(B.wh[dl])}">${Math.round(B.wh[dl])}<small> %</small></b><span>${fmtDay(dl, { weekday: 'short', day: 'numeric', month: 'short' })}</span></div>
+    <span class="tm-zone"><i style="background:${tmWell(B.wh[dl])}"></i>his last check-in</span>` : '<div class="ac"><b>—</b></div><span class="tm-zone">no check-in</span>'}<div class="ln"><span>Last 7 days</span><b>${w7 == null ? '—' : Math.round(w7) + ' %'}</b></div><div class="ln"><span>The 4 weeks before</span><b>${w28 == null ? '—' : Math.round(w28) + ' %'}</b></div></div>`;
+  return tiles + wcs + rh + well;
+}
+/** The messages of the top (admin): his status when he is out, else his load messages. */
+function plMsgsA(p) {
+  const out = p.status && p.status !== 'available', stl = out ? String(p.status).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : '';
+  const ms = out ? `<span class="pa-pill out"><i></i><b>${escapeHtml(stl)}</b> no load message while he is out</span>` : (p.msgs || []).length ? p.msgs.map((m) => `<span class="pa-pill ${m.lv}"><i></i><b>${escapeHtml(m.t)}</b> ${escapeHtml(m.x)}</span>`).join('')
+    : '<span class="pa-pill ok"><i></i>Nothing to do — as usual and at his match level</span>';
+  return `<div class="pa-msgs pa-top">${ms}</div>`;
+}
+
 function plBuild(pid) {
   const d = WL.data, s = d.series[pid], p = d.players.find((x) => x.id === pid), n = s.cat.length;
   const days = Array.from({ length: n }, (_, i) => addDays(s.start, i));
@@ -315,14 +377,7 @@ function plBuild(pid) {
   const t = d.team, tIdx = (x) => daysBetween(t.start, x), tw = Object.fromEntries(t.weeks.map((w) => [w.start, w]));
   const wh = Object.fromEntries(((WL.history && WL.history.days) || []).filter((x) => x.byId && x.byId[pid] != null).map((x) => [x.date, x.byId[pid]]));
   const wellOf = (a, b) => { const xs = Object.entries(wh).filter(([x]) => x >= a && x <= b).map(([, v]) => v); return xs.length ? xs.reduce((u, v) => u + v, 0) / xs.length : null; };
-  const I = WL.int, g = I && I.gps ? Object.keys(I.gps).find((k) => I.gps[k].pid === pid) : null, IW = {};
-  if (I && g) {
-    const mb = ((I.rhie.mref || {})[g] || {}).bouts;
-    I.weeks.forEach((x) => { const b = x.best[g];
-      const rh = [...Object.values(x.train).map((tt) => ((tt.rhie.players || {})[g] || {}).n), ...(x.matches || []).map((m) => ((I.rhie.matches[m] || {})[g] || {}).n)].filter((v) => v != null);
-      const tot = rh.length ? rh.reduce((u, v) => u + v, 0) : null;
-      IW[x.ws] = { td: b ? b.td[0] : null, hi: b ? b.hi[0] : null, rh: tot, rx: tot != null && mb ? tot / mb : null }; });
-  }
+  const { I, g, IW } = plIW(pid);
   return { d, s, p, n, days, dayZ, mdOf, L, A, weeks, real, acAt, zw, t, tIdx, tw, wh, wellOf, I, g, IW };
 }
 
@@ -608,7 +663,7 @@ function drawPlayerLoad(opts) {
   const box = (t, note, inner, extra = '') => `<section class="panel"><div class="panel-head"><h2 class="panel-title small">${t}</h2>${note ? `<span class="panel-note">${note}</span>` : ''}${extra}</div>${inner}</section>`;
   const legend = PL.color === 'z' ? [['vlow', 'well below'], ['low', 'below'], ['ok', 'usual'], ['up', 'above'], ['vup', 'well above']].map(([c, l]) => `<span><i style="background:${TM_ZCOL[c]}"></i>${l}</span>`).join('')
     : [0.4, 0.6, 1, 1.4, 1.6].map((r) => `<span><i style="background:${tmZone(r)[0]}"></i>${tmZone(r)[1]}</span>`).join('');
-  body.innerHTML = `${isAdminUi() ? plTopA(B) + (typeof injCardHtml === 'function' ? injCardHtml(d, p) : '') : `<div class="tm-tiles pl-tiles">${plTiles(B)}</div>`}
+  body.innerHTML = `${isAdminUi() ? plMsgsA(p) + `<div class="tm-tiles pl-tiles">${plTilesA(B)}</div>` + (typeof injCardHtml === 'function' ? injCardHtml(d, p) : '') : `<div class="tm-tiles pl-tiles">${plTiles(B)}</div>`}
     <div class="grid2">${box('Weekly load z-score', 'Sunday–Saturday weeks vs his previous 6 weeks', '<div class="table-wrap" id="pl-z"></div>')}${box(`Availability · last ${s.cat.length} days`, '', '<div id="pl-timeline"></div>')}</div>
     <div class="tm-bar"><div class="tm-dates${PL.view === 'day' ? '' : ' muted'}">${PL.view === 'day' ? `<label>From <input type="date" id="pl-from" min="${s.start}" max="${d.as_of}" value="${plDayRange(s, d)[0]}"></label><label>to <input type="date" id="pl-to" min="${s.start}" max="${d.as_of}" value="${plDayRange(s, d)[1]}"></label>${PL.from ? '<button type="button" class="linkbtn" id="pl-reset">Reset</button>' : ''}` : PL.view === 'week' ? 'The last weeks' : PL.view === 'games' ? 'His last matches' : 'The season'}</div>
       <div class="tm-ctl">${PL.view === 'games' ? segHtml('pl-g90', [['raw', 'Raw'], ['p90', 'Per 90']], PL.g90 || 'raw') : `<span class="tm-lab">Team</span>${segHtml('pl-team', [['off', 'Off'], ['on', 'Show']], PL.team ? 'on' : 'off')}`}<span class="tm-lab">Colour</span>${segHtml('pl-color', [['z', 'z-score'], ['ac', 'A:C']], PL.color)}${segHtml('pl-view', [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['games', 'Games']], PL.view)}</div></div>
