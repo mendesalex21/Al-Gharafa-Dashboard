@@ -2400,3 +2400,11 @@ html:not(.is-admin) .admin-only { display: none !important; }
 .pa-g .f { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; } .pa-g .t { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); }
 
 .inj-st + .inj-st { margin-left: 6px; } .inj-spw { margin-top: 12px; } .inj-sp { width: 100%; height: auto; }
+
+/* return card, plain and small (2026-11-06) */
+.inj-g3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; max-width: 1180px; margin-top: 6px; }
+.inj-c { min-width: 0; } .inj-ct { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 2px; } .inj-cs { font-size: 11.5px; color: var(--ink-muted); }
+.inj-c .inj-cv { width: 100%; height: auto; display: block; }
+.inj-c .inj-cv .ax { font-size: 9.5px; } .inj-c .inj-cv .pv { font-size: 10.5px; } .inj-c .inj-cv .pl { stroke-width: 1.6; } .inj-c .inj-cv .bd { opacity: .12; }
+.pl-tiles .ln > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 860px) { .inj-g3 { grid-template-columns: 1fr; } }

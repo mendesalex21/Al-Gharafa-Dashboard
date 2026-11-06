@@ -43,42 +43,41 @@ function injMedTxt(m) {
   const side = m.side === 'L' ? 'left' : m.side === 'R' ? 'right' : m.side === 'B' ? 'both sides' : '';
   return [[m.region, side].filter(Boolean).join(' '), [m.type, m.mechanism].filter(Boolean).join(', '), m.where, m.severity, m.recur && m.recur !== 'new' ? m.recur : ''].filter(Boolean).join(' · ');
 }
-/** % of his week before, week by week, over the band of the usual return of his class. */
+/** % of his week before, week by week, over the band of the usual return of his class — small and plain (his ask,
+ * 2026-11-06: the charts were far too big): one of three side by side, the title in HTML, 50 / 100 % only. */
 function injCurve(I, s, k, lab) {
-  const nw = s.win, W = 520, H = 170, L = 38, R = 40, T = 14, Bm = 26, band = (I.bands[s.cls] || {})[k] || [];
+  const nw = s.win, W = 380, H = 128, L = 30, R = 34, T = 8, Bm = 18, band = (I.bands[s.cls] || {})[k] || [];
   const x = (i) => L + (nw > 1 ? i * (W - L - R) / (nw - 1) : (W - L - R) / 2), y = (p) => T + (1 - Math.min(Math.max(p, 0), 160) / 160) * (H - T - Bm);
-  let g = `<svg viewBox="0 0 ${W} ${H}" class="inj-cv" role="img" aria-label="${escapeHtml(lab)}"><text x="${L}" y="10" class="ct">${escapeHtml(lab)}</text>`;
-  [0, 50, 100, 150].forEach((p) => { g += `<line x1="${L}" x2="${W - R}" y1="${y(p)}" y2="${y(p)}" class="${p === 100 ? 'g100' : 'gl'}"/><text x="${L - 6}" y="${y(p) + 4}" class="ax" text-anchor="end">${p}%</text>`; });
-  for (let i = 0; i < nw; i++) g += `<text x="${x(i)}" y="${H - 8}" class="ax" text-anchor="middle">week ${i + 1}</text>`;
+  let g = `<svg viewBox="0 0 ${W} ${H}" class="inj-cv" role="img" aria-label="${escapeHtml(lab)}">`;
+  [50, 100].forEach((p) => { g += `<line x1="${L}" x2="${W - R}" y1="${y(p)}" y2="${y(p)}" class="gl"/><text x="${L - 5}" y="${y(p) + 3.5}" class="ax" text-anchor="end">${p}%</text>`; });
+  for (let i = 0; i < nw; i++) g += `<text x="${x(i)}" y="${H - 4}" class="ax" text-anchor="middle">W${i + 1}</text>`;
   const b = band.map((v, i) => [i, v]).filter(([, v]) => v);
   if (b.length) {
     g += `<polygon points="${b.map(([i, v]) => `${x(i).toFixed(1)},${y(v[2]).toFixed(1)}`).join(' ')} ${b.slice().reverse().map(([i, v]) => `${x(i).toFixed(1)},${y(v[0]).toFixed(1)}`).join(' ')}" class="bd"/>`;
     g += `<polyline points="${b.map(([i, v]) => `${x(i).toFixed(1)},${y(v[1]).toFixed(1)}`).join(' ')}" class="md"/>`;
   }
-  g += `<line x1="${L}" x2="${W - R}" y1="${y(90)}" y2="${y(90)}" class="g90"/><text x="${W - R + 4}" y="${y(90) + 4}" class="ax">90%</text>`;
+  g += `<line x1="${L}" x2="${W - R}" y1="${y(90)}" y2="${y(90)}" class="g90"/>`;
   const pts = s.weeks.map((w, i) => ({ w, i })).filter(({ w, i }) => i < nw && w.pct[k] != null && (w.ok || (!w.done && w.days >= 3)));
   if (pts.length) {
     const done = pts.filter(({ w }) => w.done);
     if (done.length > 1) g += `<polyline points="${done.map(({ w, i }) => `${x(i).toFixed(1)},${y(w.pct[k]).toFixed(1)}`).join(' ')}" class="pl"/>`;
-    pts.forEach(({ w, i }) => { g += `<circle cx="${x(i).toFixed(1)}" cy="${y(w.pct[k]).toFixed(1)}" r="${w.done ? 5 : 4}" class="${w.done ? 'pd' : 'po'}"><title>week ${i + 1}${w.done ? '' : ' so far'} · ${w.pct[k]} % of his week before${w.nm ? ` · ${w.nm} match${w.nm > 1 ? 'es' : ''}` : ''}</title></circle>`; });
-    const l = pts[pts.length - 1]; g += `<text x="${(x(l.i) + 9).toFixed(1)}" y="${(y(l.w.pct[k]) + 4).toFixed(1)}" class="pv">${l.w.pct[k]}%</text>`;
+    pts.forEach(({ w, i }) => { g += `<circle cx="${x(i).toFixed(1)}" cy="${y(w.pct[k]).toFixed(1)}" r="${w.done ? 3.5 : 3}" class="${w.done ? 'pd' : 'po'}"><title>week ${i + 1}${w.done ? '' : ' so far'} · ${w.pct[k]} % of his week before${w.nm ? ` · ${w.nm} match${w.nm > 1 ? 'es' : ''}` : ''}</title></circle>`; });
+    const l = pts[pts.length - 1]; g += `<text x="${(x(l.i) + 7).toFixed(1)}" y="${(y(l.w.pct[k]) + 3.5).toFixed(1)}" class="pv">${l.w.pct[k]}%</text>`;
   }
-  return g + '</svg>';
+  return `<div class="inj-c"><div class="inj-ct">${escapeHtml(lab)}</div>${g}</svg></div>`;
 }
 /** % of his max speed day by day after his return, with the 80 / 85 / 90 % lines (his ask, 2026-11-06). */
 function injSpeed(I, s) {
   const pts = (s.vmax_days || []).filter(([dd]) => dd < 7 * s.win);
-  if (!pts.length) return '';
-  const N = 7 * s.win, W = 1080, H = 180, L = 38, R = 70, T = 18, Bm = 24, lo = 60, hi = 105;
+  const m = s.ms || {}, f = (k) => (m[k] != null ? `day ${m[k]}` : '—');
+  const N = 7 * s.win, W = 380, H = 128, L = 30, R = 34, T = 8, Bm = 18, lo = 60, hi = 105;
   const x = (dd) => L + dd / Math.max(1, N - 1) * (W - L - R), y = (v) => T + (1 - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * (H - T - Bm);
-  let g = `<svg viewBox="0 0 ${W} ${H}" class="inj-cv inj-sp" role="img" aria-label="max speed after his return"><text x="${L}" y="11" class="ct">Max speed of each day · % of his max speed (12 months before the injury)</text>`;
-  [[90, '#34c759'], [85, '#a3d977'], [80, '#e8c26a']].forEach(([v, c]) => { g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${c}" stroke-width="1.5" stroke-dasharray="4 3"/><text x="${W - R + 6}" y="${y(v) + 4}" class="ax">${v} %</text>`; });
-  [60, 70, 100].forEach((v) => { g += `<text x="${L - 6}" y="${y(v) + 4}" class="ax" text-anchor="end">${v}%</text>`; });
-  for (let w = 0; w <= s.win; w++) { const xx = x(Math.min(N - 1, w * 7)); g += `<line x1="${xx}" x2="${xx}" y1="${T}" y2="${H - Bm}" class="gl"/>${w < s.win ? `<text x="${x(w * 7 + 3)}" y="${H - 6}" class="ax" text-anchor="middle">week ${w + 1}</text>` : ''}`; }
-  g += `<polyline points="${pts.map(([dd, v]) => `${x(dd).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" class="pl" style="stroke-width:1.5;opacity:.5"/>`;
-  pts.forEach(([dd, v]) => { g += `<circle cx="${x(dd).toFixed(1)}" cy="${y(v).toFixed(1)}" r="4" fill="${v >= 90 ? '#34c759' : v >= 85 ? '#a3d977' : v >= 80 ? '#e8c26a' : '#c9c8c1'}" stroke="var(--surface)" stroke-width="1.5"><title>day ${dd} · ${injDay(addDays(s.back, dd))} · ${v} %</title></circle>`; });
-  const m = s.ms || {}, f = (k) => (m[k] != null ? `day ${m[k]}` : 'not yet');
-  return `<div class="inj-spw">${g}</svg><div class="muted sm">first ≥ 80 %: ${f('v80')} · ≥ 85 %: ${f('v85')} · ≥ 90 %: ${f('v90')}${(I.ms_usual[s.cls] || {}).v90 != null ? ` (usual for a ${I.classes[s.cls].label.toLowerCase()} injury: day ${I.ms_usual[s.cls].v90})` : ''}</div></div>`;
+  let g = `<svg viewBox="0 0 ${W} ${H}" class="inj-cv" role="img" aria-label="max speed after his return">`;
+  [[90, '#34c759'], [85, '#a3d977'], [80, '#e8c26a']].forEach(([v, c]) => { g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${c}" stroke-width="1" stroke-dasharray="3 3"/><text x="${W - R + 5}" y="${y(v) + 3.5}" class="ax">${v}</text>`; });
+  g += `<text x="${L - 5}" y="${y(100) + 3.5}" class="ax" text-anchor="end">100%</text><text x="${L - 5}" y="${y(70) + 3.5}" class="ax" text-anchor="end">70%</text>`;
+  for (let w = 0; w < s.win; w++) g += `<text x="${x(w * 7 + 3)}" y="${H - 4}" class="ax" text-anchor="middle">W${w + 1}</text>`;
+  pts.forEach(([dd, v]) => { g += `<circle cx="${x(dd).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${v >= 90 ? '#34c759' : v >= 85 ? '#a3d977' : v >= 80 ? '#e8c26a' : '#c9c8c1'}"><title>day ${dd} · ${injDay(addDays(s.back, dd))} · ${v} % of his max speed</title></circle>`; });
+  return `<div class="inj-c"><div class="inj-ct">Max speed of each day · % of his max</div>${g}</svg><div class="inj-cs">first ≥ 80 % ${f('v80')} · ≥ 85 % ${f('v85')} · ≥ 90 % ${f('v90')}</div></div>`;
 }
 function injMilestones(I, s) {
   const u = (I.ms_usual || {})[s.cls] || {};
@@ -94,9 +93,8 @@ function injCardHtml(d, p) {
   return `<section class="panel inj-card"><div class="inj-ph"><div style="flex:1"><div class="inj-t">Return from injury</div>
       <div class="muted">${s.med ? escapeHtml(injMedTxt(s.med)) + ' · ' : ''}out ${s.out} days from ${injDay(s.inj_date || s.start)} · back on ${injDay(s.back)} · week ${wk} of ${s.win}</div></div>${injClsChip(I, s, true)}${injStateChip(s)}${injFastChip(I, s)}</div>
     <div class="muted sm" style="margin:10px 0 4px">${ref}</div>
-    ${pre ? `<div class="inj-g2">${injCurve(I, s, 'td', 'Total distance · % of his week before')}${injCurve(I, s, 'hit', '> 20 km/h · % of his week before')}</div>
-    <div class="inj-lg"><span><i class="l1"></i>${escapeHtml(p.name)}</span><span><i class="l2"></i>usual return after a ${I.classes[s.cls].label.toLowerCase()} injury at the club (middle half of our ${I.n[s.cls]} returns since 2024)</span><span><i class="l3"></i>median</span><span><i class="l4"></i>90 % = back to his load</span></div>` : ''}
-    ${injSpeed(I, s)}
+    <div class="inj-g3">${pre ? injCurve(I, s, 'td', 'Total distance · % of his week before') + injCurve(I, s, 'hit', '> 20 km/h · % of his week before') : ''}${injSpeed(I, s)}</div>
+    ${pre ? `<div class="inj-lg"><span><i class="l1"></i>${escapeHtml(p.name)}</span><span><i class="l2"></i>usual return after a ${I.classes[s.cls].label.toLowerCase()} injury (our ${I.n[s.cls]} returns since 2024)</span><span><i class="l4"></i>90 % = back to his load</span></div>` : ''}
     ${injMilestones(I, s)}
     <p class="muted sm" style="margin:10px 0 0">${s.fast ? `<b>Fast high-speed return:</b> ${escapeHtml(injFastTxt(I, s))}.<br>` : ''}Return complete = ≥ 90 % of his max speed touched, and 90 % of his week before on total distance and > 20 km/h (a congested week compared with his congested weeks; ${s.cls === 'short' ? '1 week' : '2 weeks running'}) or a 60 min match at his usual intensity.</p></section>`;
 }

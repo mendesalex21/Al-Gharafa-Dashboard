@@ -291,7 +291,12 @@ function renderPlayerLoad(opts) {
 function plIW(pid) {
   const I = WL.int, g = I && I.gps ? Object.keys(I.gps).find((k) => I.gps[k].pid === pid) : null, IW = {};
   if (I && g) {
-    const mb = ((I.rhie.mref || {})[g] || {}).bouts;
+    let mb = ((I.rhie.mref || {})[g] || {}).bouts;
+    if (!mb && WL.data) { // no match reference of his own (few matches): the median of his position's
+      const pos = ((WL.data.players || []).find((x) => x.id === pid) || {}).pos, same = new Set((WL.data.players || []).filter((x) => x.pos === pos).map((x) => x.id));
+      const v = Object.entries(I.rhie.mref || {}).filter(([k, r]) => r && r.bouts && I.gps[k] && same.has(I.gps[k].pid)).map(([, r]) => r.bouts).sort((a, b) => a - b);
+      if (v.length) mb = v[Math.floor(v.length / 2)];
+    }
     I.weeks.forEach((x) => { const b = x.best[g];
       const tr = Object.values(x.train).map((tt) => ((tt.rhie.players || {})[g] || {}).n).filter((v) => v != null);
       const rh = [...tr, ...(x.matches || []).map((m) => ((I.rhie.matches[m] || {})[g] || {}).n)].filter((v) => v != null);
@@ -321,20 +326,20 @@ function plTilesA(B) {
     const [l] = PL_LAB[k], now = B.acAt(k, d.as_of), prev = B.acAt(k, addDays(d.as_of, -7)), [col, txt] = tmZone(now), z = last ? B.zw(last, k) : null;
     const x = pr && pr.r ? pr.r[k] : null, lv = fl[k];
     let extra = `<div class="ln"><span>A:C a week ago</span><b>${prev == null ? '—' : prev.toFixed(2)}</b></div>`;
-    if (lv != null && !p.u23) extra = vs(x, lv, 'Vs his match · 4 weeks', (v) => v.toFixed(2) + '×') + gauge(x, lv, Math.max(ce[k] || 2.9, x || 0) * 1.05, `his week ÷ his own match (4-week average) · black tick = the level of the regular starters (${lv}×)${pr && pr.ref ? ` = ${tmK(lv * pr.ref[k])} a week` : ''}`);
-    else if (k === 'spr' && p.days_hsv != null) extra = `<div class="ln"><span>Last ≥ 90 % of his max speed</span><b style="color:${p.days_hsv >= 10 ? '#b26a00' : '#1d7a35'}">${p.days_hsv} days ago</b></div>`;
+    if (lv != null && x != null) extra = vs(x, lv, 'Vs match · 4 wk', (v) => v.toFixed(2) + '×') + gauge(x, lv, Math.max(ce[k] || 2.9, x || 0) * 1.05, `his week ÷ his own match (4-week average) · black tick = the level of the regular starters (${lv}×)${pr && pr.ref ? ` = ${tmK(lv * pr.ref[k])} a week` : ''}`);
+    else if (k === 'spr' && p.days_hsv != null) extra = `<div class="ln"><span>Last ≥ 90 % Vmax</span><b style="color:${p.days_hsv >= 10 ? '#b26a00' : '#1d7a35'}">${p.days_hsv} days ago</b></div>`;
     return `<div class="tm-tile"><span class="k">${l}</span><div class="ac"><b style="color:${TM_ZCOL[tmZ(z)]}">${z == null ? '—' : tmS(z)}</b><span>z · ${last ? last.label : ''}</span></div>
       <span class="tm-zone"><i style="background:${col}"></i><span title="${txt}">A:C <b>${now == null ? '—' : now.toFixed(2)}</b></span></span>${extra}</div>`;
   }).join('');
   const lw = B.weeks.filter((w) => w.done && B.IW[w.start] && B.IW[w.start].td != null).slice(-1)[0], xw = lw ? B.IW[lw.start] : null;
   const pcol = (v) => (v == null ? 'var(--ink-muted)' : v >= 100 ? '#1f7a3d' : v >= 90 ? '#34a853' : v >= 80 ? '#5fbf7a' : v >= 60 ? '#e8a33d' : '#d9534f');
   const LV = plIntLevels(d.as_of), w4 = LV.avg4(B.IW, 'td'), r4 = LV.avg4(B.IW, 'rt');
-  const wcs = `<div class="tm-tile"><span class="k">WCS · best minute in training</span><div class="ac"><b style="color:${pcol(xw && xw.td)}">${xw && xw.td != null ? xw.td : '—'}<small> %</small></b><span>of his WCS · ${lw ? lw.label : ''}</span></div>
+  const wcs = `<div class="tm-tile"><span class="k">WCS · training</span><div class="ac"><b style="color:${pcol(xw && xw.td)}">${xw && xw.td != null ? xw.td : '—'}<small> %</small></b><span>of his WCS · ${lw ? lw.label : ''}</span></div>
     <span class="tm-zone"><i style="background:${pcol(xw && xw.hi)}"></i>A/D + spr <b>${xw && xw.hi != null ? xw.hi + ' %' : '—'}</b></span>
-    ${vs(w4, LV.td, 'Vs his matches · 4 weeks', (v) => Math.round(v) + ' %')}${gauge(w4, LV.td, 120, `his best training minute of the week as % of his worst case in matches (4-week average) · black tick = the level of the regular starters${LV.td != null ? ` (${Math.round(LV.td)} %)` : ''}`)}</div>`;
+    ${vs(w4, LV.td, 'Vs matches · 4 wk', (v) => Math.round(v) + ' %')}${gauge(w4, LV.td, 120, `his best training minute of the week as % of his worst case in matches (4-week average) · black tick = the level of the regular starters${LV.td != null ? ` (${Math.round(LV.td)} %)` : ''}`)}</div>`;
   const rh = `<div class="tm-tile"><span class="k">RHIE · bouts</span><div class="ac"><b>${xw && xw.rh != null ? xw.rh : '—'}</b><span>${lw ? lw.label : ''} · training + matches</span></div>
     <span class="tm-zone"><i style="background:#16269e"></i>${xw && xw.rt != null ? `training × ${xw.rt.toFixed(1)} of his matches` : 'training + matches'}</span>
-    ${vs(r4, LV.rt, 'In training vs his matches · 4 weeks', (v) => v.toFixed(1) + '×')}${gauge(r4, LV.rt, Math.max(3, r4 || 0) * 1.05, `his training bouts of the week ÷ his bouts in a match (4-week average) · black tick = the level of the regular starters${LV.rt != null ? ` (${LV.rt.toFixed(1)}×)` : ''}`)}</div>`;
+    ${vs(r4, LV.rt, 'Vs matches · 4 wk', (v) => v.toFixed(1) + '×')}${gauge(r4, LV.rt, Math.max(3, r4 || 0) * 1.05, `his training bouts of the week ÷ his bouts in a match (4-week average) · black tick = the level of the regular starters${LV.rt != null ? ` (${LV.rt.toFixed(1)}×)` : ''}`)}</div>`;
   const dl = Object.keys(B.wh).sort().pop(), w7 = B.wellOf(addDays(d.as_of, -6), d.as_of), w28 = B.wellOf(addDays(d.as_of, -34), addDays(d.as_of, -7));
   const well = `<div class="tm-tile"><span class="k">Wellness</span>${dl ? `<div class="ac"><b style="color:${tmWell(B.wh[dl])}">${Math.round(B.wh[dl])}<small> %</small></b><span>${fmtDay(dl, { weekday: 'short', day: 'numeric', month: 'short' })}</span></div>
     <span class="tm-zone"><i style="background:${tmWell(B.wh[dl])}"></i>his last check-in</span>` : '<div class="ac"><b>—</b></div><span class="tm-zone">no check-in</span>'}<div class="ln"><span>Last 7 days</span><b>${w7 == null ? '—' : Math.round(w7) + ' %'}</b></div><div class="ln"><span>The 4 weeks before</span><b>${w28 == null ? '—' : Math.round(w28) + ' %'}</b></div></div>`;
