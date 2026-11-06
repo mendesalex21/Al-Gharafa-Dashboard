@@ -22,6 +22,17 @@ function injStateChip(s) {
   const txt = s.state === 'complete' && s.complete ? `${t} · week ${s.complete.week}` : s.state === 'not_back' ? `${t} after ${s.win} weeks` : t;
   return `<span class="inj-st ${c}" title="${s.state === 'complete' && s.complete ? (s.complete.how === 'match' ? 'a 60 min match at his usual intensity' : 'back to his load of before') + ' · ' + injDay(s.complete.date) : ''}">${escapeHtml(txt)}</span>`;
 }
+/** "Fast return": > 20 km/h above the top of the usual return (p75 of his class) in week 1 or 2. The words follow our own
+ * history, recomputed at each build: a warning only while these returns were re-injured clearly more often (+5 points). */
+const injFastRisk = (I) => { const f = I.fast_stats || {}; return f.re_fast != null && f.re_other != null && f.n_fast >= 10 && f.re_fast >= f.re_other + 5; };
+function injFastTxt(I, s) {
+  const f = I.fast_stats || {};
+  return `> 20 km/h at ${s.fast.pct} % of his week before in week ${s.fast.week} — above the top of the usual return (${s.fast.p75} %)${f.re_fast != null ? ` · in our returns since 2024, ${f.re_fast} % of these fast returns were re-injured within 8 weeks, ${f.re_other} % of the others${injFastRisk(I) ? '' : ' — no link with re-injuries so far'}` : ''}`;
+}
+function injFastChip(I, s) {
+  if (!s.fast) return '';
+  return `<span class="inj-st ${injFastRisk(I) ? 'orange' : 'blue'}" title="${escapeHtml(injFastTxt(I, s))}">${injFastRisk(I) ? 'fast return — watch' : 'fast high-speed return'}</span>`;
+}
 function injClsChip(I, s, long) {
   if (!s.cls) return '<span class="inj-cls none">under 5 days</span>';
   const c = I.classes[s.cls];
@@ -54,6 +65,21 @@ function injCurve(I, s, k, lab) {
   }
   return g + '</svg>';
 }
+/** % of his max speed day by day after his return, with the 80 / 85 / 90 % lines (his ask, 2026-11-06). */
+function injSpeed(I, s) {
+  const pts = (s.vmax_days || []).filter(([dd]) => dd < 7 * s.win);
+  if (!pts.length) return '';
+  const N = 7 * s.win, W = 1080, H = 180, L = 38, R = 70, T = 18, Bm = 24, lo = 60, hi = 105;
+  const x = (dd) => L + dd / Math.max(1, N - 1) * (W - L - R), y = (v) => T + (1 - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * (H - T - Bm);
+  let g = `<svg viewBox="0 0 ${W} ${H}" class="inj-cv inj-sp" role="img" aria-label="max speed after his return"><text x="${L}" y="11" class="ct">Max speed of each day · % of his max speed (12 months before the injury)</text>`;
+  [[90, '#34c759'], [85, '#a3d977'], [80, '#e8c26a']].forEach(([v, c]) => { g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${c}" stroke-width="1.5" stroke-dasharray="4 3"/><text x="${W - R + 6}" y="${y(v) + 4}" class="ax">${v} %</text>`; });
+  [60, 70, 100].forEach((v) => { g += `<text x="${L - 6}" y="${y(v) + 4}" class="ax" text-anchor="end">${v}%</text>`; });
+  for (let w = 0; w <= s.win; w++) { const xx = x(Math.min(N - 1, w * 7)); g += `<line x1="${xx}" x2="${xx}" y1="${T}" y2="${H - Bm}" class="gl"/>${w < s.win ? `<text x="${x(w * 7 + 3)}" y="${H - 6}" class="ax" text-anchor="middle">week ${w + 1}</text>` : ''}`; }
+  g += `<polyline points="${pts.map(([dd, v]) => `${x(dd).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" class="pl" style="stroke-width:1.5;opacity:.5"/>`;
+  pts.forEach(([dd, v]) => { g += `<circle cx="${x(dd).toFixed(1)}" cy="${y(v).toFixed(1)}" r="4" fill="${v >= 90 ? '#34c759' : v >= 85 ? '#a3d977' : v >= 80 ? '#e8c26a' : '#c9c8c1'}" stroke="var(--surface)" stroke-width="1.5"><title>day ${dd} · ${injDay(addDays(s.back, dd))} · ${v} %</title></circle>`; });
+  const m = s.ms || {}, f = (k) => (m[k] != null ? `day ${m[k]}` : 'not yet');
+  return `<div class="inj-spw">${g}</svg><div class="muted sm">first ≥ 80 %: ${f('v80')} · ≥ 85 %: ${f('v85')} · ≥ 90 %: ${f('v90')}${(I.ms_usual[s.cls] || {}).v90 != null ? ` (usual for a ${I.classes[s.cls].label.toLowerCase()} injury: day ${I.ms_usual[s.cls].v90})` : ''}</div></div>`;
+}
 function injMilestones(I, s) {
   const u = (I.ms_usual || {})[s.cls] || {};
   return `<div class="inj-msr">${INJ_MS.map(([k, l]) => { const n = s.ms ? s.ms[k] : null, ok = n != null;
@@ -66,12 +92,13 @@ function injCardHtml(d, p) {
   const pre = s.pre, wk = Math.min(s.win, s.weeks.length || 1);
   const ref = pre ? `His week before the injury (4 normal weeks): total distance ${(pre.td / 1000).toFixed(1)} km · > 20 km/h ${pre.hit} m · sprint ${pre.spr} m · Acc + Dec ${pre.acc_dec}` : 'No normal week before the injury to compare with.';
   return `<section class="panel inj-card"><div class="inj-ph"><div style="flex:1"><div class="inj-t">Return from injury</div>
-      <div class="muted">${s.med ? escapeHtml(injMedTxt(s.med)) + ' · ' : ''}out ${s.out} days from ${injDay(s.inj_date || s.start)} · back on ${injDay(s.back)} · week ${wk} of ${s.win}</div></div>${injClsChip(I, s, true)}${injStateChip(s)}</div>
+      <div class="muted">${s.med ? escapeHtml(injMedTxt(s.med)) + ' · ' : ''}out ${s.out} days from ${injDay(s.inj_date || s.start)} · back on ${injDay(s.back)} · week ${wk} of ${s.win}</div></div>${injClsChip(I, s, true)}${injStateChip(s)}${injFastChip(I, s)}</div>
     <div class="muted sm" style="margin:10px 0 4px">${ref}</div>
     ${pre ? `<div class="inj-g2">${injCurve(I, s, 'td', 'Total distance · % of his week before')}${injCurve(I, s, 'hit', '> 20 km/h · % of his week before')}</div>
     <div class="inj-lg"><span><i class="l1"></i>${escapeHtml(p.name)}</span><span><i class="l2"></i>usual return after a ${I.classes[s.cls].label.toLowerCase()} injury at the club (middle half of our ${I.n[s.cls]} returns since 2024)</span><span><i class="l3"></i>median</span><span><i class="l4"></i>90 % = back to his load</span></div>` : ''}
+    ${injSpeed(I, s)}
     ${injMilestones(I, s)}
-    <p class="muted sm" style="margin:10px 0 0">Return complete = ≥ 90 % of his max speed touched, and 90 % of his week before on total distance and > 20 km/h (a congested week compared with his congested weeks; ${s.cls === 'short' ? '1 week' : '2 weeks running'}) or a 60 min match at his usual intensity.</p></section>`;
+    <p class="muted sm" style="margin:10px 0 0">${s.fast ? `<b>Fast high-speed return:</b> ${escapeHtml(injFastTxt(I, s))}.<br>` : ''}Return complete = ≥ 90 % of his max speed touched, and 90 % of his week before on total distance and > 20 km/h (a congested week compared with his congested weeks; ${s.cls === 'short' ? '1 week' : '2 weeks running'}) or a 60 min match at his usual intensity.</p></section>`;
 }
 /** Workload › Player, at the bottom: his injuries (admin; in place of the physical tests). */
 function injHistoryHtml(d, p) {
@@ -80,7 +107,7 @@ function injHistoryHtml(d, p) {
   if (!rows.length) return '<div class="empty">No injury of 5 days or more in the data (since 2024), none on the medical list.</div>';
   return `<div class="table-wrap"><table class="dtable inj-tb"><thead><tr><th>Date</th><th>Injury</th><th>Out</th><th>Return</th><th class="c">≥ 90 % Vmax</th><th class="c">60 min match</th></tr></thead><tbody>${rows.map((s) =>
     `<tr><td>${injDayY(s.inj_date || s.start)}</td><td>${s.med ? escapeHtml(injMedTxt(s.med)) : '<span class="muted">status in the Excel</span>'}</td><td>${injClsChip(I, s)}</td>
-      <td>${s.cls ? injStateChip(s) : '<span class="muted">—</span>'}</td><td class="c">${s.ms && s.ms.v90 != null ? 'day ' + s.ms.v90 : '<span class="muted">—</span>'}</td><td class="c">${s.ms && s.ms.m60 != null ? 'day ' + s.ms.m60 : '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody></table></div>
+      <td>${s.cls ? injStateChip(s) + injFastChip(I, s) : '<span class="muted">—</span>'}</td><td class="c">${s.ms && s.ms.v90 != null ? 'day ' + s.ms.v90 : '<span class="muted">—</span>'}</td><td class="c">${s.ms && s.ms.m60 != null ? 'day ' + s.ms.m60 : '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody></table></div>
     <p class="muted sm" style="margin:8px 0 0">Injuries of 5 days or more from the statuses of the Excel (injured / rehab, since 2024), with the details of the medical department's list when it has them · days of the milestones counted from his first day back.</p>`;
 }
 
@@ -105,7 +132,7 @@ function drawInjuries() {
   const tick = (s, k) => (s.ms && s.ms[k] != null ? `✓ day ${s.ms[k]}` : '<span class="muted">not yet</span>');
   const rows = cur.map(({ pid, s }) => `<tr data-pl="${pid}"><td><b>${escapeHtml(name(pid))}</b> <small class="muted">${escapeHtml(pos(pid))}</small></td><td>${injClsChip(I, s)}${s.med ? `<small class="muted inj-reg">${escapeHtml(s.med.region || '')}</small>` : ''}</td>
     <td class="c">${s.back ? injDay(s.back) : '<span class="muted">—</span>'}</td><td class="c">${s.back ? `${Math.min(s.win, s.weeks.length || 1)} / ${s.win}` : '—'}</td><td class="c">${s.back ? pct(s, 'td') : '—'}</td><td class="c">${s.back ? pct(s, 'hit') : '—'}</td><td class="c">${s.back ? pct(s, 'spr') : '—'}</td>
-    <td class="c">${s.back ? tick(s, 'v90') : '—'}</td><td class="c">${s.back ? tick(s, 'm60') : '—'}</td><td>${injStateChip(s)}</td></tr>`).join('');
+    <td class="c">${s.back ? tick(s, 'v90') : '—'}</td><td class="c">${s.back ? tick(s, 'm60') : '—'}</td><td>${injStateChip(s)}${injFastChip(I, s)}</td></tr>`).join('');
   const y = d.as_of.slice(0, 4), m = +d.as_of.slice(5, 7), season = `${m >= 7 ? y : y - 1}-07-01`;
   const all = Object.entries(I.players).flatMap(([pid, rs]) => rs.filter((s) => (s.inj_date || s.start) >= season).map((s) => ({ pid, s }))).sort((a, b) => String(b.s.inj_date || b.s.start).localeCompare(String(a.s.inj_date || a.s.start)));
   const reg = {}; all.forEach(({ s }) => { if (s.med && s.med.region) reg[s.med.region] = (reg[s.med.region] || 0) + 1; });
