@@ -608,14 +608,14 @@ function drawPlayerLoad(opts) {
   const box = (t, note, inner, extra = '') => `<section class="panel"><div class="panel-head"><h2 class="panel-title small">${t}</h2>${note ? `<span class="panel-note">${note}</span>` : ''}${extra}</div>${inner}</section>`;
   const legend = PL.color === 'z' ? [['vlow', 'well below'], ['low', 'below'], ['ok', 'usual'], ['up', 'above'], ['vup', 'well above']].map(([c, l]) => `<span><i style="background:${TM_ZCOL[c]}"></i>${l}</span>`).join('')
     : [0.4, 0.6, 1, 1.4, 1.6].map((r) => `<span><i style="background:${tmZone(r)[0]}"></i>${tmZone(r)[1]}</span>`).join('');
-  body.innerHTML = `${isAdminUi() ? plTopA(B) : `<div class="tm-tiles pl-tiles">${plTiles(B)}</div>`}
+  body.innerHTML = `${isAdminUi() ? plTopA(B) + (typeof injCardHtml === 'function' ? injCardHtml(d, p) : '') : `<div class="tm-tiles pl-tiles">${plTiles(B)}</div>`}
     <div class="grid2">${box('Weekly load z-score', 'Sunday–Saturday weeks vs his previous 6 weeks', '<div class="table-wrap" id="pl-z"></div>')}${box(`Availability · last ${s.cat.length} days`, '', '<div id="pl-timeline"></div>')}</div>
     <div class="tm-bar"><div class="tm-dates${PL.view === 'day' ? '' : ' muted'}">${PL.view === 'day' ? `<label>From <input type="date" id="pl-from" min="${s.start}" max="${d.as_of}" value="${plDayRange(s, d)[0]}"></label><label>to <input type="date" id="pl-to" min="${s.start}" max="${d.as_of}" value="${plDayRange(s, d)[1]}"></label>${PL.from ? '<button type="button" class="linkbtn" id="pl-reset">Reset</button>' : ''}` : PL.view === 'week' ? 'The last weeks' : PL.view === 'games' ? 'His last matches' : 'The season'}</div>
       <div class="tm-ctl">${PL.view === 'games' ? segHtml('pl-g90', [['raw', 'Raw'], ['p90', 'Per 90']], PL.g90 || 'raw') : `<span class="tm-lab">Team</span>${segHtml('pl-team', [['off', 'Off'], ['on', 'Show']], PL.team ? 'on' : 'off')}`}<span class="tm-lab">Colour</span>${segHtml('pl-color', [['z', 'z-score'], ['ac', 'A:C']], PL.color)}${segHtml('pl-view', [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['games', 'Games']], PL.view)}</div></div>
     <div class="tm-legend">${legend}<span>G = match</span>${PL.view === 'week' ? '<span>click a week: its detail day by day</span>' : ''}${PL.team ? '<span><i style="background:#6b6b70"></i>the team</span>' : ''}</div>
     <div class="tm-grid${PL.team && PL.view !== 'games' ? ' pl-team' : ''}">${plCharts(B)}</div>
     ${PL.view === 'games' ? plGamesTable(B) : plTable(B)}
-    <div class="grid2">${box('Match references', p.top3_src === 'own' ? `top 3 of his last ${p.top3_n} games ≥ 70 min (A + B, at most since last season), extra time left out` : `no game of 70 min yet — ${p.top3_src} reference`, plRefs(B))}${box('Physical tests', '', '<div id="pl-tests"></div>', '<a class="link" id="pl-tests-link">Open tests</a>')}</div>`;
+    <div class="grid2">${box('Match references', p.top3_src === 'own' ? `top 3 of his last ${p.top3_n} games ≥ 70 min (A + B, at most since last season), extra time left out` : `no game of 70 min yet — ${p.top3_src} reference`, plRefs(B))}${isAdminUi() && typeof injHistoryHtml === 'function' ? box('Injury history', 'injuries of 5 days or more + the medical list', injHistoryHtml(d, p)) : box('Physical tests', '', '<div id="pl-tests"></div>', '<a class="link" id="pl-tests-link">Open tests</a>')}</div>`;
   if (document.getElementById('pl-team')) bindSeg('pl-team', (v) => { PL.team = v === 'on'; drawPlayerLoad(); });
   if (document.getElementById('pl-g90')) bindSeg('pl-g90', (v) => { PL.g90 = v; drawPlayerLoad(); }); // Games: raw or per 90
   bindSeg('pl-color', (v) => { PL.color = v; drawPlayerLoad(); });
@@ -624,11 +624,11 @@ function drawPlayerLoad(opts) {
   if (document.getElementById('pl-reset')) document.getElementById('pl-reset').onclick = () => { PL.from = PL.to = null; drawPlayerLoad(); };
   bindSeg('pl-hit', (v) => { PL.hit = v; drawPlayerLoad(); });
   bindSeg('pl-spr', (v) => { PL.spr = v; drawPlayerLoad(); });
-  document.getElementById('pl-tests-link').onclick = () => switchView('testing', { athlete: p.id, tab: 'profile' });
+  if (document.getElementById('pl-tests-link')) document.getElementById('pl-tests-link').onclick = () => switchView('testing', { athlete: p.id, tab: 'profile' });
   body.querySelectorAll('[data-wk]').forEach((el) => { el.onclick = () => plWeekOpen(el.dataset.wk); el.onkeydown = (e) => { if (e.key === 'Enter') plWeekOpen(el.dataset.wk); }; }); // a week: its detail day by day
   drawZTable(s);
   drawTimeline(s);
-  drawPlayerTests(p);
+  if (document.getElementById('pl-tests')) drawPlayerTests(p);
 }
 
 /** Admin first (2026-11-05): his messages and his last 4 weeks against his match (×/week; floor = the regular starters'
