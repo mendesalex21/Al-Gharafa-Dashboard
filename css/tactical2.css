@@ -279,3 +279,22 @@
 #view-tactical2 .tiles.two { grid-template-columns: repeat(2, 1fr); }
 @media (max-width: 1000px) { #view-tactical2 .vr2 { grid-template-columns: 1fr; } }
 #view-tactical2 .t2-nextoth { font-size: 12.5px; color: var(--ink-2); margin: 0 0 6px 2px; } /* the next match without a file (2026-11-02) */
+
+/* Tactical › New version: the parts moved in from the old version (2026-11-06) */
+.t2-old { display: flex; flex-direction: column; gap: 14px; }
+.sp-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 8px; }
+.sp-draw .sp-dt, .sp-h { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 4px; }
+.sp-leg { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--ink-muted); margin-top: 4px; } .sp-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+.sp-leg i.r { background: #e5484d; } .sp-leg i.b { background: #2a78d6; } .sp-leg i.z { background: #2a78d6; border-radius: 2px; } .sp-leg i.l { background: #9ec3f0; }
+.lu-pitch { background: #2f8a4c; border-radius: 14px; padding: 14px 8px; display: flex; flex-direction: column; gap: 14px; }
+.lu-row { display: flex; justify-content: space-evenly; gap: 6px; }
+.lu-pl { display: flex; flex-direction: column; align-items: center; min-width: 70px; color: #fff; text-align: center; }
+.lu-pl b { width: 30px; height: 30px; border-radius: 50%; background: #fff; color: #16269e; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.lu-pl.ch b { background: #f5c518; color: #0b0b0b; } .lu-pl span { font-size: 12px; font-weight: 600; margin-top: 3px; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+.lu-pl small { font-size: 10.5px; background: rgba(255,255,255,.92); border-radius: 6px; padding: 0 5px; margin-top: 2px; font-weight: 700; }
+.lu-ul { margin: 4px 0 6px; padding-left: 18px; font-size: 13px; } .lu-ul li { margin: 3px 0; }
+.gl-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.gl-b { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+.gl-b.away { background: var(--surface-2); } .gl-b:disabled { cursor: default; opacity: .7; } .gl-b small { color: var(--ink-muted); display: inline-flex; align-items: center; gap: 4px; }
+@media (max-width: 900px) { .sp-two { grid-template-columns: 1fr; } }
+.sp-pitch { width: 100%; height: auto; display: block; border-radius: 8px; }

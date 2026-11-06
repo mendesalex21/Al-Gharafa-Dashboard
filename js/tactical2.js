@@ -37,8 +37,10 @@ function renderTactical2() {
   const root = document.getElementById('view-tactical2');
   root.innerHTML = `${pageHead('Admin · new version', 'Tactical', 't2-sub', `<span class="tc-lock">🔒 only you can see this tab</span><button class="btn-light" onclick="switchView('tactical')">Old version</button>${segHtml('t2-seg', [['teams', 'Teams'], ['league', 'League'], ['matches', 'Matches']], T2.s)}`)}<div id="t2-body"><div class="panel"><div class="empty">Loading…</div></div></div><div class="t3-modal" id="t2-modal" hidden></div>`;
   bindSeg('t2-seg', (v) => { T2.s = v; T2.ev = null; drawTactical2(); });
+  loadData('workload').then((w) => { T2X.wl = w.players || null; }).catch(() => {}); // our players' status for the predicted line-up
   Promise.all([loadData('tactical'), loadData('calendar').catch(() => null)]).then(([d, cal]) => {
     T2.data = d.v2 || null;
+    T2.raw = d; if (typeof TC !== 'undefined') TC.data = d; // the old version's parts (radar, set pieces, line-ups) read it
     if (T2.data && cal) T2.next = t2NextOpponent(cal);
     if (T2.data && !T2.team) T2.team = T2.next && T2.data.teams[T2.next.team] ? T2.next.team : Object.keys(T2.data.teams || {})[0];
     drawTactical2();
@@ -202,7 +204,7 @@ function t2TeamMatches(team) {
       <td><button class="chip g" data-vmatch="${m.id}">▶ ${t2Moments(team).filter((x) => x.m === m.id).length}</button></td><td style="text-align:right;white-space:nowrap"><button class="btn" data-pdf="${m.id}">⬇ Game report</button> <button class="btn" data-export="${m.id}">XML</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 function t2TeamPage() {
-  const team = T2.team, SEG = [['over', 'Overview'], ['with', 'With the ball'], ['without', 'Without the ball'], ['video', 'Video room'], ['matches', 'Matches']];
+  const team = T2.team, SEG = [['over', 'Overview'], ['with', 'With the ball'], ['without', 'Without the ball'], ['style', 'Style'], ['set', 'Set pieces'], ['lineup', 'Line-up'], ['video', 'Video room'], ['matches', 'Matches']];
   const head = T2.seg === 'matches' ? `<div class="card">${t2Header(team)}</div>`
     : `<div class="card">${t2Header(team, T2.seg === 'over' ? '<button class="btn" data-seg="video">▶ Video room</button>' : '')}${t2Say(team)}</div>` + t2Picker(team);
   const seg = `<div class="seg" style="align-self:flex-start">${SEG.map(([k, l]) => `<button class="${T2.seg === k ? 'active' : ''}" data-seg="${k}">${l}</button>`).join('')}</div>`; // just above what it changes (his ask)
@@ -210,6 +212,9 @@ function t2TeamPage() {
   if (T2.seg === 'with') body = t2BuBlock(team) + `<div class="grid2">${t2GkBlock(team)}${t2ProgBlock(team)}</div>`;
   else if (T2.seg === 'without') body = `<div class="grid2"><div style="display:flex;flex-direction:column;gap:14px">${t2PressBlock(team)}<div class="card blk"><h3>Defending</h3>${t2Tiles(team, ['goals_against', 'xg_against', 'shots_against', 'loss3'], 'two')}</div></div>${t2RecBlock(team)}</div>`;
   else if (T2.seg === 'video') body = t2VideoRoom(team);
+  else if (T2.seg === 'style') body = t2StylePage(team);
+  else if (T2.seg === 'set') body = t2SetPage(team);
+  else if (T2.seg === 'lineup') body = t2LineupPage(team);
   else if (T2.seg === 'matches') body = t2TeamMatches(team);
   else body = `<div class="card"><h3>Headline numbers <small>per match · rank among the ${T2.data.N} QSL teams · the dots = every team, dashed = league average · (i) = how it is calculated</small></h3>${t2Tiles(team, ['goals_for', 'goals_against', 'xg', 'xg_against', 'possession', 'press', 'rec_h', 'prog_ok'])}</div>
       <div class="grid2">${t2AttackBlock(team)}${t2BuBlock(team, true)}</div><div class="grid2">${t2PressBlock(team, true)}${t2SetBlock(team)}</div>`;
@@ -410,6 +415,7 @@ function t2Bind() {
   const dl = document.getElementById('vr-dl'); if (dl) dl.onclick = () => t2Record(L.filter((x) => t2M()[x.m].tracking), dl);
   const all = document.getElementById('vr-all'); if (all) all.onclick = () => { const M = t2M(), first = L.find((x) => M[x.m].tracking); if (!first) return; T2.ev = first; P2X.all = true; t2PlayerOpen(first, true); };
   if (T2.seg === 'video' && T2.ev) t2PlayerOpen(T2.ev, false);
+  if (typeof t2BindX === 'function') t2BindX();
 }
 
 // ------------------------------------------------------------------ League: the season table and the players
@@ -498,10 +504,12 @@ async function t2MatchCentre(box) {
   const xp = (x) => Math.min(99.4, ((x.h === 2 ? 47 : 0) + Math.min((x.a + (T2_PRE[x.c] || 0)) / 60000, x.h === 1 ? 47 : 50)) / len * 100);
   const rows = T2_TL.map((c) => { const xs = tl.filter((x) => x.c === c);
     return `<div class="tl-row"><span>${escapeHtml(T2_CAT[c][1])}${c === 'press' ? ' (organised)' : ''} <b class="muted">${xs.length}</b></span><div class="tl-lane">${xs.map((x) => `<i class="${x.t === H ? 'h' : 'a'} ${x === T2.ev ? 'on' : ''}" style="left:${xp(x)}%" data-tl="${tl.indexOf(x)}" title="${escapeHtml(t2Min(x) + ' ' + x.t + (x.tag ? ' · ' + x.tag : ''))}"></i>`).join('')}</div></div>`; }).join('');
+  const om = typeof t2OldMatch === 'function' ? t2OldMatch(T2.mid) : null, goals = om ? t2GoalGoals(om, mom) : [];
   const say = (t) => (T2.data.teams[t] ? `<div class="card"><h3>${crestHtml(t, 18)} ${escapeHtml(t)} <small>season · ${T2.data.teams[t].n} matches</small></h3>${t2Say(t, false)}</div>` : `<div class="card"><h3>${crestHtml(t, 18)} ${escapeHtml(t)}</h3><p class="muted">Not a QSL team: no season profile.</p></div>`);
   box.innerHTML = `<div class="mc"><div class="card"><h3>Matches <small>${T2.data.matches.length} with an XML</small></h3><select class="select" id="mc-team" style="margin-bottom:8px;width:100%"><option value="">All teams</option>${Object.keys(T2.data.teams).sort().map((t) => `<option ${T2.fteam === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select>
       <div class="mc-list">${ms.map((z) => `<button class="mc-li ${z.id === T2.mid ? 'on' : ''}" data-mid="${z.id}"><small>${t2day(z.date)} · ${z.comp === 'Qatar Stars League' ? 'QSL' : escapeHtml(z.comp || '')}${z.tracking ? ' · 2D' : ''}</small><span>${crestHtml(z.home, 15)} ${escapeHtml(z.home)} <b>${z.score[0]}–${z.score[1]}</b> ${escapeHtml(z.away)} ${crestHtml(z.away, 15)}</span></button>`).join('')}</div></div>
     <div style="display:flex;flex-direction:column;gap:14px;min-width:0"><div class="mhd"><div class="tm">${crestHtml(H, 44)}${escapeHtml(H)}</div><div class="sc">${m.score[0]} – ${m.score[1]}<small>${escapeHtml(m.comp || '')} · ${t2day(m.date)}</small></div><div class="tm r">${crestHtml(A, 44)}${escapeHtml(A)}</div></div>
+      ${typeof t2MatchExtras === 'function' ? t2MatchExtras(om, goals) : ''}
       <div class="card rep"><div class="thumbs"><i></i><i></i><i></i><i></i><i></i></div><div style="flex:1;min-width:180px"><b>Game report</b><div class="muted" style="font-size:12px">your Tableau report, ${H === T2_US || A === T2_US ? 12 : 10} pages, made from the XML</div></div>
         <button class="btn p" data-pdf="${T2.mid}">⬇ PDF</button><button class="btn" data-export="${T2.mid}">⬇ XML for the video</button></div>
       <div class="grid2">${say(H)}${say(A)}</div>
@@ -514,6 +522,8 @@ async function t2MatchCentre(box) {
   box.querySelectorAll('[data-tl]').forEach((b) => (b.onclick = () => { T2.ev = tl[+b.dataset.tl]; box.querySelectorAll('.tl-lane i').forEach((z) => z.classList.toggle('on', z === b)); t2PlayerOpen(T2.ev, true); }));
   box.querySelectorAll('[data-export]').forEach((b) => (b.onclick = () => t2Export(b.dataset.export)));
   box.querySelectorAll('[data-pdf]').forEach((b) => (b.onclick = () => t2ReportPdf(b.dataset.pdf, b)));
+  box.querySelectorAll('[data-goal]').forEach((b) => (b.onclick = () => { const x = goals[+b.dataset.goal].mo; if (!x) return; T2.ev = tl.find((y) => y.c === x.c && y.h === x.h && y.a === x.a) || x;
+    box.querySelectorAll('.tl-lane i').forEach((z) => z.classList.toggle('on', tl[+z.dataset.tl] === T2.ev)); t2PlayerOpen(T2.ev, true); document.getElementById('pl2').scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
   if (T2.ev) t2PlayerOpen(T2.ev, false);
 }
 
