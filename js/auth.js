@@ -35,9 +35,16 @@ async function startSession(idToken) {
         // a first sign-in on this device (2026-11-06, a new staff member saw only "Loading…"): the pages started before the
         // session existed, through the slow Google route — reload once, everything then comes from the server with the session
         try { if (!sessionStorage.getItem('session_reload')) { sessionStorage.setItem('session_reload', '1'); location.reload(); } } catch (e) { /* private mode */ }
-      } else if (j.error === 'forbidden' || j.error === 'invalid_token') return;
+      } else if (j.error === 'forbidden' || j.error === 'invalid_token') { sessionProblem(j.error === 'forbidden' ? `The Google account ${j.email || ''} is not on the staff list.` : 'Google did not accept this sign-in.'); return; }
     } catch (e) { await new Promise((ok) => setTimeout(ok, 1500 * (i + 1))); } // the script's cold start
   }
+  if (!AUTH.session) sessionProblem('The staff session could not be started (the Google script did not answer).');
+}
+/** Say it on the page when the staff session cannot start (2026-11-06: a new staff member only saw "Loading…"). */
+function sessionProblem(msg) {
+  let el = document.getElementById('session-problem');
+  if (!el) { el = document.createElement('div'); el.id = 'session-problem'; el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:9999;max-width:560px;background:#fff4e5;color:#6b4a00;border:1px solid #f0c27a;border-radius:14px;padding:12px 16px;font:14px/1.4 system-ui;box-shadow:0 8px 24px rgba(0,0,0,.12)'; document.body.appendChild(el); }
+  el.innerHTML = `<b>No data:</b> ${escapeHtml(msg)} <button type="button" style="margin-left:8px" onclick="try{google.accounts.id.disableAutoSelect()}catch(e){};forgetSignIn();location.reload()">Sign in with another account</button>`;
 }
 
 function initAuth(onReady) {
