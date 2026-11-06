@@ -103,7 +103,7 @@ function t2Lineup(team) {
     if (p.starter) { r.starts++; r.pos[p.pos] = (r.pos[p.pos] || 0) + 1; }
     if ((p.min || 0) > 0) r.apps++;
     r.min += p.min || 0; r.lastSeen = Math.min(r.lastSeen, i);
-    if (i === 0) r.lastXI = !!p.starter;
+    if (i === 0) { r.lastXI = !!p.starter; r.lastPos = p.pos; }
   }));
   // his position = the one he started most at over ALL the team's matches with a file (a sub's listed position is not reliable)
   const posAll = {}; ms.forEach((m) => m.lineups[side(m)].forEach((p) => { if (p.starter && p.pos && p.pos !== 'Undefined') { const o = posAll[key(p)] || (posAll[key(p)] = {}); o[p.pos] = (o[p.pos] || 0) + 1; } }));
@@ -113,22 +113,23 @@ function t2Lineup(team) {
   if (team === T2_US && T2X.wl) Object.values(P).forEach((r) => { const w = t2WlOf(r.p); if (w && w.status && w.status !== 'available') out.set(key(r.p), w.status); });
   const XI = [], used = new Set();
   Object.values(P).filter((r) => r.lastXI).forEach((r) => {
-    if (!out.has(key(r.p))) { XI.push({ r, why: null }); used.add(key(r.p)); return; }
+    const slot = T2_LINE(r.lastPos && r.lastPos !== 'Undefined' ? r.lastPos : r.main); // his role in the last match = the slot of the XI
+    if (!out.has(key(r.p))) { XI.push({ r, line: slot, why: null }); used.add(key(r.p)); return; }
     // the same position first (a player who played there), else the same line — most starts, then most minutes
     const free = Object.values(P).filter((x) => !x.lastXI && !used.has(key(x.p)) && !out.has(key(x.p))), by = (a, b) => b.starts - a.starts || b.min - a.min;
     const c = free.filter((x) => x.main === r.main && x.min > 0).sort(by)[0] || free.filter((x) => x.line === r.line).sort(by)[0];
-    if (c) { XI.push({ r: c, why: `in for ${r.p.name} (${out.get(key(r.p))})` }); used.add(key(c.p)); } else XI.push({ r, why: `${out.get(key(r.p))} — no like-for-like` });
+    if (c) { XI.push({ r: c, line: slot, why: `in for ${r.p.name} (${out.get(key(r.p))})` }); used.add(key(c.p)); } else XI.push({ r, line: slot, why: `${out.get(key(r.p))} — no like-for-like` });
   });
   const form = (lst) => [1, 2, 3].map((l) => lst.filter((x) => x === l).length).join('-');
   const usual = {}; last5.forEach((m) => { const f = form(m.lineups[side(m)].filter((p) => p.starter && p.pos !== 'GK').map((p) => T2_LINE(p.pos))); usual[f] = (usual[f] || 0) + 1; });
-  return { ms, last5, P, XI, out, form: form(XI.filter((x) => x.r.line).map((x) => x.r.line)), usual: Object.entries(usual).sort((a, b) => b[1] - a[1])[0][0], side };
+  return { ms, last5, P, XI, out, form: form(XI.filter((x) => x.line).map((x) => x.line)), usual: Object.entries(usual).sort((a, b) => b[1] - a[1])[0][0], side };
 }
 function t2LineupPage(team) {
   const L = t2Lineup(team);
   if (!L) return '<div class="card"><p class="muted">No match with a line-up for this team.</p></div>';
   const n = L.last5.length, col = (s) => (s >= n - 1 ? '#1d7a35' : s >= Math.ceil(n / 2) ? '#9a5b00' : '#b02a2a');
   const chip = (x) => `<div class="lu-pl${x.why ? ' ch' : ''}" title="${escapeHtml(`${x.r.p.first} ${x.r.p.name} · ${x.r.main} · started ${x.r.starts} of the last ${n} · ${x.r.min} min${x.why ? ' · ' + x.why : ''}`)}"><b>${x.r.p.num}</b><span>${escapeHtml(x.r.p.name)}</span><small style="color:${col(x.r.starts)}">${x.r.starts}/${n}${x.why ? ' · new' : ''}</small></div>`;
-  const pitch = `<div class="lu-pitch">${[3, 2, 1, 0].map((l) => `<div class="lu-row">${L.XI.filter((x) => x.r.line === l).map(chip).join('')}</div>`).join('')}</div>`;
+  const pitch = `<div class="lu-pitch">${[3, 2, 1, 0].map((l) => `<div class="lu-row">${L.XI.filter((x) => x.line === l).map(chip).join('')}</div>`).join('')}</div>`;
   const chg = L.XI.filter((x) => x.why);
   const outs = [...L.out.entries()].map(([k, why]) => `<li><b>${escapeHtml(L.P[k] ? L.P[k].p.name : k)}</b> — ${escapeHtml(why)}</li>`).join('');
   const rows = Object.values(L.P).sort((a, b) => b.starts - a.starts || b.min - a.min).map((r) => `<tr class="${L.XI.some((x) => x.r === r) ? 'on' : ''}"><td class="l"><b>${r.p.num}</b> ${escapeHtml(r.p.first)} <b>${escapeHtml(r.p.name)}</b></td><td>${escapeHtml(r.main || '')}</td><td>${r.starts}/${n}</td><td>${r.apps}</td><td>${r.min}'</td><td>${r.lastXI ? '✓' : ''}</td><td>${L.out.has(`${r.p.first} ${r.p.name}`) ? `<span class="tg ko">${escapeHtml(L.out.get(`${r.p.first} ${r.p.name}`))}</span>` : ''}</td></tr>`).join('');
