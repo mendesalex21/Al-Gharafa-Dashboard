@@ -105,7 +105,9 @@ function t2Lineup(team) {
     r.min += p.min || 0; r.lastSeen = Math.min(r.lastSeen, i);
     if (i === 0) r.lastXI = !!p.starter;
   }));
-  Object.values(P).forEach((r) => { r.main = Object.entries(r.pos).sort((a, b) => b[1] - a[1])[0]; r.main = r.main ? r.main[0] : r.p.pos; r.line = T2_LINE(r.main); });
+  // his position = the one he started most at over ALL the team's matches with a file (a sub's listed position is not reliable)
+  const posAll = {}; ms.forEach((m) => m.lineups[side(m)].forEach((p) => { if (p.starter && p.pos && p.pos !== 'Undefined') { const o = posAll[key(p)] || (posAll[key(p)] = {}); o[p.pos] = (o[p.pos] || 0) + 1; } }));
+  Object.values(P).forEach((r) => { const m = Object.entries(posAll[key(r.p)] || r.pos).sort((a, b) => b[1] - a[1])[0]; r.main = m ? m[0] : r.p.pos; r.line = T2_LINE(r.main); });
   const out = new Map();
   ms[0].lineups[side(ms[0])].forEach((p) => { if (p.r) out.set(key(p), 'red card in the last match'); });
   if (team === T2_US && T2X.wl) Object.values(P).forEach((r) => { const w = t2WlOf(r.p); if (w && w.status && w.status !== 'available') out.set(key(r.p), w.status); });
