@@ -76,6 +76,7 @@ function injSpeed(I, s) {
   [[90, '#34c759'], [85, '#a3d977'], [80, '#e8c26a']].forEach(([v, c]) => { g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${c}" stroke-width="1" stroke-dasharray="3 3"/><text x="${W - R + 5}" y="${y(v) + 3.5}" class="ax">${v}</text>`; });
   g += `<text x="${L - 5}" y="${y(100) + 3.5}" class="ax" text-anchor="end">100%</text><text x="${L - 5}" y="${y(70) + 3.5}" class="ax" text-anchor="end">70%</text>`;
   for (let w = 0; w < s.win; w++) g += `<text x="${x(w * 7 + 3)}" y="${H - 4}" class="ax" text-anchor="middle">W${w + 1}</text>`;
+  if (pts.length > 1) g += `<polyline points="${pts.map(([dd, v]) => `${x(dd).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--ink-2)" stroke-width="1.2" stroke-linejoin="round" opacity=".55"/>`;
   pts.forEach(([dd, v]) => { g += `<circle cx="${x(dd).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${v >= 90 ? '#34c759' : v >= 85 ? '#a3d977' : v >= 80 ? '#e8c26a' : '#c9c8c1'}"><title>day ${dd} · ${injDay(addDays(s.back, dd))} · ${v} % of his max speed</title></circle>`; });
   return `<div class="inj-c"><div class="inj-ct">Max speed of each day · % of his max</div>${g}</svg><div class="inj-cs">first ≥ 80 % ${f('v80')} · ≥ 85 % ${f('v85')} · ≥ 90 % ${f('v90')}</div></div>`;
 }
@@ -93,7 +94,7 @@ function injCardHtml(d, p) {
   return `<section class="panel inj-card"><div class="inj-ph"><div style="flex:1"><div class="inj-t">Return from injury</div>
       <div class="muted">${s.med ? escapeHtml(injMedTxt(s.med)) + ' · ' : ''}out ${s.out} days from ${injDay(s.inj_date || s.start)} · back on ${injDay(s.back)} · week ${wk} of ${s.win}</div></div>${injClsChip(I, s, true)}${injStateChip(s)}${injFastChip(I, s)}</div>
     <div class="muted sm" style="margin:10px 0 4px">${ref}</div>
-    <div class="inj-g3">${pre ? injCurve(I, s, 'td', 'Total distance · % of his week before') + injCurve(I, s, 'hit', '> 20 km/h · % of his week before') : ''}${injSpeed(I, s)}</div>
+    <div class="inj-g3">${pre ? injCurve(I, s, 'td', 'Total distance · % of his week before') + injCurve(I, s, 'hit', '> 20 km/h · % of his week before') + injCurve(I, s, 'acc_dec', 'Acc + Dec · % of his week before') : ''}${injSpeed(I, s)}</div>
     ${pre ? `<div class="inj-lg"><span><i class="l1"></i>${escapeHtml(p.name)}</span><span><i class="l2"></i>usual return after a ${I.classes[s.cls].label.toLowerCase()} injury (our ${I.n[s.cls]} returns since 2024)</span><span><i class="l4"></i>90 % = back to his load</span></div>` : ''}
     ${injMilestones(I, s)}
     <p class="muted sm" style="margin:10px 0 0">${s.fast ? `<b>Fast high-speed return:</b> ${escapeHtml(injFastTxt(I, s))}.<br>` : ''}Return complete = ≥ 90 % of his max speed touched, and 90 % of his week before on total distance and > 20 km/h (a congested week compared with his congested weeks; ${s.cls === 'short' ? '1 week' : '2 weeks running'}) or a 60 min match at his usual intensity.</p></section>`;

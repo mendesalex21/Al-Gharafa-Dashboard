@@ -291,12 +291,7 @@ function renderPlayerLoad(opts) {
 function plIW(pid) {
   const I = WL.int, g = I && I.gps ? Object.keys(I.gps).find((k) => I.gps[k].pid === pid) : null, IW = {};
   if (I && g) {
-    let mb = ((I.rhie.mref || {})[g] || {}).bouts;
-    if (!mb && WL.data) { // no match reference of his own (few matches): the median of his position's
-      const pos = ((WL.data.players || []).find((x) => x.id === pid) || {}).pos, same = new Set((WL.data.players || []).filter((x) => x.pos === pos).map((x) => x.id));
-      const v = Object.entries(I.rhie.mref || {}).filter(([k, r]) => r && r.bouts && I.gps[k] && same.has(I.gps[k].pid)).map(([, r]) => r.bouts).sort((a, b) => a - b);
-      if (v.length) mb = v[Math.floor(v.length / 2)];
-    }
+    const mb = ((I.rhie.mref || {})[g] || {}).bouts;
     I.weeks.forEach((x) => { const b = x.best[g];
       const tr = Object.values(x.train).map((tt) => ((tt.rhie.players || {})[g] || {}).n).filter((v) => v != null);
       const rh = [...tr, ...(x.matches || []).map((m) => ((I.rhie.matches[m] || {})[g] || {}).n)].filter((v) => v != null);
@@ -322,11 +317,13 @@ function plTilesA(B) {
   const { p, d } = B, last = B.real('td').slice(-1)[0], fl = (d.prep_floors || {}).floor || {}, ce = (d.prep_floors || {}).ceil || {}, pr = p.prep;
   const gauge = (x, lv, max, tip) => (x == null ? '' : `<div class="pa-g" title="${tip}"><i class="f" style="width:${Math.max(0, Math.min(100, x / max * 100))}%;background:${lv == null || x >= lv ? '#34c759' : '#ff9f0a'}"></i>${lv != null ? `<i class="t" style="left:${Math.min(100, lv / max * 100)}%"></i>` : ''}</div>`);
   const vs = (x, lv, txt, fmt) => `<div class="ln pa-mx"><span>${txt}</span><b style="color:${x == null ? 'var(--ink-muted)' : lv == null || x >= lv ? '#1d7a35' : '#b26a00'}">${x == null ? '—' : `${lv == null ? '' : x >= lv ? '✓ ' : '↓ '}${fmt(x)}`}${lv != null ? `<small> level ${fmt(lv)}</small>` : ''}</b></div>`;
+  const noRef = (txt) => `<div class="ln pa-mx"><span>${txt}</span><b class="muted" style="font-weight:500">No game reference</b></div>`;
   const tiles = plKeys().map((k) => {
     const [l] = PL_LAB[k], now = B.acAt(k, d.as_of), prev = B.acAt(k, addDays(d.as_of, -7)), [col, txt] = tmZone(now), z = last ? B.zw(last, k) : null;
     const x = pr && pr.r ? pr.r[k] : null, lv = fl[k];
     let extra = `<div class="ln"><span>A:C a week ago</span><b>${prev == null ? '—' : prev.toFixed(2)}</b></div>`;
-    if (lv != null && x != null) extra = vs(x, lv, 'Vs match · 4 wk', (v) => v.toFixed(2) + '×') + gauge(x, lv, Math.max(ce[k] || 2.9, x || 0) * 1.05, `his week ÷ his own match (4-week average) · black tick = the level of the regular starters (${lv}×)${pr && pr.ref ? ` = ${tmK(lv * pr.ref[k])} a week` : ''}`);
+    if (lv != null && (!pr || pr.src !== 'own')) extra = noRef('Vs match'); // fewer than 3 games of his own: nothing to compare with
+    else if (lv != null && x != null) extra = vs(x, lv, 'Vs match', (v) => v.toFixed(2) + '×') + gauge(x, lv, Math.max(ce[k] || 2.9, x || 0) * 1.05, `his week ÷ his own match (4-week average) · black tick = the level of the regular starters (${lv}×)${pr && pr.ref ? ` = ${tmK(lv * pr.ref[k])} a week` : ''}`);
     else if (k === 'spr' && p.days_hsv != null) extra = `<div class="ln"><span>Last ≥ 90 % Vmax</span><b style="color:${p.days_hsv >= 10 ? '#b26a00' : '#1d7a35'}">${p.days_hsv} days ago</b></div>`;
     return `<div class="tm-tile"><span class="k">${l}</span><div class="ac"><b style="color:${TM_ZCOL[tmZ(z)]}">${z == null ? '—' : tmS(z)}</b><span>z · ${last ? last.label : ''}</span></div>
       <span class="tm-zone"><i style="background:${col}"></i><span title="${txt}">A:C <b>${now == null ? '—' : now.toFixed(2)}</b></span></span>${extra}</div>`;
@@ -336,10 +333,10 @@ function plTilesA(B) {
   const LV = plIntLevels(d.as_of), w4 = LV.avg4(B.IW, 'td'), r4 = LV.avg4(B.IW, 'rt');
   const wcs = `<div class="tm-tile"><span class="k">WCS · training</span><div class="ac"><b style="color:${pcol(xw && xw.td)}">${xw && xw.td != null ? xw.td : '—'}<small> %</small></b><span>of his WCS · ${lw ? lw.label : ''}</span></div>
     <span class="tm-zone"><i style="background:${pcol(xw && xw.hi)}"></i>A/D + spr <b>${xw && xw.hi != null ? xw.hi + ' %' : '—'}</b></span>
-    ${vs(w4, LV.td, 'Vs matches · 4 wk', (v) => Math.round(v) + ' %')}${gauge(w4, LV.td, 120, `his best training minute of the week as % of his worst case in matches (4-week average) · black tick = the level of the regular starters${LV.td != null ? ` (${Math.round(LV.td)} %)` : ''}`)}</div>`;
+    ${!(B.I && B.I.wref && B.g && B.I.wref[B.g]) ? noRef('Vs matches') : vs(w4, LV.td, 'Vs matches', (v) => Math.round(v) + ' %') + gauge(w4, LV.td, 120, `his best training minute of the week as % of his worst case in matches (4-week average) · black tick = the level of the regular starters${LV.td != null ? ` (${Math.round(LV.td)} %)` : ''}`)}</div>`;
   const rh = `<div class="tm-tile"><span class="k">RHIE · bouts</span><div class="ac"><b>${xw && xw.rh != null ? xw.rh : '—'}</b><span>${lw ? lw.label : ''} · training + matches</span></div>
     <span class="tm-zone"><i style="background:#16269e"></i>${xw && xw.rt != null ? `training × ${xw.rt.toFixed(1)} of his matches` : 'training + matches'}</span>
-    ${vs(r4, LV.rt, 'Vs matches · 4 wk', (v) => v.toFixed(1) + '×')}${gauge(r4, LV.rt, Math.max(3, r4 || 0) * 1.05, `his training bouts of the week ÷ his bouts in a match (4-week average) · black tick = the level of the regular starters${LV.rt != null ? ` (${LV.rt.toFixed(1)}×)` : ''}`)}</div>`;
+    ${!(B.I && B.g && ((B.I.rhie.mref || {})[B.g] || {}).bouts) ? noRef('Vs matches') : vs(r4, LV.rt, 'Vs matches', (v) => v.toFixed(1) + '×') + gauge(r4, LV.rt, Math.max(3, r4 || 0) * 1.05, `his training bouts of the week ÷ his bouts in a match (4-week average) · black tick = the level of the regular starters${LV.rt != null ? ` (${LV.rt.toFixed(1)}×)` : ''}`)}</div>`;
   const dl = Object.keys(B.wh).sort().pop(), w7 = B.wellOf(addDays(d.as_of, -6), d.as_of), w28 = B.wellOf(addDays(d.as_of, -34), addDays(d.as_of, -7));
   const well = `<div class="tm-tile"><span class="k">Wellness</span>${dl ? `<div class="ac"><b style="color:${tmWell(B.wh[dl])}">${Math.round(B.wh[dl])}<small> %</small></b><span>${fmtDay(dl, { weekday: 'short', day: 'numeric', month: 'short' })}</span></div>
     <span class="tm-zone"><i style="background:${tmWell(B.wh[dl])}"></i>his last check-in</span>` : '<div class="ac"><b>—</b></div><span class="tm-zone">no check-in</span>'}<div class="ln"><span>Last 7 days</span><b>${w7 == null ? '—' : Math.round(w7) + ' %'}</b></div><div class="ln"><span>The 4 weeks before</span><b>${w28 == null ? '—' : Math.round(w28) + ' %'}</b></div></div>`;
@@ -741,23 +738,32 @@ function av(cats) {
 }
 const avCol = (p) => (p >= 90 ? '#1f7a3d' : p >= 75 ? '#ff9f0a' : '#e5484d');
 function drawTimeline(s) {
-  // a calendar per month (Sun → Sat, his choice 2026-10-19), each day its letter in its colour
-  const first = s.start, last = addDays(s.start, s.cat.length - 1), months = [];
-  for (let m = first.slice(0, 7); m <= last.slice(0, 7);) { months.push(m); const [y, mo] = m.split('-').map(Number); m = mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`; }
+  // a calendar per month (Sun → Sat, his choice 2026-10-19), each day its letter in its colour; the last 4 months, arrows
+  // for the months before (his ask, 2026-11-06 — his whole history: series.cal_cat)
+  const cs = s.cal_start || s.start, cc = s.cal_cat || s.cat;
+  const first = cs, last = addDays(s.start, s.cat.length - 1), all_m = [];
+  for (let m = first.slice(0, 7); m <= last.slice(0, 7);) { all_m.push(m); const [y, mo] = m.split('-').map(Number); m = mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`; }
+  const maxOff = Math.max(0, all_m.length - 4); PL.calOff = Math.min(PL.calOff || 0, maxOff);
+  const months = all_m.slice(Math.max(0, all_m.length - 4 - PL.calOff), all_m.length - PL.calOff);
+  const catAt = (x) => { const j = daysBetween(cs, x); return j >= 0 && j < cc.length ? cc[j] : null; };
   const cal = (m) => {
     const [y, mo] = m.split('-').map(Number), nd = new Date(Date.UTC(y, mo, 0)).getUTCDate(), lead = dateOf(m + '-01').getUTCDay();
     let cells = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((l) => `<b class="tc-h">${l}</b>`).join('') + '<i class="tc-pad"></i>'.repeat(lead);
     for (let dd = 1; dd <= nd; dd++) {
-      const x = `${m}-${String(dd).padStart(2, '0')}`, i = daysBetween(s.start, x), c = i >= 0 && i < s.cat.length ? s.cat[i] : null, L = c ? TL_LET[c] : null, info = c ? CAT_INFO[c] || CAT_INFO['-'] : null;
-      cells += L ? `<i style="color:${L[1]};background:${L[2]}" title="${fmtDay(x)} · ${info[0]}${s.min[i] ? ` · ${s.min[i]} min` : ''}">${L[0]}</i>` : `<i class="tc-none" title="${fmtDay(x)}${c ? ' · no record' : ''}"></i>`;
+      const x = `${m}-${String(dd).padStart(2, '0')}`, i = daysBetween(s.start, x), c = catAt(x), L = c ? TL_LET[c] : null, info = c ? CAT_INFO[c] || CAT_INFO['-'] : null;
+      cells += L ? `<i style="color:${L[1]};background:${L[2]}" title="${fmtDay(x)} · ${info[0]}${i >= 0 && s.min[i] ? ` · ${s.min[i]} min` : ''}">${L[0]}</i>` : `<i class="tc-none" title="${fmtDay(x)}${c ? ' · no record' : ''}"></i>`;
     }
-    const a = av(s.cat.split('').filter((_, i) => addDays(s.start, i).startsWith(m)));
+    const a = av(cc.split('').filter((_, j) => addDays(cs, j).startsWith(m)));
     return `<div class="tc-m"><div class="tc-t">${fmtDay(m + '-15', { month: 'long' })}${a.pct == null ? '' : ` <span style="color:${avCol(a.pct)}">${a.pct} %</span>`}</div><div class="tc-g">${cells}</div></div>`;
   };
-  const used = new Set(s.cat.split('')), all = av(s.cat.split(''));
+  const used = new Set(months.flatMap((m) => cc.split('').filter((_, j) => addDays(cs, j).startsWith(m)))), all = av(s.cat.split(''));
+  const nav = maxOff ? `<span class="stepper tc-nav"><button type="button" id="tc-prev" aria-label="Months before"${PL.calOff >= maxOff ? ' disabled' : ''}>‹</button><span class="month-label">${fmtDay(months[0] + '-15', { month: 'short' })} – ${fmtDay(months[months.length - 1] + '-15', { month: 'short', year: 'numeric' })}</span><button type="button" id="tc-next" aria-label="Months after"${PL.calOff ? '' : ' disabled'}>›</button></span>` : '';
   const sum = all.pct == null ? '' : `<div class="tc-av"><b style="color:${avCol(all.pct)}">${all.pct} %</b><span>available · ${all.days - all.out} of ${all.days} team days${all.out ? ` · out ${[['x', 'injury'], ['r', 'rehab'], ['s', 'sick']].filter(([k]) => all.n[k]).map(([k, l]) => `${all.n[k]} ${l}`).join(' · ')}` : ''}</span></div>`;
-  document.getElementById('pl-timeline').innerHTML = `${sum}<div class="tc">${months.map(cal).join('')}</div>
+  document.getElementById('pl-timeline').innerHTML = `<div class="tc-top">${sum}${nav}</div><div class="tc">${months.map(cal).join('')}</div>
     <div class="legend-row tight">${Object.entries(TL_LET).filter(([k]) => used.has(k)).map(([k, L]) => `<span><b class="tl-k" style="color:${L[1]};background:${L[2]}">${L[0]}</b>${CAT_INFO[k][0]}</span>`).join('')}</div>`;
+  const pv = document.getElementById('tc-prev'), nx = document.getElementById('tc-next');
+  if (pv) pv.onclick = () => { PL.calOff = Math.min(maxOff, (PL.calOff || 0) + 1); drawTimeline(s); };
+  if (nx) nx.onclick = () => { PL.calOff = Math.max(0, (PL.calOff || 0) - 1); drawTimeline(s); };
 }
 
 function drawPlayerTests(p) {
