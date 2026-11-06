@@ -14,6 +14,7 @@ const injAll = (d) => (d && d.injuries) || null;
 const injOf = (d, pid) => { const I = injAll(d); return I && I.players ? I.players[pid] || [] : []; };
 const injSpells = (rows) => rows.filter((s) => s.cls); // spells of 5 days or more (the others: the medical list only)
 const injCur = (d, pid) => injSpells(injOf(d, pid))[0] || null; // his latest spell
+const injRecent = (s, asOf, extra = 14) => !!s.back && daysBetween(s.back, asOf) <= 7 * s.win + extra; // still in (or just after) his return window
 const injDay = (iso) => fmtDay(iso, { day: 'numeric', month: 'short' });
 const injDayY = (iso) => fmtDay(iso, { day: 'numeric', month: 'short', year: 'numeric' });
 function injStateChip(s) {
@@ -61,7 +62,7 @@ function injMilestones(I, s) {
 /** Workload › Player: the return card, while his return is open (admin). */
 function injCardHtml(d, p) {
   const I = injAll(d), s = injCur(d, p.id);
-  if (!I || !s || !INJ_OPEN.includes(s.state) || !s.back) return '';
+  if (!I || !s || !INJ_OPEN.includes(s.state) || !injRecent(s, d.as_of, 7)) return '';
   const pre = s.pre, wk = Math.min(s.win, s.weeks.length || 1);
   const ref = pre ? `His week before the injury (4 normal weeks): total distance ${(pre.td / 1000).toFixed(1)} km · > 20 km/h ${pre.hit} m · sprint ${pre.spr} m · Acc + Dec ${pre.acc_dec}` : 'No normal week before the injury to compare with.';
   return `<section class="panel inj-card"><div class="inj-ph"><div style="flex:1"><div class="inj-t">Return from injury</div>
@@ -98,7 +99,7 @@ function drawInjuries() {
   document.getElementById('inj-sub').textContent = `Data up to ${fmtDay(d.as_of, { weekday: 'long', day: 'numeric', month: 'long' })}`;
   const name = (pid) => { const p = d.players.find((x) => x.id === pid); return p ? p.name : pid; }, pos = (pid) => { const p = d.players.find((x) => x.id === pid); return p ? p.pos || '' : ''; };
   const recent = addDays(d.as_of, -14);
-  const cur = Object.keys(I.players).map((pid) => ({ pid, s: injCur(d, pid) })).filter(({ s }) => s && (INJ_OPEN.includes(s.state) || s.state === 'out' || (s.state === 'interrupted' && s.back >= addDays(d.as_of, -42)) || (s.state === 'complete' && s.complete && s.complete.date >= recent)))
+  const cur = Object.keys(I.players).map((pid) => ({ pid, s: injCur(d, pid) })).filter(({ s }) => s && ((INJ_OPEN.includes(s.state) && injRecent(s, d.as_of)) || s.state === 'out' || (s.state === 'interrupted' && s.back >= addDays(d.as_of, -42)) || (s.state === 'complete' && s.complete && s.complete.date >= recent)))
     .sort((a, b) => ({ out: 0, behind: 1, not_back: 1, first_week: 2, on_track: 2, interrupted: 3, complete: 4 }[a.s.state] - { out: 0, behind: 1, not_back: 1, first_week: 2, on_track: 2, interrupted: 3, complete: 4 }[b.s.state]) || String(b.s.back || b.s.start).localeCompare(String(a.s.back || a.s.start)));
   const pct = (s, k) => { const w = s.weeks.filter((x) => x.ok || (!x.done && x.days >= 3)).slice(-1)[0]; return w && w.pct[k] != null ? `${w.pct[k]}%` : '<span class="muted">—</span>'; };
   const tick = (s, k) => (s.ms && s.ms[k] != null ? `✓ day ${s.ms[k]}` : '<span class="muted">not yet</span>');
