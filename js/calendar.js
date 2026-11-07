@@ -95,9 +95,9 @@ function renderCalendar(opts) {
   calSetMode(opts);
   const root = document.getElementById('view-calendar');
   root.innerHTML = `
-    ${pageHead('Season 2026/27', 'Calendar', 'ca-sub', `${segHtml('ca-mode', [['month', 'Calendar'], ['games', 'Games']], CAL.mode)}
-      <div class="stepper ca-step" id="ca-step"><button type="button" id="ca-prev" aria-label="Previous month">‹</button><span class="month-label" id="ca-month"></span><button type="button" id="ca-next-m" aria-label="Next month">›</button>
+    ${pageHead('Season 2026/27', 'Calendar', 'ca-sub', `<div class="stepper ca-step" id="ca-step"><button type="button" id="ca-prev" aria-label="Previous month">‹</button><span class="month-label" id="ca-month"></span><button type="button" id="ca-next-m" aria-label="Next month">›</button>
         <button type="button" class="btn-light" id="ca-today">Today</button></div>
+      ${segHtml('ca-mode', [['month', 'Calendar'], ['games', 'Games']], CAL.mode)}
       <button type="button" class="btn-light" id="ca-add">+ Add match</button>
       <label class="toggle"><input type="checkbox" id="ca-b"> B-team (QSL 2)</label>`)}
     <div class="ca-up" id="ca-next"></div>

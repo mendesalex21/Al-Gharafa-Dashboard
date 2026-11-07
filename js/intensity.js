@@ -115,8 +115,8 @@ function drawIntensity() {
   
   function render() {
     const N = D.weeks.length;
-    document.getElementById('in-body').innerHTML = `<div class="sv-bleed"><div class="wc-top"><div><div class="wc-eb">Training</div><div class="wc-h1">Intensity</div><p class="wc-sub">${S.tab === 'wcs' ? 'The training against the matches\' worst case scenarios: the best passages of the week, the gap to the match, each drill against the WCS of its kind.' : 'Repeated high-intensity efforts: each session and drill against a match, each player\'s week, the type of the bouts and his profile.'}</p></div>
-      <div class="wc-ctl"><span class="wc-seg" data-k="tab"><span data-v="wcs" class="${S.tab === 'wcs' ? 'on' : ''}">WCS</span><span data-v="rhie" class="${S.tab === 'rhie' ? 'on' : ''}">RHIE</span></span><span class="wc-seg in-wk" data-k="wk"><span data-v="prev" class="${S.wk ? '' : 'off'}">‹</span><span class="on">${W.week.label || 'Week'} · ${dl(W.week.ws)} – ${dl(W.week.we)}</span><span data-v="next" class="${S.wk < N - 1 ? '' : 'off'}">›</span></span></div></div>
+    document.getElementById('in-body').innerHTML = `<div class="sv-bleed"><div class="pg-head"><div><div class="pg-eyebrow">Training</div><h1 class="pg-title">Intensity</h1><p class="pg-sub">${S.tab === 'wcs' ? 'The training against the matches\' worst case scenarios: the best passages of the week, the gap to the match, each drill against the WCS of its kind.' : 'Repeated high-intensity efforts: each session and drill against a match, each player\'s week, the type of the bouts and his profile.'}</p></div>
+      <div class="pg-tools wc-ctl"><span class="wc-seg" data-k="tab"><span data-v="wcs" class="${S.tab === 'wcs' ? 'on' : ''}">WCS</span><span data-v="rhie" class="${S.tab === 'rhie' ? 'on' : ''}">RHIE</span></span><span class="wc-seg in-wk" data-k="wk"><span data-v="prev" class="${S.wk ? '' : 'off'}">‹</span><span class="on">${W.week.label || 'Week'} · ${dl(W.week.ws)} – ${dl(W.week.we)}</span><span data-v="next" class="${S.wk < N - 1 ? '' : 'off'}">›</span></span></div></div>
       ${S.tab === 'wcs' ? wcsTab() : rhieTab()}</div>`;
   }
   render();

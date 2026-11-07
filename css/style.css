@@ -340,8 +340,16 @@ main { padding: 32px 0 96px; }
 main.page { padding-top: 40px; }
 .muted { color: var(--ink-muted); }
 .num { font-variant-numeric: tabular-nums; }
-.pg-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 20px; flex-wrap: wrap; margin-bottom: 26px; }
-.pg-eyebrow { font-size: 13px; font-weight: 600; color: var(--ink-muted); margin-bottom: 4px; }
+/* the title of every page in the same place (his ask, 2026-11-07, as Training › Sessions): the centred column's left edge,
+   also on the full-width pages (Workload › Team / Player / Injuries, Intensity) */
+.pg-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 20px; flex-wrap: wrap; margin: 0 auto 26px; width: 100%; max-width: 1132px; }
+.pg-eyebrow { font-size: 13px; font-weight: 600; color: var(--ink-muted); margin-bottom: 4px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* each menu's pages as buttons on the page (his ask, 2026-11-07) — his account first */
+.pg-subnav { display: none; }
+html.is-admin .pg-subnav { display: inline-flex; padding: 2px; border-radius: 8px; }
+html.is-admin .pg-subnav button { font-size: 12px; padding: 3px 11px; border-radius: 6px; }
+html.is-admin .pg-eyebrow { min-height: 26px; }
+html.is-admin #ca-mode, html.is-admin #ro-view { display: none; } /* the same buttons, now in the eyebrow line */
 .pg-title { font-size: 34px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1; margin: 0; }
 .pg-sub { font-size: 13.5px; color: var(--ink-muted); margin: 6px 0 0; max-width: 720px; }
 .pg-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -1344,8 +1352,7 @@ table.plan tr.is-next td:first-child { box-shadow: inset 3px 0 0 #2a78d6; font-w
 .ca-step .month-label { min-width: 124px; text-align: center; font-weight: 650; }
 #view-calendar .cal-panel { margin-top: 8px; padding: 8px 10px 10px; }
 .cal2 .cal-dow { padding: 0 0 2px; font-size: 11px; }
-#view-calendar { padding-top: 14px; padding-bottom: 18px; }
-#view-calendar .pg-eyebrow { display: none; } /* one screen: the season is in the month and the cards */
+#view-calendar { padding-bottom: 18px; } /* the title where it is on every page (2026-11-07); the month still fits the window */
 #view-calendar .pg-head { margin-bottom: 10px; }
 @media (min-width: 900px) { #view-calendar .pg-head { flex-wrap: nowrap; } #view-calendar .pg-head > div:first-child { min-width: 0; flex: 1 1 auto; } #view-calendar .pg-tools { flex-wrap: nowrap; flex: none; } }
 .ca-legend { padding: 8px 4px 0; font-size: 11.5px; gap: 6px 14px; }
@@ -1805,10 +1812,7 @@ select.sp-st { font: inherit; font-size: 11.5px; font-weight: 700; border: 0; cu
 .rh-pf.S { background: #16269e; color: #fff; } .rh-pf.A { background: #dff3e6; color: #17753a; } .rh-pf.D { background: #fbe6e3; color: #a52a2a; } .rh-pf.M { background: #eef0f4; color: #6a6f80; }
 
 /* ---------- Training › Intensity (WCS · RHIE), preview 2026-10-16 ---------- */
-#view-intensity .wc-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
-#view-intensity .wc-eb { font-size: 13px; font-weight: 600; color: var(--ink-muted); }
-#view-intensity .wc-h1 { font-size: 34px; font-weight: 700; margin: 2px 0; letter-spacing: -.02em; }
-#view-intensity .wc-sub { margin: 0; font-size: 13.5px; color: var(--ink-2); max-width: 600px; }
+#view-intensity .pg-head { margin-bottom: 16px; }
 #view-intensity .wc-ctl { display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 #view-intensity .wc-seg { display: inline-flex; background: var(--surface-2); border-radius: 999px; padding: 3px; }
 #view-intensity .wc-seg span { font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 999px; color: var(--ink-2); cursor: pointer; user-select: none; }

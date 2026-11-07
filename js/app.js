@@ -37,7 +37,32 @@ const VIEW_MODE = { roster: () => RO.view, calendar: () => CAL.mode };
 function flyoutActive() {
   const mode = VIEW_MODE[CURRENT_VIEW] ? VIEW_MODE[CURRENT_VIEW]() : null;
   document.querySelectorAll('.flyout-link').forEach((a) => a.classList.toggle('active', a.dataset.view === CURRENT_VIEW && (!a.dataset.mode || a.dataset.mode === mode)));
+  subnavSync();
 }
+
+/** Each menu's pages as buttons on the page, in the eyebrow line above the title (his ask, 2026-11-07): Training ›
+ * Sessions · Intensity, Workload › Team · Squad · Player · Injuries, Squad › By position · List, Calendar › Calendar ·
+ * Games. The same links as the menu's flyout. His account first (CSS: html.is-admin .pg-subnav). */
+function subnavSync() {
+  const main = CURRENT_VIEW && document.getElementById('view-' + CURRENT_VIEW), eb = main && main.querySelector('.pg-head .pg-eyebrow');
+  if (!eb) return;
+  const panel = document.getElementById('flyout-' + VIEW_SECTION[CURRENT_VIEW]);
+  const links = panel ? [...panel.querySelectorAll('.flyout-link')].filter((a) => !a.hidden) : [];
+  let nav = eb.querySelector('.pg-subnav');
+  if (links.length < 2) { if (nav) nav.remove(); return; }
+  const mode = VIEW_MODE[CURRENT_VIEW] ? VIEW_MODE[CURRENT_VIEW]() : null;
+  const on = (a) => a.dataset.view === CURRENT_VIEW && (!a.dataset.mode || a.dataset.mode === mode);
+  const key = links.map((a) => `${a.dataset.view}${a.dataset.mode || ''}${on(a) ? '*' : ''}`).join('|');
+  if (nav && nav.dataset.key === key) return;
+  if (!nav) { nav = document.createElement('span'); nav.className = 'seg pg-subnav'; nav.setAttribute('role', 'group'); eb.appendChild(nav); }
+  nav.dataset.key = key;
+  nav.innerHTML = links.map((a, i) => `<button type="button" data-i="${i}" class="${on(a) ? 'active' : ''}">${escapeHtml(String(a.childNodes[0].textContent).trim())}</button>`).join('');
+  nav.querySelectorAll('button').forEach((b) => { b.onclick = () => { const a = links[+b.dataset.i]; if (!on(a)) switchView(a.dataset.view, a.dataset.mode ? { mode: a.dataset.mode } : undefined); }; });
+}
+/** Pages draw their title when their data arrives: the buttons follow (one check per frame at most). */
+let SUBNAV_RAF = 0;
+new MutationObserver(() => { if (!SUBNAV_RAF) SUBNAV_RAF = requestAnimationFrame(() => { SUBNAV_RAF = 0; subnavSync(); }); })
+  .observe(document.body, { childList: true, subtree: true });
 
 /** Apple-style flyouts under nav items: open on mouse hover, on tap (iPad) or keyboard. */
 function initFlyouts() {

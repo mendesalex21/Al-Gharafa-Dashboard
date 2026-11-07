@@ -48,7 +48,7 @@ document.addEventListener('visibilitychange', () => {
 
 function wellnessSkeleton() {
   return `
-    <div class="w-updated" id="w-updated"></div>
+    ${pageHead('Morning check-in', 'Wellness', 'w-sub')}<div class="w-updated" id="w-updated"></div>
     <section class="w-team-card">
       <div class="w-team-card-top">
         <div class="w-ring" id="w-teamRing"><div class="w-inner"><span class="w-team-ring-label" id="w-teamRingLabel">—</span></div></div>
