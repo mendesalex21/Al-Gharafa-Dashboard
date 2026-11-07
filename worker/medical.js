@@ -7,7 +7,7 @@
  *   DELETE /api/injuries?pid=…&date=…          → removes one
  */
 const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
-export const MED_ROLES = ['admin', 'medical'];
+export const MED_ROLES = ['admin', 'medical', 'staff', 'tactical']; // released to the staff 2026-11-07 (his call)
 const LISTS = {
   type: ['Muscle', 'Tendon', 'Ligament / sprain', 'Bone', 'Contusion', 'Other'],
   side: ['R', 'L', 'B', ''], onset: ['Sudden', 'Gradual', ''], mechanism: ['Contact', 'Non-contact', ''], where: ['Training', 'Match', 'Other', ''],

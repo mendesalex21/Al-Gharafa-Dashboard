@@ -188,7 +188,7 @@ const INJ_CHIPS = [
   ['severity', 'Expected time out', ['≤ 1 week', '1–3 weeks', '3–6 weeks', '> 6 weeks']],
 ];
 const INJ_LOCAL = 'demo_medical_v1';
-const injCanEdit = () => AUTH.demo || isAdminUi() || ['admin', 'medical'].includes((AUTH.user || {}).role);
+const injCanEdit = () => AUTH.demo || isAdminUi() || ['admin', 'medical', 'staff', 'tactical'].includes((AUTH.user || {}).role); // released to the staff 2026-11-07
 function injLocal() { try { return JSON.parse(localStorage.getItem(INJ_LOCAL) || '[]'); } catch (e) { return []; } }
 /** A saved detail on the payload (so the pages show it at once): on its return (the spell it was entered for, else the one
  * starting 10 days after to 3 days before the injury day, as the build links them), else as an injury under 5 days. */
@@ -255,7 +255,7 @@ function injEntryDraw() {
     const sides = F.region && !central ? `<div class="inj-chips" style="justify-content:center;margin-top:6px">${[['L', 'Left'], ['R', 'Right'], ['B', 'Both']].map(([v, l]) => chip('side', v, l)).join('')}</div>` : '';
     const extra = F.extra ? `<div class="inj-xtra"><label>Player<select data-f="pid"><option value="">—</option>${d.players.map((p) => `<option value="${p.id}"${p.id === F.pid ? ' selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}</select></label>
         <label>Day of the injury<input type="date" data-f="date" value="${F.date}" max="${d.as_of}"></label><label>Days out<input type="number" data-f="days" min="0" max="400" value="${F.days}" placeholder="0"></label></div>` : '';
-    form = `<div class="inj-fh"><b>${escapeHtml(who)}${F.extra ? '' : ` · injury of ${injDayY(F.date)}`}</b><span class="inj-priv">🔒 medical staff and admin only</span></div>
+    form = `<div class="inj-fh"><b>${escapeHtml(who)}${F.extra ? '' : ` · injury of ${injDayY(F.date)}`}</b><span class="inj-priv">🔒 staff only</span></div>
       ${F.extra ? '' : `<div class="muted sm">Day of the injury taken from the data (first day out): <input type="date" data-f="date" value="${F.date}" max="${d.as_of}" class="inj-date"> — change it if the injury happened earlier.</div>`}${extra}
       <div class="inj-fb"><div class="inj-fmap">${bodyMapHtml({}, { picking: true, pick: F.region ? { region: F.region, side: F.side } : null, w: 118 })}<div class="inj-where">${escapeHtml(where)}</div>${sides}</div>
         <div class="inj-groups">${groups}</div></div>

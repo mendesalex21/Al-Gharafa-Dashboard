@@ -2478,5 +2478,3 @@ html:not(.is-admin) .admin-only { display: none !important; }
 .inj-ff .btn-g, .inj-ff .btn-p { border: 0; border-radius: 12px; padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer; margin-left: 8px; }
 .inj-ff .btn-g { background: var(--surface-2); color: var(--ink); } .inj-ff .btn-p { background: var(--bm-pick); color: #fff; }
 @media (max-width: 860px) { .inj-season, .inj-ent { grid-template-columns: 1fr; } .inj-fb { flex-direction: column; align-items: center; } }
-/* the injury body maps: his account first (2026-11-07) — the staff keep the list */
-html:not(.is-admin) .inj-hmap, html:not(.is-admin) .inj-smap { display: none; }

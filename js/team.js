@@ -206,7 +206,7 @@ function drawTeam() {
   const fi = document.getElementById('tm-from'), ti = document.getElementById('tm-to');
   fi.min = ti.min = B.t.start; fi.max = ti.max = asOf; fi.value = from; ti.value = to;
   document.getElementById('tm-reset').hidden = !TM.custom;
-  const tl = document.getElementById('tm-tiles'), adm = isAdminUi();
+  const tl = document.getElementById('tm-tiles'), adm = true; // the Player-style tiles: released to the staff 2026-11-07
   tl.classList.toggle('pl-tiles', adm); tl.innerHTML = adm ? tmTilesA(B) : tmTiles(B);
   const head = (l, note) => `<h2>${l}<small>${note}</small></h2>`;
   let cards = '', table = '';
