@@ -2427,3 +2427,56 @@ html:not(.is-admin) .admin-only { display: none !important; }
 .inj-msl i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); font-style: normal; font-size: 10px; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
 .inj-msl span.ok i { background: #34c759; border-color: #34c759; } .inj-msl small { color: var(--ink-muted); margin-left: 2px; }
 @media (max-width: 860px) { .inj-ab { grid-template-columns: 1fr; } }
+
+/* Body map (bodymap.js, his choice 2026-11-07: muscle map A) + the injury entry on Workload › Injuries */
+:root { --bm-body: #eceae4; --bm-line: #d3d0c7; --bm-mus: #dcd9d1; --bm-pick: #0f8b8d; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) { --bm-body: #2a2a28; --bm-line: #3a3a37; --bm-mus: #34342f; } }
+:root[data-theme="dark"] { --bm-body: #2a2a28; --bm-line: #3a3a37; --bm-mus: #34342f; }
+.bm { display: flex; gap: 6px; justify-content: center; }
+.bm figure { margin: 0; text-align: center; font-size: 11.5px; color: var(--ink-muted); }
+.bm svg { width: var(--bm-w, 120px); height: auto; display: block; }
+.bm-body { fill: var(--bm-body); stroke: var(--bm-line); stroke-width: 1.2; }
+.bm-mus { fill: var(--bm-mus); stroke: var(--surface); stroke-width: 1; }
+.bm-joint { fill: var(--bm-mus); stroke: var(--surface); stroke-width: 1.2; }
+.bm-n { font-size: 13px; font-weight: 800; fill: #fff; text-anchor: middle; pointer-events: none; }
+.bm-picking .bm-hit { cursor: pointer; } .bm-picking .bm-hit:hover { fill: color-mix(in srgb, var(--bm-pick) 45%, var(--bm-mus)); }
+.bm-leg { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: center; font-size: 11.5px; color: var(--ink-2); margin-top: 8px; }
+.bm-leg i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.inj-hgrid { display: flex; gap: 16px; align-items: flex-start; }
+.inj-hmap { flex: none; width: 236px; }
+.inj-hlist { flex: 1; min-width: 0; }
+.inj-hi { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--hairline); } .inj-hi:last-child { border-bottom: 0; }
+.inj-hd { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; } .inj-hd b { font-size: 12px; color: var(--ink-muted); font-weight: 600; } .inj-hd small { color: var(--ink-muted); font-size: 11.5px; }
+.inj-hc { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex: none; }
+@media (max-width: 860px) { .inj-hgrid { flex-direction: column; align-items: center; } }
+.inj-season { display: grid; grid-template-columns: 300px 1fr; gap: 18px; align-items: start; }
+.inj-smap { padding-top: 6px; }
+.inj-ed { margin-left: 8px; border: 0; background: var(--surface-2); color: var(--ink-2); border-radius: 8px; padding: 2px 8px; cursor: pointer; font-size: 12px; }
+.inj-cnt { display: inline-block; font-size: 12px; font-weight: 700; color: #b02a2a; background: color-mix(in srgb, #e5484d 14%, var(--surface)); border-radius: 999px; padding: 1px 9px; vertical-align: 3px; }
+.inj-ent { display: grid; grid-template-columns: 290px 1fr; gap: 18px; align-items: start; }
+.inj-list { display: flex; flex-direction: column; gap: 8px; }
+.inj-todo { display: flex; align-items: center; gap: 10px; text-align: left; border: 0; border-radius: 14px; padding: 10px 11px; background: var(--surface-2); color: var(--ink); cursor: pointer; font: inherit; }
+.inj-todo.sel { outline: 2px solid var(--bm-pick); background: var(--surface); }
+.inj-tn { flex: 1; min-width: 0; } .inj-tn b { display: block; font-size: 13.5px; } .inj-tn small { color: var(--ink-muted); font-size: 12px; }
+.inj-av { width: 32px; height: 32px; border-radius: 50%; background: var(--bm-pick); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 11.5px; flex: none; }
+.inj-new { border: 1px dashed var(--hairline); background: transparent; color: var(--ink-2); border-radius: 12px; padding: 9px; cursor: pointer; font: inherit; font-weight: 600; }
+.inj-form { border: 1px solid var(--hairline); border-radius: var(--radius-md); padding: 14px 16px; min-height: 120px; }
+.inj-fempty { color: var(--ink-muted); display: grid; place-items: center; min-height: 90px; }
+.inj-fh { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 4px; } .inj-fh b { font-size: 16px; }
+.inj-priv { font-size: 12px; color: var(--ink-2); background: var(--surface-2); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.inj-date, .inj-xtra input, .inj-xtra select { font: inherit; font-size: 13px; padding: 4px 8px; border: 1px solid var(--hairline); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.inj-xtra { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 2px; } .inj-xtra label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-muted); }
+.inj-fb { display: flex; gap: 18px; margin-top: 10px; align-items: flex-start; }
+.inj-fmap { flex: none; text-align: center; } .inj-where { font-size: 13px; font-weight: 600; margin-top: 4px; }
+.inj-groups { flex: 1; display: flex; flex-wrap: wrap; gap: 4px 22px; align-content: flex-start; }
+.inj-g.wide { flex-basis: 100%; } .inj-gl { font-size: 11.5px; font-weight: 700; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .04em; margin: 10px 0 6px; }
+.inj-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.inj-chip { border: 1px solid var(--hairline); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.inj-chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); } .inj-chip.t.on { background: var(--bm-pick); border-color: var(--bm-pick); color: #fff; }
+.inj-ff { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.inj-ff .red { color: #b02a2a; } .inj-ff .green { color: #1d7a35; }
+.inj-ff .btn-g, .inj-ff .btn-p { border: 0; border-radius: 12px; padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer; margin-left: 8px; }
+.inj-ff .btn-g { background: var(--surface-2); color: var(--ink); } .inj-ff .btn-p { background: var(--bm-pick); color: #fff; }
+@media (max-width: 860px) { .inj-season, .inj-ent { grid-template-columns: 1fr; } .inj-fb { flex-direction: column; align-items: center; } }
+/* the injury body maps: his account first (2026-11-07) — the staff keep the list */
+html:not(.is-admin) .inj-hmap, html:not(.is-admin) .inj-smap { display: none; }

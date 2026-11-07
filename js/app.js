@@ -6,12 +6,12 @@ const VIEW_SECTION = {
 const VIEW_RENDER = {
   home: () => renderHome(), wellness: () => renderWellness(), longitudinal: () => renderLongitudinal(),
   sessions: (o) => renderSessions(o), objectives: (o) => renderObjectives(o), intensity: () => renderIntensity(), team: () => renderTeam(), squad: () => renderSquad(),
-  player: (o) => renderPlayerLoad(o), injuries: () => renderInjuries(), readiness: () => renderReadiness(), testing: (o) => renderTesting(o), calendar: (o) => renderCalendar(o),
+  player: (o) => renderPlayerLoad(o), injuries: (o) => renderInjuries(o), readiness: () => renderReadiness(), testing: (o) => renderTesting(o), calendar: (o) => renderCalendar(o),
   reports: (o) => renderReports(o), roster: (o) => renderRoster(o), plan: () => renderPlan(), matchfiles: () => renderMatchFiles(), tactical2: () => renderTactical2(),
 };
 const VIEW_REDRAW = {
   home: () => { hoLoadPlans(); drawHome(); }, longitudinal: () => drawLongitudinal(), sessions: (o) => drawSessions(o), objectives: () => drawObjectives(), intensity: () => drawIntensity(),
-  team: () => drawTeam(), squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), injuries: () => drawInjuries(), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: (o) => { calSetMode(o); drawCalendar(); }, reports: () => rpFit(), roster: (o) => { roSetMode(o); drawRoster(); }, plan: () => splDraw(), matchfiles: () => drawMatchFiles(), tactical2: () => drawTactical2(),
+  team: () => drawTeam(), squad: () => drawSquad(), player: (o) => drawPlayerLoad(o), injuries: (o) => drawInjuries(o), readiness: () => drawReadiness(), testing: (o) => drawTesting(o), calendar: (o) => { calSetMode(o); drawCalendar(); }, reports: () => rpFit(), roster: (o) => { roSetMode(o); drawRoster(); }, plan: () => splDraw(), matchfiles: () => drawMatchFiles(), tactical2: () => drawTactical2(),
 };
 let CURRENT_VIEW = null;
 /** Pages taken out of the menu (2026-10-26, his call — already shown elsewhere): old links open where it now lives. */
@@ -135,7 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (parts[0] === 'week') parts[0] = 'squad'; // Training › Week load is gone: its charts are in Workload › Squad
   if (VIEW_GONE[parts[0]]) parts[0] = VIEW_GONE[parts[0]];
   const [start, arg, arg2] = parts;
-  const opts = arg ? { sessions: { date: arg, player: arg2 }, player: { player: arg }, testing: { athlete: arg, tab: 'profile' }, objectives: { cycle: arg }, reports: { date: arg, version: arg2 }, calendar: { mode: arg }, roster: { mode: arg } }[start] : undefined;
+  const opts = arg ? { sessions: { date: arg, player: arg2 }, player: { player: arg }, testing: { athlete: arg, tab: 'profile' }, objectives: { cycle: arg }, reports: { date: arg, version: arg2 }, calendar: { mode: arg }, injuries: { player: arg }, roster: { mode: arg } }[start] : undefined;
   initAuth(async () => {
     // photos: once per device, then from the browser's storage (a few ms) — wait that long so pages draw with them
     await Promise.race([loadPlayerPhotos(), new Promise((ok) => setTimeout(ok, 400))]);
