@@ -80,6 +80,36 @@ export async function kioskRoute(req, env, ctx, path) {
   return json({ ok: false, error: 'not_found' }, 404);
 }
 
+// ------------------------------------------------------------------ the RPE read from here (2026-11-07, his go)
+// The Session Plan page and the online calculation read the players' RPE from D1, not from the Google sheet any more
+// (the sheet stays a copy: the physical coach, the GPS file's RPE tab). Same shape as the script's kioskRpe_:
+// {date: {site player id: [[rpe, "HH:mm" Qatar time]]}} — kiosk ids mapped with the Players sheet's alias.
+const qatarHm = (ts) => { const t = Date.parse(ts || ''); return Number.isFinite(t) ? new Date(t + 3 * 3600e3).toISOString().slice(11, 16) : ''; };
+export async function rpeDays(env, days) {
+  const alias = {};
+  (await players(env)).forEach((p) => { alias[String(p.player_id).trim().toLowerCase()] = p.player_id; if (p.alias_kiosk) alias[String(p.alias_kiosk).trim().toLowerCase()] = p.player_id; });
+  const since = days > 0 ? idxDate(dayIdx(qatarDay()) - days) : '0000-00-00';
+  const r = await env.KIOSK.prepare('SELECT date, player_id, rpe, ts FROM rpe WHERE date >= ? ORDER BY date, ts').bind(since).all(), out = {};
+  for (const x of r.results || []) {
+    const id = alias[String(x.player_id).trim().toLowerCase()], v = num(x.rpe);
+    if (!id || v == null) continue;
+    ((out[x.date] = out[x.date] || {})[id] = out[x.date][id] || []).push([v, qatarHm(x.ts)]);
+  }
+  return out;
+}
+/** An RPE typed by the staff on the Session Plan page (a player who did not answer): saved like his own answer, with
+ * who typed it, then copied to the Google sheet as the others. */
+export async function rpeStaff(req, env, ctx, user) {
+  const b = await req.json().catch(() => ({})), v = num(b.rpe), date = String(b.date || ''), id = String(b.player_id || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !id || v == null || v < 0 || v > 10) return json({ ok: false, error: 'bad_request' }, 400);
+  const p = (await players(env)).find((x) => String(x.player_id).toLowerCase() === id.toLowerCase());
+  const kid = (p && String(p.alias_kiosk || '').trim()) || id, name = String(b.player_name || (p && p.display_name) || id).slice(0, 60);
+  await env.KIOSK.prepare('INSERT OR REPLACE INTO rpe (date, player_id, player_name, rpe, ts, by, mirrored) VALUES (?, ?, ?, ?, ?, ?, 0)')
+    .bind(date, kid, name, v, new Date().toISOString(), user.email || '').run();
+  ctx.waitUntil(kioskMirror(env));
+  return json({ ok: true, saved: `${date} · ${kid} · ${v}` });
+}
+
 /** The answers not yet in the Google sheets, copied there (the script's kiosk_write: same tabs, same columns). */
 export async function kioskMirror(env) {
   if (!env.KIOSK || !env.API_URL || !env.UPLOAD_KEY) return;

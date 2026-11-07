@@ -17,7 +17,7 @@
  * "staff", re-read with the wellness): removing someone there cuts his access within 10 minutes.
  * Anything missing or failing here → an error status: the site then falls back to the Google script.
  */
-import { kioskRoute, kioskMirror, kioskCompute } from './kiosk.js'; // the players' wellness / RPE pages (2026-10-22)
+import { kioskRoute, kioskMirror, kioskCompute, rpeDays, rpeStaff } from './kiosk.js'; // the players' wellness / RPE pages (2026-10-22)
 
 const UPLOADS = ['workload', 'sessions', 'objectives', 'calendar', 'tests', 'reports', 'staff_report', 'plan_lib', 'squad_stats', 'match_report', 'intensity', 'tactical'];
 const ADMIN_ONLY = ['tactical']; // the match files' data (line-ups, scorers, tactics): the admin + the staff with role "tactical"
@@ -40,6 +40,10 @@ export default {
       if (path === '/api/match-files' && req.headers.get('X-Upload-Key')) { // the PC's bulk upload of match files (sync/upload_match_files.py)
         return env.UPLOAD_KEY && same(req.headers.get('X-Upload-Key'), env.UPLOAD_KEY) ? await matchFiles(req, { role: 'admin', email: 'pc upload' }, env) : json({ ok: false, error: 'forbidden' }, 403);
       }
+      if (path === '/api/rpe' && req.method === 'GET' && req.headers.get('X-Upload-Key')) { // the online calculation: every RPE (2026-11-07)
+        if (!env.UPLOAD_KEY || !same(req.headers.get('X-Upload-Key'), env.UPLOAD_KEY)) return json({ ok: false, error: 'forbidden' }, 403);
+        return json({ ok: true, rpe: env.KIOSK ? await rpeDays(env, 0) : {} });
+      }
       if (path === '/api/rebuild' && req.method === 'POST' && req.headers.get('X-Upload-Key')) { // the PC (tests); the site uses its staff session below
         return env.UPLOAD_KEY && same(req.headers.get('X-Upload-Key'), env.UPLOAD_KEY) ? await rebuild(env) : json({ ok: false, error: 'forbidden' }, 403);
       }
@@ -48,6 +52,8 @@ export default {
       if (!user) return json({ ok: false, error: 'unauthenticated' }, 401);
       if (path.startsWith('/api/data/') && req.method === 'GET') return await data(req, path.slice(10), user, env, ctx);
       if (path.startsWith('/api/pdf/') && req.method === 'GET') return await pdf(decodeURIComponent(path.slice(9)), env);
+      if (path === '/api/rpe' && req.method === 'GET') return json({ ok: true, rpe: await rpeDays(env, Math.max(1, Math.min(400, Number(new URL(req.url).searchParams.get('days')) || 60))) }); // Session Plan
+      if (path === '/api/rpe' && req.method === 'POST') return await rpeStaff(req, env, ctx, user); // an RPE typed on Session Plan
       if (path === '/api/statsports' && req.method === 'GET') return await statsports(new URL(req.url).searchParams.get('date'), env);
       if (path === '/api/rebuild' && req.method === 'POST') return await rebuild(env);
       if (path === '/api/me' && req.method === 'GET') return json({ ok: true, user, build: user.role === 'admin' ? await env.DATA.get('p:build_status', 'json') : undefined }); // his banner when an online build was not sent

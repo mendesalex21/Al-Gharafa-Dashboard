@@ -53,9 +53,15 @@ function renderPlan() {
 // The saved plans come from the Google script (about 4 s): this browser keeps the last copy to draw the page at once,
 // the site fetches them in the background after signing in, and the fresh copy replaces the old one when it comes —
 // unless something was typed meanwhile (it is being saved). His ask, 2026-10-21: no wait on opening Session Plan.
+/** The players' RPE (their page and the values typed here) from the Cloudflare server (2026-11-07): the same as the
+ * Google sheet's copy, without waiting on the script. null = not read (the script's copy in the plans is used). */
+async function splRpeCf() {
+  if (AUTH.demo || typeof cfOn !== 'function' || !cfOn()) return null;
+  try { const r = await fetch('/api/rpe?days=60', { headers: cfHeaders() }), j = await r.json(); return r.ok && j.ok ? j.rpe : null; } catch (e) { return null; }
+}
 function splFetchSaved() {
   if (!SPL.fetching) {
-    SPL.fetching = callApi('plans', null, {}).then((d) => { d.drills = d.drills || {}; cacheSet('plans', d); SPL.fetchedAt = Date.now(); return d; })
+    SPL.fetching = Promise.all([callApi('plans', null, {}), splRpeCf()]).then(([d, rpe]) => { d.drills = d.drills || {}; if (rpe) d.rpe = rpe; cacheSet('plans', d); SPL.fetchedAt = Date.now(); return d; })
       .finally(() => { SPL.fetching = null; });
   }
   return SPL.fetching;
@@ -598,7 +604,12 @@ async function splSaveNoRpe(date, id, input) {
   const name = (SPL.lib.players.find((q) => q.id === id) || {}).name || ((SPL.lib.roster || {})[id] || {}).name || id;
   SPL.state = `Saving the RPE of ${name}…`; splStateLine();
   try {
-    if (AUTH.demo) splDemoStore(); else await callApi('rpe_add', null, { date, player_id: id, player_name: name, rpe: v });
+    if (AUTH.demo) splDemoStore();
+    else if (cfOn()) { // saved on the Cloudflare server like the player's own answer (copied to the Google sheet from there)
+      const r = await fetch('/api/rpe', { method: 'POST', headers: { ...cfHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ date, player_id: id, player_name: name, rpe: v }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || r.status);
+    } else await callApi('rpe_add', null, { date, player_id: id, player_name: name, rpe: v });
     const rp = SPL.saved.rpe || (SPL.saved.rpe = {}); (rp[date] || (rp[date] = {}))[id] = [[v, '']];
     if (AUTH.demo) splDemoStore();
     if (l) { l.classList.remove('miss'); l.classList.add('k'); l.title = 'Ready: added in a few minutes'; }
@@ -1010,7 +1021,7 @@ function splKioskRpe(date, ampm) {
 async function splRefreshRpe() {
   if (AUTH.demo) return;
   SPL.state = 'Reading the kiosk…'; splStateLine();
-  try { const r = await callApi('plans', null, {}); SPL.saved.rpe = r.rpe || {}; SPL.state = 'Kiosk RPE up to date ✓'; splDraw(); }
+  try { const cf = await splRpeCf(), r = cf ? { rpe: cf } : await callApi('plans', null, {}); SPL.saved.rpe = r.rpe || {}; SPL.state = 'Kiosk RPE up to date ✓'; splDraw(); }
   catch (err) { SPL.state = 'Kiosk not read — ' + (err.message || err); splStateLine(); }
 }
 /** A match day's drills (his Excel: the halves 1 and 2, the individual work 3), then the 15-minute periods. */
