@@ -2427,3 +2427,9 @@ html:not(.is-admin) .admin-only { display: none !important; }
 .inj-msl i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); font-style: normal; font-size: 10px; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
 .inj-msl span.ok i { background: #34c759; border-color: #34c759; } .inj-msl small { color: var(--ink-muted); margin-left: 2px; }
 @media (max-width: 860px) { .inj-ab { grid-template-columns: 1fr; } }
+
+/* Centred wide pages (his mockup, 2026-11-07) — his account first: Sessions, Intensity, Workload › Team / Player /
+   Injuries in the 1180 px column like Home and Calendar; the Player tiles on two rows of four */
+html.is-admin .sv-bleed { width: auto; margin-left: 0; --bw: 1132px; }
+html.is-admin #view-team.wrap { max-width: 1180px; }
+html.is-admin .pl-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
