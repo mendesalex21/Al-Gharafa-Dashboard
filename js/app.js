@@ -42,7 +42,7 @@ function flyoutActive() {
 
 /** Each menu's pages as buttons on the page, in the eyebrow line above the title (his ask, 2026-11-07): Training ›
  * Sessions · Intensity, Workload › Team · Squad · Player · Injuries, Squad › By position · List, Calendar › Calendar ·
- * Games. The same links as the menu's flyout. His account first (CSS: html.is-admin .pg-subnav). */
+ * Games. The same links as the menu's flyout. Released to the staff 2026-11-07. */
 function subnavSync() {
   const main = CURRENT_VIEW && document.getElementById('view-' + CURRENT_VIEW), eb = main && main.querySelector('.pg-head .pg-eyebrow');
   if (!eb) return;
