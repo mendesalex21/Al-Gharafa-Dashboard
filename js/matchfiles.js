@@ -106,6 +106,7 @@ async function mfShowLink() {
       if (!document.documentElement.classList.contains('is-admin')) {
         document.documentElement.classList.add('is-admin'); // his new features first (CSS html.is-admin …), the staff see them once he releases them
         if (typeof splDraw === 'function' && typeof CURRENT_VIEW !== 'undefined' && CURRENT_VIEW === 'plan') splDraw(); // the load projection
+        if (typeof drawTeam === 'function' && typeof CURRENT_VIEW !== 'undefined' && CURRENT_VIEW === 'team') drawTeam(); // his Team tiles
       }
       buildBanner(j.build);
       if (!MF_POLL) MF_POLL = setInterval(mfShowLink, 120000); // the banner follows the online build's retries

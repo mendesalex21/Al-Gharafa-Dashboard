@@ -145,6 +145,54 @@ function tmTiles(B) {
   return load + wt;
 }
 
+/** The tiles in the Player page's style (his choice from the real-data mockup, 2026-11-07; admin first): each load tile
+ * keeps the team's z + A:C, then the squad against the match — the median of the available players' week ÷ their own
+ * match (prep.r, as on each player's tile), the starters' level as the tick, and how many are at that level; sprints: who
+ * ran ≥ 90 % of his Vmax in the last 10 days; WCS and RHIE tiles as on the Player page (median of the players). */
+function tmTilesA(B) {
+  const d = B.d, fl = (d.prep_floors || {}).floor || {}, ce = (d.prep_floors || {}).ceil || {}, asOf = d.as_of, last = B.real('td').slice(-1)[0];
+  const av = (d.players || []).filter((p) => p.status === 'available'), own = av.filter((p) => p.prep && p.prep.src === 'own' && p.prep.r);
+  const med = (xs) => { const v = xs.filter((x) => x != null && Number.isFinite(x)).sort((a, b) => a - b); if (!v.length) return null; const m = (v.length - 1) / 2; return (v[Math.floor(m)] + v[Math.ceil(m)]) / 2; };
+  const gauge = (x, lv, max) => (x == null ? '' : `<div class="pa-g"><i class="f" style="width:${Math.max(0, Math.min(100, x / max * 100))}%;background:${lv == null || x >= lv ? '#34c759' : '#ff9f0a'}"></i>${lv != null ? `<i class="t" style="left:${Math.min(100, lv / max * 100)}%"></i>` : ''}</div>`);
+  const vs = (x, lv, txt, fmt) => `<div class="ln pa-mx"><span>${txt}</span><b style="color:${x == null ? 'var(--ink-muted)' : lv == null || x >= lv ? '#1d7a35' : '#b26a00'}">${x == null ? '—' : `${lv == null ? '' : x >= lv ? '✓ ' : '↓ '}${fmt(x)}`}</b></div>`;
+  const cnt = (a, n) => `<div class="ln"><span>At match level</span><b>${n ? `${a}/${n} players` : '—'}</b></div>`;
+  const load = B.keys.map(([k, l]) => {
+    const now = B.t.acwr_now[k], prev = B.acAt(k, addDays(asOf, -7)), [col, txt] = tmZone(now);
+    const st = last ? tmStats(B.real(k).filter((w) => w.start !== last.start).map((w) => w[k])) : tmStats([]), z = last ? tmZof(last[k], st) : null;
+    let extra;
+    if (fl[k] != null) {
+      const xs = own.map((p) => p.prep.r[k]).filter((v) => v != null), m = med(xs);
+      extra = vs(m, fl[k], 'Vs match · median', (v) => v.toFixed(2) + '×') + gauge(m, fl[k], Math.max(ce[k] || 2.9, m || 0) * 1.05) + cnt(xs.filter((v) => v >= fl[k]).length, xs.length);
+    } else if (k === 'spr') {
+      const h = av.filter((p) => p.days_hsv != null), ok = h.filter((p) => p.days_hsv < 10).length;
+      extra = `<div class="ln pa-mx"><span title="ran at ≥ 90 % of his top speed in the last 10 days">≥ 90 % Vmax</span><b style="color:${ok < h.length ? '#b26a00' : '#1d7a35'}">${h.length ? `${ok}/${h.length} players` : '—'}</b></div>` + (h.length ? gauge(ok, h.length, h.length) : '');
+    } else extra = `<div class="ln"><span>A:C a week ago</span><b>${prev == null ? '—' : prev.toFixed(2)}</b></div>`;
+    return `<div class="tm-tile"><span class="k">${l}</span><div class="ac"><b style="color:${TM_ZCOL[tmZ(z)]}">${z == null ? '—' : tmS(z)}</b><span>z · ${last ? last.label : ''}</span></div>
+      <span class="tm-zone"><i style="background:${col}"></i><span title="${txt}">A:C <b>${now == null ? '—' : now.toFixed(2)}</b></span>${now > 1.5 && prev > 1.5 ? ' <span class="tm-2w">2W</span>' : ''}</span>${extra}</div>`;
+  }).join('');
+  // WCS + RHIE: the intensity payload, per player as on his page (plIW / plIntLevels), then the squad's median
+  let wcs = '', rh = '';
+  if (!WL.int) { if (!TM.intAsked) { TM.intAsked = true; loadData('intensity').then((x) => { WL.int = x; drawTeam(); }).catch(() => {}); } }
+  else if (typeof plIW === 'function') {
+    const I = WL.int, LV = plIntLevels(asOf), wk = (I.weeks || []).slice(-1)[0];
+    const IWs = av.map((p) => plIW(p.id).IW).filter((x) => Object.keys(x).length);
+    const pcol = (v) => (v == null ? 'var(--ink-muted)' : v >= 100 ? '#1f7a3d' : v >= 90 ? '#34a853' : v >= 80 ? '#5fbf7a' : v >= 60 ? '#e8a33d' : '#d9534f');
+    const td4 = IWs.map((IW) => LV.avg4(IW, 'td')), rt4 = IWs.map((IW) => LV.avg4(IW, 'rt'));
+    const g1 = wk && wk.gap ? Math.round(wk.gap.td[0]) : null, h1 = wk && wk.gap ? Math.round(wk.gap.hi[0]) : null, rhW = wk ? med(IWs.map((IW) => (IW[wk.ws] || {}).rh)) : null;
+    const nOf = (xs, lv) => [xs.filter((v) => v != null && lv != null && v >= lv).length, xs.filter((v) => v != null).length];
+    const [aT, nT] = nOf(td4, LV.td), [aR, nR] = nOf(rt4, LV.rt);
+    wcs = `<div class="tm-tile"><span class="k">WCS · training</span><div class="ac"><b style="color:${pcol(g1)}">${g1 == null ? '—' : g1}<small> %</small></b><span>of their WCS · ${wk ? wk.label : ''}</span></div>
+      <span class="tm-zone"><i style="background:${pcol(h1)}"></i>A/D + spr <b>${h1 == null ? '—' : h1 + ' %'}</b></span>${vs(med(td4), LV.td, 'Vs matches · median', (v) => Math.round(v) + ' %')}${gauge(med(td4), LV.td, 120)}${cnt(aT, nT)}</div>`;
+    rh = `<div class="tm-tile"><span class="k">RHIE · bouts</span><div class="ac"><b>${rhW == null ? '—' : Math.round(rhW)}</b><span>${wk ? wk.label : ''} · median per player</span></div>
+      <span class="tm-zone"><i style="background:#16269e"></i>training + matches</span>${vs(med(rt4), LV.rt, 'Vs matches · median', (v) => v.toFixed(1) + '×')}${gauge(med(rt4), LV.rt, Math.max(3, med(rt4) || 0) * 1.05)}${cnt(aR, nR)}</div>`;
+  }
+  const dates = Object.keys(B.well).sort(), lastW = dates[dates.length - 1], w7 = B.wellOf(addDays(asOf, -6), asOf), w28 = B.wellOf(addDays(asOf, -34), addDays(asOf, -7));
+  const wt = lastW ? `<div class="tm-tile"><span class="k">Wellness</span><div class="ac"><b style="color:${tmWell(B.well[lastW].v)}">${Math.round(B.well[lastW].v)}<small> %</small></b><span>${fmtDay(lastW, { weekday: 'short', day: 'numeric', month: 'short' })}</span></div>
+      <span class="tm-zone"><i style="background:${tmWell(B.well[lastW].v)}"></i>${B.well[lastW].n} check-ins</span>
+      <div class="ln"><span>Last 7 days</span><b>${w7 ? Math.round(w7.v) + ' %' : '—'}</b></div><div class="ln"><span>The 4 weeks before</span><b>${w28 ? Math.round(w28.v) + ' %' : '—'}</b></div><div class="ln"><span>Target</span><b>70 % or more</b></div></div>` : '';
+  return load + wcs + rh + wt;
+}
+
 function drawTeam() {
   const root = document.getElementById('view-team');
   if (!WL.data || !WL.data.team || !root || root.hidden || !document.getElementById('tm-charts')) return;
@@ -158,7 +206,8 @@ function drawTeam() {
   const fi = document.getElementById('tm-from'), ti = document.getElementById('tm-to');
   fi.min = ti.min = B.t.start; fi.max = ti.max = asOf; fi.value = from; ti.value = to;
   document.getElementById('tm-reset').hidden = !TM.custom;
-  document.getElementById('tm-tiles').innerHTML = tmTiles(B);
+  const tl = document.getElementById('tm-tiles'), adm = isAdminUi();
+  tl.classList.toggle('pl-tiles', adm); tl.innerHTML = adm ? tmTilesA(B) : tmTiles(B);
   const head = (l, note) => `<h2>${l}<small>${note}</small></h2>`;
   let cards = '', table = '';
 
